@@ -8,8 +8,9 @@
 
 - 本项目是 Survival Log 的离线图鉴数据解析工具，不是游戏本体，也不是运行时 mod。
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
-- 当前主要脚本为 `菜谱解析工具.py`，主要说明为 `SurvivalLog菜谱解析说明.md`。
-- 默认输出六份 UTF-8 Markdown：`SurvivalLog食品.md`、`SurvivalLog菜谱.md`、`SurvivalLog植物.md`、`SurvivalLog猎物.md`、`SurvivalLog制造.md`、`SurvivalLog家具.md`。
+- 当前主要脚本为 `图鉴解析工具.py`，主要说明为 `SurvivalLog图鉴解析说明.md`。
+- 默认输出七份 UTF-8 Markdown：六类主图鉴 `SurvivalLog食品.md`、`SurvivalLog菜肴.md`、`SurvivalLog植物.md`、`SurvivalLog猎物.md`、`SurvivalLog制造.md`、`SurvivalLog家具.md`，以及 `SurvivalLog图鉴辅助配置.md`。
+- 数据库构建脚本为 `图鉴数据库.py`，本地 Streamlit 前端为 `图鉴前端.py`；数据库默认文件为 `SurvivalLog图鉴.sqlite3`。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他安装位置时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
 
@@ -44,32 +45,34 @@
 
 ## 4. 配置表和分类规则
 
-六类导出在解析和导出层面一视同仁。新增分类时应扩展配置表、分类处理器、输出文件名和验证项，不得再为菜谱保留单独的兼容导出路径。
+六类导出在解析和导出层面一视同仁。新增分类时应扩展配置表、分类处理器、输出文件名和验证项，不得再为菜肴保留单独的兼容导出路径。
 
 - 食品：`Config_Item`，关联 `Config_ItemSubCategory`、`Config_FoodType`。
-- 菜谱：`Config_CookingRecipe`，关联 `Config_Item`、`Config_ItemSubCategory`。
+- 菜肴：`Config_CookingRecipe`，关联 `Config_Item`、`Config_ItemSubCategory`。
 - 植物：`Config_Plant`、`Config_PlantLv`，收获物、种子和枯萎产物关联 `Config_Item`。
 - 猎物：没有独立 `Config_Prey` 时使用 `Config_Item` 中的 `InCodex`、`Prey_Rarity`、`CaptureExp` 和图鉴字段。
 - 制造：`Config_ProductionList`、`Config_ProductionLv`，材料、产物、失败产物和完美产物关联 `Config_Item`。
 - 家具：`Config_Furniture` 及 `Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`。
 
-食品和猎物按游戏 Codex 字段分类：先要求 `Config_Item.InCodex == true`；`Prey_Rarity > 0` 的物品归入猎物；其他 `Category == 1` 的物品归入食品。不得直接照搬参考网页中的物品分类。
+食品和猎物按游戏 Codex 字段分类：先要求 `Config_Item.InCodex == true`；`Prey_Rarity > 0` 的物品归入猎物；`Category == 1` 的物品归入食品。食品和猎物允许重叠，不得直接照搬参考网页中的物品分类。
+当前版本主图鉴数量基准为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87。参考进度为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，总计 366/935，约 39%；参考进度只用于验收，不推断具体完成 ID。
 
-家具关联字段必须按语义解析：功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力配置 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜谱 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`。没有独立配置表的条件组、奖励组、动作、房间和掉落组等引用保留原始 ID。
+家具关联字段必须按语义解析：功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力配置 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`。没有独立配置表的条件组、奖励组、动作、房间和掉落组等引用保留原始 ID。
 
 ## 5. 代码架构边界
 
 - 配置表使用集中 schema 和通用 MemoryPack 读取层；不要为每个字段复制一套临时解析器。
-- 六类输出应通过统一的分类注册表和统一的 `extract_category` 流程完成；每类只提供自己的数据选择和 Markdown 渲染器。
-- 不在输出流程中写只针对菜谱的隐式分支、旧单文件兼容函数或特殊覆盖参数。命令行的 `--category`、`--output-dir` 和显式单分类 `--output` 语义必须适用于所有分类。
+- 六类输出应通过统一的分类注册表和统一的 `extract_category` 流程完成；每类只提供自己的数据选择和 Markdown 渲染器。辅助配置作为独立的 `auxiliary` 导出，不计入六类完成进度。
+- 数据库使用 SQLite 保存主条目、分类映射、共享完成状态、关联关系和辅助配置；食品/猎物重复分类的同一源条目只保存一份完成状态。
+- 不在输出流程中写只针对菜肴的隐式分支、旧单文件兼容函数或特殊覆盖参数。命令行的 `--category`、`--output-dir` 和显式单分类 `--output` 语义必须适用于所有分类。
 - 保持解析层、配置关联层、分类层、Markdown 渲染层和 CLI 层边界清晰。无关重构不得混入数据解析任务。
 - 输出 Markdown 中必须包含适用的配置 ID、名称、本地化名称、分类、属性、材料、产物、种子、家具功能、等级、经验、时间、概率、价格、耐久等字段；新增字段时保留原始字段含义。
 - 脚本只读游戏源文件，并将派生结果写入输出目录。不得把生成 Markdown 反向作为下一次解析的数据源。
 
 ## 6. 命令行约定
 
-- 不指定 `--category` 时默认生成全部六类。
-- `--category all` 显式生成全部六类；`food`、`dish`、`plant`、`prey`、`craft`、`furniture` 分别生成对应分类。
+- 不指定 `--category` 时默认生成六类主图鉴和辅助配置。
+- `--category all` 显式生成全部七份输出；`food`、`dish`、`plant`、`prey`、`craft`、`furniture`、`auxiliary` 分别生成对应输出。
 - all 模式使用 `--output-dir` 指定目录；显式单分类时可以用 `--output` 指定该分类的单个 Markdown 路径。
 - 参数错误、资源缺失、catalog 版本变化、bundle 解密失败、TextAsset 缺失和 schema 不匹配必须返回非零退出码，并给出可操作的中文错误信息。
 - 重新运行只覆盖目标 Markdown，不修改游戏文件、mod DLL、存档或其他输出类型。
@@ -97,10 +100,11 @@
 
 窄范围代码改动至少执行语法检查和对应分类验证；涉及解析 schema、资源定位、分类规则或共用导出层时执行完整验证。
 
-- 运行 `python -m py_compile "菜谱解析工具.py"`。
-- 使用当前完整游戏目录运行一次默认全量导出，确认生成六个 UTF-8 Markdown。
-- 分别运行六个 `--category` 入口，确认输出路径、退出码、数量和内容正常。
-- 校验当前已知主表数量：菜谱 496、植物 38、制造 148、家具 1,249；食品和猎物以当前 Codex 分类结果为准。
+- 运行 `python -m py_compile "图鉴解析工具.py" "图鉴数据库.py" "图鉴前端.py"`。
+- 使用当前完整游戏目录运行一次默认全量导出，确认生成七个 UTF-8 Markdown。
+- 分别运行七个 `--category` 入口，确认输出路径、退出码、数量和内容正常。
+- 校验当前主图鉴数量：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87；原始配置表数量不能直接当作图鉴数量。
+- 构建 SQLite 数据库，确认六类分类映射合计 935，食品/猎物重叠条目共享完成状态；启动 Streamlit 前端验证筛选、详情和勾选持久化。
 - 确认所有解析表读取到 EOF，无未捕获 schema 错误；检查未知关联 ID 是否明确显示为 `ID:xxxx`。
 - 抽查参考仓库和本地数据中的佛跳墙、清炒菌菇、蛋炒饭、松茸、硬纸、箱子和小家鼠等条目。
 - 对资源缺失、catalog 版本变化、空列表、空本地化名称和未知 ID 做隔离测试；测试不得改动游戏目录。
@@ -109,8 +113,8 @@
 
 ## 10. 文档、状态与版本控制
 
-- 解析行为、资源来源、版本号、分类规则、已知限制或 CLI 发生变化时，同步更新 `SurvivalLog菜谱解析说明.md`，但不复制整份工作规范。
+- 解析行为、资源来源、版本号、分类规则、已知限制或 CLI 发生变化时，同步更新 `SurvivalLog图鉴解析说明.md`，但不复制整份工作规范。
 - 不创建与用户要求无关的日志、缓存、测试数据或多余文档文件。
-- 不自动把游戏资源、存档、生成的大型 Markdown 或临时文件加入 Git；检查 `.gitignore` 后再决定是否纳入版本控制。
+- 不自动把游戏资源、存档、生成的大型 Markdown、SQLite 数据库或临时文件加入 Git；检查 `.gitignore` 后再决定是否纳入版本控制。
 - 完成一个逻辑完整、经过验证的功能单元后，默认创建一次本地 commit。commit 只包含本任务明确修改的文件。有外部未提交修改时不得擅自提交或重写历史。
 - commit提交信息为 type: description 格式，description 应能概括本次变更。type 为英文格式，description 为中文格式。

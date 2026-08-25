@@ -1,16 +1,16 @@
-# Survival Log 菜谱（离线解析）
+# Survival Log 菜肴（离线解析）
 
-- 生成时间：2026-08-25T14:52:11+08:00
+- 生成时间：2026-08-25T16:51:52+08:00
 - 游戏资源版本：1.0.14956 / catalog 2.3.1
-- 菜谱配置包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
+- 菜肴配置包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
 - 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\c8a59b0bfbba77b98f7716d8240206bf.bundle`
-- 菜谱数量：496
+- 菜肴数量：496
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
-- 说明：这里包含配置表中的全部菜谱；mod 界面中的“已解锁/未解锁”来自存档内的 CodexManager，不能从静态配置表推断。
+- 说明：这里包含当前配置表中的全部菜肴；游戏存档中的解锁状态不从静态资源推断。
 
 ## 字段说明
 
-菜谱名称、食材名和食材分类使用游戏配置中的本地化字段。具体物品配方来自 `SpecificItems`；没有具体物品时，使用 `TagCombo` 分类组合，这与 mod 的显示逻辑一致。
+菜肴名称、食材名和食材分类使用游戏配置中的本地化字段。具体物品配方来自 `SpecificItems`；没有具体物品时，使用 `TagCombo` 分类组合。
 
 ## ID 0 段
 
