@@ -611,15 +611,39 @@ button {
 }
 
 .entry-highlight {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   overflow: hidden;
   margin-top: 5px;
+  white-space: nowrap;
+}
+
+.entry-highlight-item {
+  display: inline-flex;
+  align-items: baseline;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 3px 7px;
   border-radius: 4px;
   background: rgba(31, 122, 109, 0.08);
   color: var(--accent);
   font-size: 11px;
   line-height: 1.35;
+  white-space: nowrap;
+}
+
+.entry-highlight-label {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+
+.entry-highlight-value {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

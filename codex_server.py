@@ -242,9 +242,7 @@ def _build_detail_fields(
             {
                 "field": "level",
                 "label": "要求等级",
-                "value": _format_relation_values(
-                    levels, include_group=True, include_id=False
-                ),
+                "value": _format_relation_values(levels, include_id=False),
             }
         )
 
@@ -262,22 +260,24 @@ def _build_detail_fields(
     return highlights, fields, list(highlighted_relation_prefixes)
 
 
-def _highlight_summary(
+def _highlight_items(
     category: str,
     raw: dict[str, Any],
     relations: list[dict[str, Any]],
-) -> str:
+) -> list[dict[str, str]]:
     highlights, _fields, _prefixes = _build_detail_fields(category, raw, relations)
-    values: list[str] = []
-    for field in highlights:
-        value = str(field["value"])
-        if not value:
-            continue
-        parts = []
-        for part in value.split("；"):
-            parts.append(part.split("：", 1)[-1])
-        values.append("、".join(part for part in parts if part))
-    return "；".join(values)
+    return [
+        {
+            "label": str(field["label"]),
+            "value": str(field["value"]),
+        }
+        for field in highlights
+        if str(field["value"])
+    ]
+
+
+def _highlight_summary(items: list[dict[str, str]]) -> str:
+    return "；".join(f"{item['label']}：{item['value']}" for item in items)
 
 
 class CodexService:
@@ -410,7 +410,9 @@ class CodexService:
             for row in rows:
                 raw = json.loads(row["raw_json"])
                 relations = get_entry_relations(self.connection, row["entry_key"])
-                row["highlight_summary"] = _highlight_summary(category, raw, relations)
+                highlight_items = _highlight_items(category, raw, relations)
+                row["highlight_items"] = highlight_items
+                row["highlight_summary"] = _highlight_summary(highlight_items)
             return {
                 "category": category,
                 "label": CATEGORY_LABELS[category],

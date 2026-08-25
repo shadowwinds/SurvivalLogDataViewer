@@ -177,9 +177,28 @@
         makeElement("div", "entry-name", entry.name),
         makeElement("span", "entry-id", `ID ${entry.source_id}`),
       );
+      const highlightLine = makeElement("div", "entry-highlight");
+      const highlightItems = Array.isArray(entry.highlight_items)
+        ? entry.highlight_items
+        : [];
+      if (highlightItems.length) {
+        highlightItems.forEach((item) => {
+          const highlightItem = makeElement("span", "entry-highlight-item");
+          const label = String(item.label || "");
+          const value = String(item.value || "无");
+          highlightItem.append(
+            makeElement("span", "entry-highlight-label", `${label}：`),
+            makeElement("span", "entry-highlight-value", value),
+          );
+          highlightItem.title = `${label}：${value}`;
+          highlightLine.append(highlightItem);
+        });
+      } else {
+        highlightLine.append(makeElement("span", "entry-highlight-item", "无"));
+      }
       body.append(
         titleLine,
-        makeElement("div", "entry-highlight", entry.highlight_summary || "无"),
+        highlightLine,
       );
 
       const status = makeElement(
