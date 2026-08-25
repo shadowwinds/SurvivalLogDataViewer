@@ -1,0 +1,1270 @@
+# Survival Log 植物（离线解析）
+
+- 生成时间：2026-08-25T14:52:11+08:00
+- 游戏资源版本：1.0.14956 / catalog 2.3.1
+- 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\c8a59b0bfbba77b98f7716d8240206bf.bundle`
+- 条目数量：38
+- 配置表：`Config_Plant`、`Config_PlantLv`、`Config_Item`
+- 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
+- 说明：包含完整植物配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。
+
+## 植物
+
+### 豆芽（测试种子）（ID 1）
+
+- ID：1
+- 名称键：Plant_Name_1
+- 名称：豆芽（测试种子）
+- 描述键：Plant_Des_1
+- 描述：豆芽说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00323
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00323
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00342
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00343
+- 尺寸：1
+- 生长时间：64800
+- 光照需求：1
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2504]`；解析：番茄（ID 2504）
+- 收获经验：30
+- 完美收获产物：`[2504]`；解析：番茄（ID 2504）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 小番茄（测试种子）（ID 2）
+
+- ID：2
+- 名称键：Plant_Name_2
+- 名称：小番茄（测试种子）
+- 描述键：Plant_Des_2
+- 描述：小番茄说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00341
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00341
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00324
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00325
+- 尺寸：1
+- 生长时间：285000
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2504]`；解析：番茄（ID 2504）
+- 收获经验：70
+- 完美收获产物：`[2504]`；解析：番茄（ID 2504）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 生菜（测试种子）（ID 3）
+
+- ID：3
+- 名称键：Plant_Name_3
+- 名称：生菜（测试种子）
+- 描述键：Plant_Des_3
+- 描述：生菜说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00174
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00174
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00148
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00168
+- 尺寸：2
+- 生长时间：226800
+- 光照需求：1
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2528]`；解析：卷心菜（ID 2528）
+- 收获经验：100
+- 完美收获产物：`[2528]`；解析：卷心菜（ID 2528）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 蘑菇（测试种子）（ID 4）
+
+- ID：4
+- 名称键：Plant_Name_4
+- 名称：蘑菇（测试种子）
+- 描述键：Plant_Des_4
+- 描述：蘑菇说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00335
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00335
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00336
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00337
+- 尺寸：1
+- 生长时间：307500
+- 光照需求：0
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2905]`；解析：无名蘑菇（ID 2905）
+- 收获经验：75
+- 完美收获产物：`[2905]`；解析：无名蘑菇（ID 2905）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 白玉菇（ID 5）
+
+- ID：5
+- 名称键：Plant_Name_5
+- 名称：白玉菇
+- 描述键：Plant_Des_5
+- 描述：偏爱阴暗潮湿的角落。不需要阳光的眷顾，独自便能绽出一片洁白。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Baiyugu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Baiyugu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Baiyugu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Baiyugu_04
+- 尺寸：1
+- 生长时间：172800
+- 光照需求：0
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2513, 2513]`；解析：白玉菇（ID 2513）、白玉菇（ID 2513）
+- 收获经验：45
+- 完美收获产物：`[2513, 2513, 15007]`；解析：白玉菇（ID 2513）、白玉菇（ID 2513）、白玉菇种子（ID 15007）
+- 完美率：0.2
+- 种子产物：`[15007]`；解析：白玉菇种子（ID 15007）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 草菇（ID 6）
+
+- ID：6
+- 名称键：Plant_Name_6
+- 名称：草菇
+- 描述键：Plant_Des_6
+- 描述：不挑土壤，不争光照。最先在废墟缝隙里醒来的，往往是这样的生命。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Caogu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Caogu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Caogu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Caogu_04
+- 尺寸：1
+- 生长时间：259200
+- 光照需求：0
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2514, 2514]`；解析：草菇（ID 2514）、草菇（ID 2514）
+- 收获经验：65
+- 完美收获产物：`[2514, 2514, 15008]`；解析：草菇（ID 2514）、草菇（ID 2514）、草菇种子（ID 15008）
+- 完美率：0.2
+- 种子产物：`[15008]`；解析：草菇种子（ID 15008）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 平菇（ID 7）
+
+- ID：7
+- 名称键：Plant_Name_7
+- 名称：平菇
+- 描述键：Plant_Des_7
+- 描述：层叠而生，片片相依，像旧书页间夹着的一段温柔注脚。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Pinggu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Pinggu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Pinggu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Pinggu_04
+- 尺寸：1
+- 生长时间：292500
+- 光照需求：0
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2515, 2515]`；解析：平菇（ID 2515）、平菇（ID 2515）
+- 收获经验：70
+- 完美收获产物：`[2515, 2515, 15009]`；解析：平菇（ID 2515）、平菇（ID 2515）、平菇种子（ID 15009）
+- 完美率：0.2
+- 种子产物：`[15009]`；解析：平菇种子（ID 15009）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 杏鲍菇（ID 8）
+
+- ID：8
+- 名称键：Plant_Name_8
+- 名称：杏鲍菇
+- 描述键：Plant_Des_8
+- 描述：敦实的身形，朴素的颜色。可靠的事物不需要漂亮的外表。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Xinbaogu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Xinbaogu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Xinbaogu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Xinbaogu_04
+- 尺寸：2
+- 生长时间：300000
+- 光照需求：0
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2516, 2516]`；解析：杏鲍菇（ID 2516）、杏鲍菇（ID 2516）
+- 收获经验：130
+- 完美收获产物：`[2516, 2516, 15010]`；解析：杏鲍菇（ID 2516）、杏鲍菇（ID 2516）、杏鲍菇种子（ID 15010）
+- 完美率：0.2
+- 种子产物：`[15010]`；解析：杏鲍菇种子（ID 15010）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 茶树菇（ID 9）
+
+- ID：9
+- 名称键：Plant_Name_9
+- 名称：茶树菇
+- 描述键：Plant_Des_9
+- 描述：生长缓慢，回报丰厚。时间偏爱有耐心的人。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Chashugu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Chashugu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Chashugu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Chashugu_04
+- 尺寸：1
+- 生长时间：315000
+- 光照需求：0
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2517, 2517, 2517]`；解析：茶树菇（ID 2517）、茶树菇（ID 2517）、茶树菇（ID 2517）
+- 收获经验：75
+- 完美收获产物：`[2517, 2517, 2517, 15011]`；解析：茶树菇（ID 2517）、茶树菇（ID 2517）、茶树菇（ID 2517）、茶树菇种子（ID 15011）
+- 完美率：0.2
+- 种子产物：`[15011]`；解析：茶树菇种子（ID 15011）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 鸡腿菇（ID 10）
+
+- ID：10
+- 名称键：Plant_Name_10
+- 名称：鸡腿菇
+- 描述键：Plant_Des_10
+- 描述：圆润饱满地破土而出，带着一个不太相称却令人会心的名字。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jituigu_05
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jituigu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jituigu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jituigu_04
+- 尺寸：2
+- 生长时间：297000
+- 光照需求：0
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2518, 2518]`；解析：鸡腿菇（ID 2518）、鸡腿菇（ID 2518）
+- 收获经验：130
+- 完美收获产物：`[2518, 2518, 15012]`；解析：鸡腿菇（ID 2518）、鸡腿菇（ID 2518）、鸡腿菇种子（ID 15012）
+- 完美率：0.2
+- 种子产物：`[15012]`；解析：鸡腿菇种子（ID 15012）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 松茸（ID 11）
+
+- ID：11
+- 名称键：Plant_Name_11
+- 名称：松茸
+- 描述键：Plant_Des_11
+- 描述：山林深处的气息被封存在小小的菌包里，等待再次苏醒。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Songrong_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Songrong_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Songrong_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Songrong_04
+- 尺寸：2
+- 生长时间：648000
+- 光照需求：0
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2519]`；解析：松茸（ID 2519）
+- 收获经验：250
+- 完美收获产物：`[2519, 15013]`；解析：松茸（ID 2519）、松茸种子（ID 15013）
+- 完美率：0.2
+- 种子产物：`[15013]`；解析：松茸种子（ID 15013）
+- 种子率：0.5
+- 枯萎产物：`[15503]`；解析：高级有机肥料（ID 15503）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 灵芝（ID 12）
+
+- ID：12
+- 名称键：Plant_Name_12
+- 名称：灵芝
+- 描述键：Plant_Des_12
+- 描述：自古被寄予长生的期许。如今的期许更简单——只要它好好长大。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Lingzhi_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Lingzhi_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Lingzhi_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Lingzhi_04
+- 尺寸：2
+- 生长时间：648000
+- 光照需求：0
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2520]`；解析：灵芝（ID 2520）
+- 收获经验：250
+- 完美收获产物：`[2520, 15014]`；解析：灵芝（ID 2520）、灵芝种子（ID 15014）
+- 完美率：0.2
+- 种子产物：`[15014]`；解析：灵芝种子（ID 15014）
+- 种子率：0.5
+- 枯萎产物：`[15503]`；解析：高级有机肥料（ID 15503）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 向日葵（ID 13）
+
+- ID：13
+- 名称键：Plant_Name_13
+- 名称：向日葵
+- 描述键：Plant_Des_13
+- 描述：无论被种在哪里，都记得朝向阳光。这份执着，令人心生暖意。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00329
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00330
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00331
+- 尺寸：4
+- 生长时间：457500
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2521]`；解析：葵花籽（ID 2521）
+- 收获经验：335
+- 完美收获产物：`[2521, 15015]`；解析：葵花籽（ID 2521）、向日葵种子（ID 15015）
+- 完美率：0.2
+- 种子产物：`[15015]`；解析：向日葵种子（ID 15015）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 胡萝卜（ID 14）
+
+- ID：14
+- 名称键：Plant_Name_14
+- 名称：胡萝卜
+- 描述键：Plant_Des_14
+- 描述：果实深藏土中，拔起之前无人知晓它的心事。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00341
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00342
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00343
+- 尺寸：2
+- 生长时间：367500
+- 光照需求：2
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2522]`；解析：胡萝卜（ID 2522）
+- 收获经验：155
+- 完美收获产物：`[2522, 15016]`；解析：胡萝卜（ID 2522）、胡萝卜种子（ID 15016）
+- 完美率：0.2
+- 种子产物：`[15016]`；解析：胡萝卜种子（ID 15016）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 甜菜（ID 15）
+
+- ID：15
+- 名称键：Plant_Name_15
+- 名称：甜菜
+- 描述键：Plant_Des_15
+- 描述：切开后是沉静的深红，像大地在根茎里私藏了一枚落日。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00323
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00324
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00325
+- 尺寸：2
+- 生长时间：357000
+- 光照需求：2
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2523]`；解析：甜菜（ID 2523）
+- 收获经验：150
+- 完美收获产物：`[2523, 15017]`；解析：甜菜（ID 2523）、甜菜种子（ID 15017）
+- 完美率：0.2
+- 种子产物：`[15017]`；解析：甜菜种子（ID 15017）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 韭菜（ID 16）
+
+- ID：16
+- 名称键：Plant_Name_16
+- 名称：韭菜
+- 描述键：Plant_Des_16
+- 描述：割去又生，循环往复。最质朴的生命力，不需要解释。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jiucai_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jiucai_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jiucai_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jiucai_04
+- 尺寸：1
+- 生长时间：262500
+- 光照需求：1
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2524]`；解析：韭菜（ID 2524）
+- 收获经验：65
+- 完美收获产物：`[2524, 15018]`；解析：韭菜（ID 2524）、韭菜种子（ID 15018）
+- 完美率：0.2
+- 种子产物：`[15018]`；解析：韭菜种子（ID 15018）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 茄子（ID 17）
+
+- ID：17
+- 名称键：Plant_Name_17
+- 名称：茄子
+- 描述键：Plant_Des_17
+- 描述：紫色果实低垂枝头，姿态谦逊，仿佛在安静地点头致意。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Qiezi_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Qiezi_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Qiezi_04
+- 尺寸：2
+- 生长时间：427500
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2525, 2525]`；解析：茄子（ID 2525）、茄子（ID 2525）
+- 收获经验：175
+- 完美收获产物：`[2525, 2525, 15019]`；解析：茄子（ID 2525）、茄子（ID 2525）、茄子种子（ID 15019）
+- 完美率：0.2
+- 种子产物：`[15019]`；解析：茄子种子（ID 15019）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 咖啡（ID 18）
+
+- ID：18
+- 名称键：Plant_Name_18
+- 名称：咖啡
+- 描述键：Plant_Des_18
+- 描述：从一粒种子到一杯热饮，隔着一段值得期待的漫长旅程。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00335
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00336
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00337
+- 尺寸：4
+- 生长时间：648000
+- 光照需求：1
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2526]`；解析：咖啡（ID 2526）
+- 收获经验：450
+- 完美收获产物：`[2526, 15020]`；解析：咖啡（ID 2526）、咖啡种子（ID 15020）
+- 完美率：0.2
+- 种子产物：`[15020]`；解析：咖啡种子（ID 15020）
+- 种子率：0.5
+- 枯萎产物：`[15503]`；解析：高级有机肥料（ID 15503）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 土豆（ID 19）
+
+- ID：19
+- 名称键：Plant_Name_19
+- 名称：土豆
+- 描述键：Plant_Des_19
+- 描述：深埋土中，不事声张。朴实的外表下，藏着扎实的分量。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00243
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00144
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00164
+- 尺寸：1
+- 生长时间：382500
+- 光照需求：1
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2527, 2527]`；解析：土豆（ID 2527）、土豆（ID 2527）
+- 收获经验：90
+- 完美收获产物：`[2527, 2527, 15021]`；解析：土豆（ID 2527）、土豆（ID 2527）、土豆种子（ID 15021）
+- 完美率：0.2
+- 种子产物：`[15021]`；解析：土豆种子（ID 15021）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 卷心菜（ID 20）
+
+- ID：20
+- 名称键：Plant_Name_20
+- 名称：卷心菜
+- 描述键：Plant_Des_20
+- 描述：叶片层层相拥，像在替彼此抵挡外面的寒意。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cabbage_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cabbage_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cabbage_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cabbage_04
+- 尺寸：2
+- 生长时间：442500
+- 光照需求：1
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2528, 2528]`；解析：卷心菜（ID 2528）、卷心菜（ID 2528）
+- 收获经验：180
+- 完美收获产物：`[2528, 2528, 15022]`；解析：卷心菜（ID 2528）、卷心菜（ID 2528）、卷心菜种子（ID 15022）
+- 完美率：0.2
+- 种子产物：`[15022]`；解析：卷心菜种子（ID 15022）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 花椰菜（ID 21）
+
+- ID：21
+- 名称键：Plant_Name_21
+- 名称：花椰菜
+- 描述键：Plant_Des_21
+- 描述：细密的花球聚成一小朵云，仿佛从某个晴天的记忆里落下来的。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Huacai_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Huacai_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Huacai_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Huacai_04
+- 尺寸：2
+- 生长时间：447000
+- 光照需求：1
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2529]`；解析：花椰菜（ID 2529）
+- 收获经验：180
+- 完美收获产物：`[2529, 15023]`；解析：花椰菜（ID 2529）、花椰菜种子（ID 15023）
+- 完美率：0.2
+- 种子产物：`[15023]`；解析：花椰菜种子（ID 15023）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 菠菜（ID 22）
+
+- ID：22
+- 名称键：Plant_Name_22
+- 名称：菠菜
+- 描述键：Plant_Des_22
+- 描述：不声不响铺满一角，那种绿色会让人想起久违的春天。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Bocai_01
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Bocai_02
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Bocai_03
+- 尺寸：1
+- 生长时间：114900
+- 光照需求：1
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2530]`；解析：菠菜（ID 2530）
+- 收获经验：30
+- 完美收获产物：`[2530, 15024]`；解析：菠菜（ID 2530）、菠菜种子（ID 15024）
+- 完美率：0.2
+- 种子产物：`[15024]`；解析：菠菜种子（ID 15024）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 黄瓜（ID 23）
+
+- ID：23
+- 名称键：Plant_Name_23
+- 名称：黄瓜
+- 描述键：Plant_Des_23
+- 描述：藤蔓沿着支架安静攀升，在有限的空间里勾勒出自己的秩序。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cucumber_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cucumber_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cucumber_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/Cucumber_04
+- 尺寸：4
+- 生长时间：412500
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2531, 2531, 2531]`；解析：黄瓜（ID 2531）、黄瓜（ID 2531）、黄瓜（ID 2531）
+- 收获经验：305
+- 完美收获产物：`[2531, 2531, 2531, 15025]`；解析：黄瓜（ID 2531）、黄瓜（ID 2531）、黄瓜（ID 2531）、黄瓜种子（ID 15025）
+- 完美率：0.2
+- 种子产物：`[15025]`；解析：黄瓜种子（ID 15025）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 西红柿（ID 24）
+
+- ID：24
+- 名称键：Plant_Name_24
+- 名称：西红柿
+- 描述键：Plant_Des_24
+- 描述：果实转红的那天，阳台上会燃起一小片温暖的颜色。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00174
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00148
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00168
+- 尺寸：2
+- 生长时间：435000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2504, 2504, 2504]`；解析：番茄（ID 2504）、番茄（ID 2504）、番茄（ID 2504）
+- 收获经验：320
+- 完美收获产物：`[2504, 2504, 2504, 15026]`；解析：番茄（ID 2504）、番茄（ID 2504）、番茄（ID 2504）、西红柿种子（ID 15026）
+- 完美率：0.2
+- 种子产物：`[15026]`；解析：西红柿种子（ID 15026）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 草莓（ID 25）
+
+- ID：25
+- 名称键：Plant_Name_25
+- 名称：草莓
+- 描述键：Plant_Des_25
+- 描述：对温度和光线百般挑剔。美好的事物，值得多一份用心。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00103
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00102
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00104
+- 尺寸：1
+- 生长时间：307500
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2533, 2533, 2533]`；解析：草莓（ID 2533）、草莓（ID 2533）、草莓（ID 2533）
+- 收获经验：75
+- 完美收获产物：`[2533, 2533, 2533, 15027]`；解析：草莓（ID 2533）、草莓（ID 2533）、草莓（ID 2533）、草莓种子（ID 15027）
+- 完美率：0.2
+- 种子产物：`[15027]`；解析：草莓种子（ID 15027）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 彩椒（ID 26）
+
+- ID：26
+- 名称键：Plant_Name_26
+- 名称：彩椒
+- 描述键：Plant_Des_26
+- 描述：红黄绿三色并陈，是单调日子里一组明快的色彩。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00357
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00358
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00359
+- 尺寸：2
+- 生长时间：432000
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2534, 2534, 2534]`；解析：彩椒（ID 2534）、彩椒（ID 2534）、彩椒（ID 2534）
+- 收获经验：175
+- 完美收获产物：`[2534, 2534, 2534, 15028]`；解析：彩椒（ID 2534）、彩椒（ID 2534）、彩椒（ID 2534）、彩椒种子（ID 15028）
+- 完美率：0.2
+- 种子产物：`[15028]`；解析：彩椒种子（ID 15028）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 南瓜（ID 27）
+
+- ID：27
+- 名称键：Plant_Name_27
+- 名称：南瓜
+- 描述键：Plant_Des_27
+- 描述：藤蔓舒展，果实日渐丰盈。耐心总会收获沉甸甸的回应。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00347
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00348
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00349
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00351
+- 尺寸：4
+- 生长时间：502500
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2535]`；解析：南瓜（ID 2535）
+- 收获经验：360
+- 完美收获产物：`[2535, 15029]`；解析：南瓜（ID 2535）、南瓜种子（ID 15029）
+- 完美率：0.2
+- 种子产物：`[15029]`；解析：南瓜种子（ID 15029）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 玉米（ID 28）
+
+- ID：28
+- 名称键：Plant_Name_28
+- 名称：玉米
+- 描述键：Plant_Des_28
+- 描述：茎秆笔直并肩而立，整齐的样子带着一种令人安心的秩序。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00173
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00143
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00160
+- 尺寸：4
+- 生长时间：465000
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2536, 2536, 2536]`；解析：玉米（ID 2536）、玉米（ID 2536）、玉米（ID 2536）
+- 收获经验：340
+- 完美收获产物：`[2536, 2536, 2536, 15030]`；解析：玉米（ID 2536）、玉米（ID 2536）、玉米（ID 2536）、玉米种子（ID 15030）
+- 完美率：0.2
+- 种子产物：`[15030]`；解析：玉米种子（ID 15030）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 大蒜（ID 29）
+
+- ID：29
+- 名称键：Plant_Name_29
+- 名称：大蒜
+- 描述键：Plant_Des_29
+- 描述：气味锋利，性情刚烈。温和的花园里也需要一两个这样的角色。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/GarlicSeed_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/Garlic_01
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/Garlic_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/Garlic_04
+- 尺寸：1
+- 生长时间：555000
+- 光照需求：1
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2537]`；解析：大蒜（ID 2537）
+- 收获经验：120
+- 完美收获产物：`[2537, 15031]`；解析：大蒜（ID 2537）、大蒜种子（ID 15031）
+- 完美率：0.2
+- 种子产物：`[15031]`；解析：大蒜种子（ID 15031）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 洋葱（ID 30）
+
+- ID：30
+- 名称键：Plant_Name_30
+- 名称：洋葱
+- 描述键：Plant_Des_30
+- 描述：层层包裹，至核无心。但每剥开一层，都有滋味。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/OnionSeed_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/Onion_01
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/Onion_03b
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/Onion_04
+- 尺寸：1
+- 生长时间：477000
+- 光照需求：2
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2538]`；解析：洋葱（ID 2538）
+- 收获经验：105
+- 完美收获产物：`[2538, 15032]`；解析：洋葱（ID 2538）、洋葱种子（ID 15032）
+- 完美率：0.2
+- 种子产物：`[15032]`；解析：洋葱种子（ID 15032）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 西瓜（ID 31）
+
+- ID：31
+- 名称键：Plant_Name_31
+- 名称：西瓜
+- 描述键：Plant_Des_31
+- 描述：需要充足的阳光与漫长的等待。种下它，便是对夏天许下的一个约定。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/Watermelon_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/Watermelon_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/Watermelon_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/Watermelon_04
+- 尺寸：4
+- 生长时间：532500
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2539]`；解析：西瓜（ID 2539）
+- 收获经验：380
+- 完美收获产物：`[2539, 15033]`；解析：西瓜（ID 2539）、西瓜种子（ID 15033）
+- 完美率：0.2
+- 种子产物：`[15033]`；解析：西瓜种子（ID 15033）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 雏菊（ID 32）
+
+- ID：32
+- 名称键：Plant_Name_32
+- 名称：雏菊
+- 描述键：Plant_Des_32
+- 描述：最不起眼却最坚韧，随便一个角落都能开成一片。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerchuju_01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerchuju_02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerchuju_03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerchuju_04
+- 尺寸：1
+- 生长时间：450000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2541]`；解析：雏菊（ID 2541）
+- 收获经验：100
+- 完美收获产物：`[2541, 15034]`；解析：雏菊（ID 2541）、雏菊种子（ID 15034）
+- 完美率：0.2
+- 种子产物：`[15034]`；解析：雏菊种子（ID 15034）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 三色堇（ID 33）
+
+- ID：33
+- 名称键：Plant_Name_33
+- 名称：三色堇
+- 描述键：Plant_Des_33
+- 描述：耐寒的小家伙，霜降里照样开得热闹。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerSansejing_01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerSansejing_02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerSansejing_03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerSansejing_04
+- 尺寸：1
+- 生长时间：360000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2542]`；解析：三色堇（ID 2542）
+- 收获经验：100
+- 完美收获产物：`[2542, 15035]`；解析：三色堇（ID 2542）、三色堇种子（ID 15035）
+- 完美率：0.2
+- 种子产物：`[15035]`；解析：三色堇种子（ID 15035）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 金盏菊（ID 34）
+
+- ID：34
+- 名称键：Plant_Name_34
+- 名称：金盏菊
+- 描述键：Plant_Des_34
+- 描述：据说能驱虫，橙黄的花盘也让屋里亮堂了几分。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerjinzhanju_01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerjinzhanju_02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerjinzhanju_03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerjinzhanju_04
+- 尺寸：1
+- 生长时间：300000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2543]`；解析：金盏菊（ID 2543）
+- 收获经验：100
+- 完美收获产物：`[2543, 15036]`；解析：金盏菊（ID 2543）、金盏菊种子（ID 15036）
+- 完美率：0.2
+- 种子产物：`[15036]`；解析：金盏菊种子（ID 15036）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 波斯菊（ID 35）
+
+- ID：35
+- 名称键：Plant_Name_35
+- 名称：波斯菊
+- 描述键：Plant_Des_35
+- 描述：风一吹就成片摇曳，最适合铺满一整个窗台。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerbosiju_01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerbosiju_02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerbosiju_03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Flowerbosiju_04
+- 尺寸：1
+- 生长时间：240000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2544]`；解析：波斯菊（ID 2544）
+- 收获经验：100
+- 完美收获产物：`[2544, 15037]`；解析：波斯菊（ID 2544）、波斯菊种子（ID 15037）
+- 完美率：0.2
+- 种子产物：`[15037]`；解析：波斯菊种子（ID 15037）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 矮牵牛（ID 36）
+
+- ID：36
+- 名称键：Plant_Name_36
+- 名称：矮牵牛
+- 描述键：Plant_Des_36
+- 描述：泼辣好养，开起来一簇一簇的，怎么都养不死。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerAiqianniu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerAiqianniu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerAiqianniu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_FlowerAiqianniu_04
+- 尺寸：1
+- 生长时间：600000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2545]`；解析：矮牵牛（ID 2545）
+- 收获经验：100
+- 完美收获产物：`[2545, 15038]`；解析：矮牵牛（ID 2545）、矮牵牛种子（ID 15038）
+- 完美率：0.2
+- 种子产物：`[15038]`；解析：矮牵牛种子（ID 15038）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 金针菇（ID 37）
+
+- ID：37
+- 名称键：Plant_Name_37
+- 名称：金针菇
+- 描述键：Plant_Des_37
+- 描述：不需要光。在阴湿的角落里细白成束地挤上来——至于吃下去之后会怎样。它似乎另有打算。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Common_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jingzhenggu_01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jingzhenggu_02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jingzhenggu_03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Jingzhenggu_04
+- 尺寸：1
+- 生长时间：162000
+- 光照需求：0
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2908, 2908]`；解析：金针菇（ID 2908）、金针菇（ID 2908）
+- 收获经验：45
+- 完美收获产物：`[2908, 2908, 15039]`；解析：金针菇（ID 2908）、金针菇（ID 2908）、金针菇种子（ID 15039）
+- 完美率：0.2
+- 种子产物：`[15039]`；解析：金针菇种子（ID 15039）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 爬山虎（ID 38）
+
+- ID：38
+- 名称键：Plant_Name_38
+- 名称：爬山虎
+- 描述键：Plant_Des_38
+- 描述：攀着墙缝一寸寸往上，把裸露的水泥慢慢遮住。它不急，反正墙也跑不掉。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Ivy01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Ivy02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Ivy03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Ivy04
+- 尺寸：1
+- 生长时间：604800
+- 光照需求：1
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[20107]`；解析：藤蔓（ID 20107）
+- 收获经验：130
+- 完美收获产物：`[20107, 15040]`；解析：藤蔓（ID 20107）、爬山虎种子（ID 15040）
+- 完美率：0.2
+- 种子产物：`[15040]`；解析：爬山虎种子（ID 15040）
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+## 植物等级配置
+
+### 未掌握\n研究一次种植设施，开始积累种植经验（ID 0）
+
+- 等级：0
+- 经验：100
+- 说明键：PlantLv_Info_0
+- 说明：未掌握\n研究一次种植设施，开始积累种植经验
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0
+- 完美生长率：0
+- 研究经验：50
+- 研究动作 ID：ID:1921
+
+### 见习园丁\n继续种植以积累经验（ID 1）
+
+- 等级：1
+- 经验：920
+- 说明键：PlantLv_Info_1
+- 说明：见习园丁\n继续种植以积累经验
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0
+- 完美生长率：0
+- 研究经验：0
+- 研究动作 ID：无
+
+### 园艺学徒\n解锁：主界面家中植物总览卡片\n新增：作物异常（虫害/长草/干旱）概率 -20%\n新增：完美种植概率 +10%（ID 2）
+
+- 等级：2
+- 经验：5000
+- 说明键：PlantLv_Info_2
+- 说明：园艺学徒\n解锁：主界面家中植物总览卡片\n新增：作物异常（虫害/长草/干旱）概率 -20%\n新增：完美种植概率 +10%
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0.2
+- 完美生长率：0.1
+- 研究经验：0
+- 研究动作 ID：无
+
+### 熟练园丁\n强化：完美种植概率 +10% → +20%（ID 3）
+
+- 等级：3
+- 经验：17000
+- 说明键：PlantLv_Info_3
+- 说明：熟练园丁\n强化：完美种植概率 +10% → +20%
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0.2
+- 完美生长率：0.2
+- 研究经验：0
+- 研究动作 ID：无
+
+### 资深园艺师\n强化：作物异常概率 -20% → -30%\n强化：完美种植概率 +20% → +30%（ID 4）
+
+- 等级：4
+- 经验：41000
+- 说明键：PlantLv_Info_4
+- 说明：资深园艺师\n强化：作物异常概率 -20% → -30%\n强化：完美种植概率 +20% → +30%
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0.3
+- 完美生长率：0.3
+- 研究经验：0
+- 研究动作 ID：无
+
+### 园艺大师\n强化：作物异常概率 -30% → -40%\n强化：完美种植概率 +30% → +40%（ID 5）
+
+- 等级：5
+- 经验：0
+- 说明键：PlantLv_Info_5
+- 说明：园艺大师\n强化：作物异常概率 -30% → -40%\n强化：完美种植概率 +30% → +40%
+- 前置条件：`[]`；解析：无
+- 生长速度加成：0
+- 虫害降低：0.4
+- 完美生长率：0.4
+- 研究经验：0
+- 研究动作 ID：无
