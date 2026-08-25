@@ -1,9 +1,9 @@
 # Survival Log 食品（离线解析）
 
-- 生成时间：2026-08-25T16:51:52+08:00
-- 游戏资源版本：1.0.14956 / catalog 2.3.1
+- 生成时间：2026-08-25T22:48:48+08:00
+- 游戏资源版本：1.0.15029 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\c8a59b0bfbba77b98f7716d8240206bf.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`
 - 条目数量：174
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。

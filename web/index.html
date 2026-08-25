@@ -42,24 +42,19 @@
       </aside>
 
       <main class="main-content">
-        <header class="page-header">
-          <div>
-            <div class="page-kicker">SURVIVAL LOG</div>
-            <h2 id="categoryTitle">生存图鉴</h2>
-            <p class="page-summary" id="categorySummary">正在读取分类数据</p>
-          </div>
-          <div class="header-sync" id="headerSync" data-status="loading">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span>等待同步</span>
-          </div>
-        </header>
-
         <section class="toolbar" aria-label="条目筛选">
-          <label class="search-box">
-            <span class="search-icon" aria-hidden="true">⌕</span>
-            <span class="sr-only">搜索条目</span>
-            <input id="searchInput" type="search" placeholder="搜索名称、名称键或 ID" autocomplete="off">
-          </label>
+          <div class="search-fields">
+            <label class="search-box search-field">
+              <span class="search-icon" aria-hidden="true">⌕</span>
+              <span class="search-label">成品名称</span>
+              <input id="nameSearchInput" type="search" placeholder="名称、名称键或 ID" autocomplete="off">
+            </label>
+            <label class="search-box search-field material-search-field">
+              <span class="search-icon" aria-hidden="true">⌕</span>
+              <span class="search-label">材料</span>
+              <input id="materialSearchInput" type="search" placeholder="材料名称或 ID" autocomplete="off">
+            </label>
+          </div>
           <div class="filter-group" id="filterGroup" role="group" aria-label="完成状态">
             <button type="button" class="filter-button active" data-filter="all">全部</button>
             <button type="button" class="filter-button" data-filter="completed">已解锁</button>

@@ -7,12 +7,13 @@ import argparse
 import json
 import sqlite3
 import sys
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from 图鉴解析工具 import (
+from codex_parser import (
     AUXILIARY_TABLES,
     ConfigRow,
     ExtractionContext,
@@ -20,7 +21,7 @@ from 图鉴解析工具 import (
     config_row_name,
     build_extraction_context,
 )
-from 图鉴存档解析 import (
+from codex_save import (
     CODEX_CATEGORY_SOURCE_TABLES,
     SaveParseError,
     default_save_file,
@@ -239,6 +240,18 @@ def build_relations(
     entries: dict[str, ConfigRow],
 ) -> list[tuple[str, str, str, int, str, int, str]]:
     relations: list[tuple[str, str, str, int, str, int, str]] = []
+    item_furniture_ids = {
+        row.row_id: row.values.get("TargetFurnitureID")
+        for row in context.tables.get("Config_Item", [])
+        if isinstance(row.values.get("TargetFurnitureID"), int)
+        and row.values.get("TargetFurnitureID")
+    }
+    furniture_productions: dict[int, list[ConfigRow]] = {}
+    for production in context.tables.get("Config_ProductionList", []):
+        for product_id in production.values.get("ProductID") or []:
+            furniture_id = item_furniture_ids.get(product_id)
+            if isinstance(furniture_id, int) and furniture_id:
+                furniture_productions.setdefault(furniture_id, []).append(production)
 
     def add(
         row: ConfigRow,
@@ -318,6 +331,27 @@ def build_relations(
                 ("RotProductOverride", "腐烂产物覆盖", "Config_Item"),
             ):
                 add_field(row, field, relation_type, table_name)
+            for production in furniture_productions.get(row.row_id, []):
+                recipe_id = production.row_id
+                add(row, "制造配方", "Config_ProductionList", recipe_id, recipe_id, recipe_id)
+                materials = production.values.get("MaterialList")
+                if isinstance(materials, list):
+                    material_type = f"制造材料（配方 ID {recipe_id}）"
+                    for ordinal, target_id in enumerate(materials):
+                        add(row, material_type, "Config_Item", target_id, ordinal, target_id)
+                level = production.values.get("Level")
+                if isinstance(level, int):
+                    relations.append(
+                        (
+                            source_key(row.table, row.row_id),
+                            f"制造要求等级（配方 ID {recipe_id}）",
+                            "Config_ProductionList",
+                            level,
+                            "无" if not level else f"{level}级",
+                            0,
+                            json_text(level),
+                        )
+                    )
     return relations
 
 
@@ -703,6 +737,33 @@ def build_database(
         connection.close()
 
 
+def prepare_packaged_database(source_path: Path, destination_path: Path) -> Path:
+    """Copy a database for distribution with no player completion or save metadata."""
+
+    source = source_path.expanduser().resolve()
+    destination = destination_path.expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"找不到待打包数据库：{source}")
+    if source == destination:
+        raise ValueError("打包数据库的源文件和目标文件不能相同")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    connection = sqlite3.connect(str(destination), timeout=30)
+    try:
+        initialize_database(connection)
+        now = utc_now()
+        with connection:
+            connection.execute("UPDATE completion SET completed = 0, updated_at = ?", (now,))
+            connection.execute(
+                "UPDATE category_completion SET completed = 0, updated_at = ?",
+                (now,),
+            )
+            connection.execute("DELETE FROM metadata WHERE key GLOB 'save_*'")
+    finally:
+        connection.close()
+    return destination
+
+
 def open_database(
     database_path: Path,
     *,
@@ -761,17 +822,43 @@ def get_overall_summary(connection: sqlite3.Connection) -> dict[str, int]:
 def query_entries(
     connection: sqlite3.Connection,
     category: str,
-    search: str = "",
+    name_search: str = "",
     completion_filter: str = "all",
     limit: int | None = 24,
     offset: int = 0,
+    material_search: str = "",
 ) -> list[dict[str, Any]]:
     clauses = ["ec.category = ?", "e.is_current = 1"]
     params: list[Any] = [category]
-    if search.strip():
+    if name_search.strip():
         clauses.append("(e.name LIKE ? OR e.name_key LIKE ? OR CAST(e.source_id AS TEXT) LIKE ?)")
-        pattern = f"%{search.strip()}%"
+        pattern = f"%{name_search.strip()}%"
         params.extend([pattern, pattern, pattern])
+    if material_search.strip():
+        material_prefixes = {
+            "dish": ("具体食材", "食材分类"),
+            "craft": ("制造材料",),
+            "furniture": ("制造材料",),
+        }.get(category, ())
+        if not material_prefixes:
+            clauses.append("0")
+        else:
+            material_clauses = []
+            material_params: list[Any] = []
+            pattern = f"%{material_search.strip()}%"
+            for prefix in material_prefixes:
+                material_clauses.append("r.relation_type = ? OR r.relation_type LIKE ?")
+                material_params.extend([prefix, f"{prefix}（%"])
+            clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM entry_relations r "
+                "WHERE r.source_entry_key = e.entry_key "
+                f"AND ({' OR '.join(material_clauses)}) "
+                "AND (r.target_name LIKE ? OR CAST(r.target_id AS TEXT) LIKE ?)"
+                ")"
+            )
+            params.extend(material_params)
+            params.extend([pattern, pattern])
     if completion_filter == "completed":
         clauses.append("cc.completed = 1")
     elif completion_filter == "pending":
@@ -787,7 +874,7 @@ def query_entries(
         LEFT JOIN category_completion cc
             ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
-        ORDER BY e.name COLLATE NOCASE, e.source_id
+        ORDER BY e.source_id, e.name COLLATE NOCASE
     """
     if limit is None:
         if offset:
@@ -803,18 +890,52 @@ def query_entries(
 def count_entries(
     connection: sqlite3.Connection,
     category: str,
-    search: str = "",
+    name_search: str = "",
     completion_filter: str = "all",
+    material_search: str = "",
 ) -> int:
-    rows = query_entries(connection, category, search, completion_filter, limit=100, offset=0)
+    rows = query_entries(
+        connection,
+        category,
+        name_search,
+        completion_filter,
+        limit=100,
+        offset=0,
+        material_search=material_search,
+    )
     if len(rows) < 100:
         return len(rows)
     clauses = ["ec.category = ?", "e.is_current = 1"]
     params: list[Any] = [category]
-    if search.strip():
+    if name_search.strip():
         clauses.append("(e.name LIKE ? OR e.name_key LIKE ? OR CAST(e.source_id AS TEXT) LIKE ?)")
-        pattern = f"%{search.strip()}%"
+        pattern = f"%{name_search.strip()}%"
         params.extend([pattern, pattern, pattern])
+    if material_search.strip():
+        material_prefixes = {
+            "dish": ("具体食材", "食材分类"),
+            "craft": ("制造材料",),
+            "furniture": ("制造材料",),
+        }.get(category, ())
+        if not material_prefixes:
+            clauses.append("0")
+        else:
+            material_clauses = []
+            material_params: list[str] = []
+            pattern = f"%{material_search.strip()}%"
+            for prefix in material_prefixes:
+                material_clauses.append("r.relation_type = ? OR r.relation_type LIKE ?")
+                material_params.extend([prefix, f"{prefix}（%"])
+            clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM entry_relations r "
+                "WHERE r.source_entry_key = e.entry_key "
+                f"AND ({' OR '.join(material_clauses)}) "
+                "AND (r.target_name LIKE ? OR CAST(r.target_id AS TEXT) LIKE ?)"
+                ")"
+            )
+            params.extend(material_params)
+            params.extend([pattern, pattern])
     if completion_filter == "completed":
         clauses.append("cc.completed = 1")
     elif completion_filter == "pending":
@@ -895,7 +1016,7 @@ def main() -> int:
     parser.add_argument(
         "--database",
         type=Path,
-        default=Path(__file__).resolve().parent / "SurvivalLog图鉴.sqlite3",
+        default=Path(__file__).resolve().parent / "survival_log_codex.sqlite3",
         help="SQLite 数据库路径",
     )
     parser.add_argument(
@@ -909,8 +1030,19 @@ def main() -> int:
         action="store_true",
         help="只构建静态数据库，不读取游戏存档完成状态",
     )
+    parser.add_argument(
+        "--package-copy-from",
+        type=Path,
+        default=None,
+        help="复制并清空完成状态/存档元数据，用于生成独立版数据库",
+    )
     args = parser.parse_args()
     try:
+        if args.package_copy_from is not None:
+            destination = prepare_packaged_database(args.package_copy_from, args.database)
+            print(f"打包数据库：{destination}")
+            print("完成状态：已清空；save_* 元数据：已清除")
+            return 0
         counts = build_database(
             args.game_root,
             args.database,

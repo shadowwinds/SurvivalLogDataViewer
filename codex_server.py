@@ -10,12 +10,13 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from 图鉴数据库 import (
+from codex_database import (
     CATEGORY_LABELS,
     CATEGORY_ORDER,
     CompletionSyncResult,
@@ -28,11 +29,11 @@ from 图鉴数据库 import (
     query_entries,
     sync_game_completion,
 )
-from 图鉴存档解析 import default_save_file
-from 图鉴解析工具 import FIELD_LABELS, format_scalar
+from codex_save import default_save_file
+from codex_parser import FIELD_LABELS, format_scalar
 
 
-APP_DATABASE_NAME = "SurvivalLog图鉴.sqlite3"
+APP_DATABASE_NAME = "survival_log_codex.sqlite3"
 POLL_INTERVAL_SECONDS = 5
 DISCONNECT_GRACE_SECONDS = 30
 CATEGORY_EMOJI = {
@@ -43,6 +44,13 @@ CATEGORY_EMOJI = {
     "craft": "🔧",
     "furniture": "🛋️",
 }
+DETAIL_RELATION_PREFIXES = {
+    "food": ("关联植物", "目标家具"),
+    "prey": ("关联植物", "目标家具"),
+    "dish": ("具体食材", "食材分类"),
+    "craft": ("制造材料",),
+    "furniture": ("制造材料", "制造要求等级"),
+}
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
@@ -52,7 +60,8 @@ STATIC_FILES = {
 
 
 def default_database_path() -> Path:
-    return Path(__file__).resolve().parent / APP_DATABASE_NAME
+    directory = Path(__file__).resolve().parent
+    return directory / APP_DATABASE_NAME
 
 
 def static_root() -> Path:
@@ -73,6 +82,170 @@ def _first_query_value(values: dict[str, list[str]], name: str, default: str = "
 
 def _json_safe_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in entry.items() if key != "raw_json"}
+
+
+def _relation_matches(relation_type: str, prefixes: tuple[str, ...]) -> bool:
+    return any(relation_type == prefix or relation_type.startswith(f"{prefix}（") for prefix in prefixes)
+
+
+def _format_relation_values(
+    relations: list[dict[str, Any]],
+    *,
+    include_group: bool = False,
+    include_id: bool = True,
+) -> str:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for relation in relations:
+        grouped.setdefault(relation["relation_type"], []).append(relation)
+    parts: list[str] = []
+    for relation_type, values in grouped.items():
+        counts = Counter((value["target_id"], value["target_name"]) for value in values)
+        items = []
+        for (target_id, target_name), count in counts.items():
+            quantity = f" × {count}" if count > 1 else ""
+            identity = f"（ID {target_id}）" if include_id else ""
+            items.append(f"{target_name}{quantity}{identity}")
+        text = "、".join(items) or "无"
+        parts.append(f"{relation_type}：{text}" if include_group else text)
+    return "；".join(parts) or "无"
+
+
+def _raw_field(raw: dict[str, Any], field: str, label: str | None = None) -> dict[str, str] | None:
+    if field not in raw:
+        return None
+    return {
+        "field": field,
+        "label": label or FIELD_LABELS.get(field, field),
+        "value": format_scalar(raw[field]),
+    }
+
+
+def _build_detail_fields(
+    category: str,
+    raw: dict[str, Any],
+    relations: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[str]]:
+    highlights: list[dict[str, str]] = []
+    highlighted_fields: set[str] = set()
+    highlighted_relation_prefixes = DETAIL_RELATION_PREFIXES.get(category, ())
+
+    if category in {"food", "prey"}:
+        acquisition_parts: list[str] = []
+        acquisition_text = raw.get("ItemDes1_Local") or raw.get("ItemDes1")
+        if acquisition_text:
+            acquisition_parts.append(str(acquisition_text))
+            highlighted_fields.add("ItemDes1_Local")
+            highlighted_fields.add("ItemDes1")
+        for prefix in highlighted_relation_prefixes:
+            matching = [
+                relation
+                for relation in relations
+                if relation["relation_type"] == prefix
+            ]
+            if matching:
+                acquisition_parts.append(f"{prefix}：{_format_relation_values(matching)}")
+        highlights.append(
+            {
+                "field": "acquisition",
+                "label": "获取方法",
+                "value": "；".join(acquisition_parts) or "当前配置未提供专门的获取方法",
+            }
+        )
+        if category == "food":
+            price = _raw_field(raw, "price", "购买价格")
+            if price:
+                highlights.append(price)
+                highlighted_fields.add("price")
+
+    elif category == "dish":
+        ingredients = [
+            relation
+            for relation in relations
+            if relation["relation_type"] in {"具体食材", "食材分类"}
+        ]
+        highlights.append(
+            {
+                "field": "ingredients",
+                "label": "制作需要的食材",
+                "value": _format_relation_values(ingredients, include_group=True),
+            }
+        )
+        highlighted_fields.update({"SpecificItems", "TagCombo"})
+        level = _raw_field(raw, "MinLevel", "要求等级")
+        if level:
+            level["value"] = f"{level['value']}级"
+            highlights.append(level)
+            highlighted_fields.add("MinLevel")
+
+    elif category == "plant":
+        for field in ("Size", "LightNeed", "ColdResistance"):
+            item = _raw_field(raw, field)
+            if item:
+                highlights.append(item)
+                highlighted_fields.add(field)
+
+    elif category == "craft":
+        materials = [
+            relation
+            for relation in relations
+            if relation["relation_type"].startswith("制造材料")
+        ]
+        highlights.append(
+            {
+                "field": "materials",
+                "label": "制造材料（所需数量）",
+                "value": _format_relation_values(materials, include_group=True),
+            }
+        )
+        highlighted_fields.add("MaterialList")
+        level = _raw_field(raw, "Level", "要求等级")
+        if level:
+            level["value"] = f"{level['value']}级"
+            highlights.append(level)
+            highlighted_fields.add("Level")
+
+    elif category == "furniture":
+        price = _raw_field(raw, "FurniturePrice", "家具价格")
+        if price:
+            highlights.append(price)
+            highlighted_fields.add("FurniturePrice")
+        materials = [
+            relation
+            for relation in relations
+            if relation["relation_type"].startswith("制造材料")
+        ]
+        highlights.append(
+            {
+                "field": "materials",
+                "label": "制造材料（所需数量）",
+                "value": _format_relation_values(materials, include_group=True),
+            }
+        )
+        levels = [
+            relation
+            for relation in relations
+            if relation["relation_type"].startswith("制造要求等级")
+        ]
+        highlights.append(
+            {
+                "field": "level",
+                "label": "要求等级",
+                "value": _format_relation_values(levels, include_group=True, include_id=False),
+            }
+        )
+
+    fields = []
+    for field, value in raw.items():
+        if field in highlighted_fields:
+            continue
+        fields.append(
+            {
+                "field": field,
+                "label": FIELD_LABELS.get(field, field),
+                "value": format_scalar(value),
+            }
+        )
+    return highlights, fields, list(highlighted_relation_prefixes)
 
 
 class CodexService:
@@ -181,7 +354,13 @@ class CodexService:
                 "disconnect_grace_seconds": DISCONNECT_GRACE_SECONDS,
             }
 
-    def entries(self, category: str, search: str, completion_filter: str) -> dict[str, Any]:
+    def entries(
+        self,
+        category: str,
+        name_search: str,
+        material_search: str,
+        completion_filter: str,
+    ) -> dict[str, Any]:
         if category not in CATEGORY_ORDER:
             raise ValueError(f"未知图鉴分类：{category}")
         if completion_filter not in {"all", "completed", "pending"}:
@@ -191,14 +370,17 @@ class CodexService:
             rows = query_entries(
                 self.connection,
                 category,
-                search,
+                name_search,
                 completion_filter,
                 limit=None,
+                material_search=material_search,
             )
             return {
                 "category": category,
                 "label": CATEGORY_LABELS[category],
                 "total": len(rows),
+                "name_search": name_search,
+                "material_search": material_search,
                 "entries": [_json_safe_entry(row) for row in rows],
             }
 
@@ -213,17 +395,17 @@ class CodexService:
             if row is None:
                 return None
             payload = json.loads(row["raw_json"])
-            fields = [
-                {
-                    "field": field,
-                    "label": FIELD_LABELS.get(field, field),
-                    "value": format_scalar(value),
-                }
-                for field, value in payload.items()
-            ]
+            relations = get_entry_relations(self.connection, entry_key)
+            highlights, fields, highlight_relation_prefixes = _build_detail_fields(
+                category,
+                payload,
+                relations,
+            )
             return {
                 "entry": _json_safe_entry(row),
-                "relations": get_entry_relations(self.connection, entry_key),
+                "relations": relations,
+                "highlight_relation_prefixes": highlight_relation_prefixes,
+                "highlights": highlights,
                 "fields": fields,
             }
 
@@ -318,9 +500,15 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/entries":
             category = _first_query_value(query, "category", "furniture")
-            search = _first_query_value(query, "search")
+            name_search = _first_query_value(query, "name_search")
+            if not name_search:
+                name_search = _first_query_value(query, "search")
+            material_search = _first_query_value(query, "material_search")
             completion = _first_query_value(query, "completion", "all")
-            self._send_json(HTTPStatus.OK, service.entries(category, search, completion))
+            self._send_json(
+                HTTPStatus.OK,
+                service.entries(category, name_search, material_search, completion),
+            )
             return
         prefix = "/api/entries/"
         if path.startswith(prefix):

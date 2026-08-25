@@ -4,7 +4,8 @@
   const FALLBACK_POLL_INTERVAL = 5000;
   const state = {
     category: "furniture",
-    search: "",
+    nameSearch: "",
+    materialSearch: "",
     completion: "all",
     selectedKey: null,
     categories: [],
@@ -103,8 +104,6 @@
 
   function renderHeader() {
     const category = currentCategory();
-    byId("categoryTitle").textContent = `${category.emoji} ${category.label}`;
-    byId("categorySummary").textContent = `已完成 ${category.completed}/${category.total} · 当前显示 ${state.entries.length} 条`;
     byId("entriesTitle").textContent = `${category.label}条目`;
     byId("resultCount").textContent = `${state.entries.length} 条`;
   }
@@ -139,6 +138,20 @@
     });
   }
 
+  function renderSearchControls() {
+    const input = byId("materialSearchInput");
+    const field = input && input.closest(".material-search-field");
+    const supported = ["dish", "craft", "furniture"].includes(state.category);
+    if (!input || !field) return;
+    input.disabled = !supported;
+    field.classList.toggle("is-disabled", !supported);
+    input.placeholder = supported ? "材料名称或 ID" : "当前分类无材料检索";
+    if (!supported && state.materialSearch) {
+      state.materialSearch = "";
+      input.value = "";
+    }
+  }
+
   function renderEntries() {
     const list = byId("entryList");
     list.replaceChildren();
@@ -166,11 +179,11 @@
         `entry-status ${entry.completed ? "completed" : "pending"}`,
         entry.completed ? "已解锁" : "未解锁",
       );
-      const detailButton = makeElement("button", "detail-button", "详情");
-      detailButton.type = "button";
-      detailButton.dataset.entryKey = entry.entry_key;
-      detailButton.title = `查看 ${entry.name} 详情`;
-      row.append(indicator, body, status, detailButton);
+      row.dataset.entryKey = entry.entry_key;
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.setAttribute("aria-label", `查看 ${entry.name} 详情`);
+      row.append(indicator, body, status);
       fragment.append(row);
     });
     list.append(fragment);
@@ -204,42 +217,68 @@
     heading.append(status);
     content.append(heading);
 
-    if (entry.description) {
-      content.append(makeElement("p", "detail-description", entry.description));
-    }
-
-    if (payload.relations && payload.relations.length) {
-      const relationSection = makeElement("section", "detail-section");
-      relationSection.append(makeElement("h5", "detail-section-title", "关联数据"));
-      const groups = new Map();
-      payload.relations.forEach((relation) => {
-        if (!groups.has(relation.relation_type)) groups.set(relation.relation_type, []);
-        groups.get(relation.relation_type).push(
-          `${relation.target_name}（ID ${relation.target_id}）`,
+    if (payload.highlights && payload.highlights.length) {
+      const highlightSection = makeElement("section", "detail-section detail-highlights");
+      highlightSection.append(makeElement("h5", "detail-section-title", "重点信息"));
+      const highlightTable = makeElement("dl", "highlight-table");
+      payload.highlights.forEach((field) => {
+        highlightTable.append(
+          makeElement("dt", "highlight-label", field.label),
+          makeElement("dd", "highlight-value", field.value),
         );
       });
-      groups.forEach((values, relationType) => {
-        const row = makeElement("div", "relation-row");
-        row.append(
-          makeElement("span", "relation-label", relationType),
-          makeElement("span", "relation-value", values.join("、")),
-        );
-        relationSection.append(row);
-      });
-      content.append(relationSection);
+      highlightSection.append(highlightTable);
+      content.append(highlightSection);
     }
 
-    const fieldSection = makeElement("section", "detail-section");
-    fieldSection.append(makeElement("h5", "detail-section-title", "配置字段"));
-    const fieldTable = makeElement("dl", "field-table");
-    (payload.fields || []).forEach((field) => {
-      fieldTable.append(
-        makeElement("dt", "field-label", field.label),
-        makeElement("dd", "field-value", field.value),
-      );
-    });
-    fieldSection.append(fieldTable);
-    content.append(fieldSection);
+    const excludedPrefixes = payload.highlight_relation_prefixes || [];
+    const extraRelations = (payload.relations || []).filter(
+      (relation) => !excludedPrefixes.some(
+        (prefix) => relation.relation_type === prefix || relation.relation_type.startsWith(`${prefix}（`),
+      ),
+    );
+    const extraFields = payload.fields || [];
+    if (extraRelations.length || extraFields.length) {
+      const details = makeElement("details", "detail-collapse");
+      details.append(makeElement("summary", "detail-collapse-summary", "其余词条"));
+      const extraContent = makeElement("div", "detail-extra-content");
+      if (extraRelations.length) {
+        const relationSection = makeElement("section", "detail-section");
+        relationSection.append(makeElement("h5", "detail-section-title", "关联数据"));
+        const groups = new Map();
+        extraRelations.forEach((relation) => {
+          if (!groups.has(relation.relation_type)) groups.set(relation.relation_type, []);
+          groups.get(relation.relation_type).push(
+            `${relation.target_name}（ID ${relation.target_id}）`,
+          );
+        });
+        groups.forEach((values, relationType) => {
+          const row = makeElement("div", "relation-row");
+          row.append(
+            makeElement("span", "relation-label", relationType),
+            makeElement("span", "relation-value", values.join("、")),
+          );
+          relationSection.append(row);
+        });
+        extraContent.append(relationSection);
+      }
+
+      if (extraFields.length) {
+        const fieldSection = makeElement("section", "detail-section");
+        fieldSection.append(makeElement("h5", "detail-section-title", "配置字段"));
+        const fieldTable = makeElement("dl", "field-table");
+        extraFields.forEach((field) => {
+          fieldTable.append(
+            makeElement("dt", "field-label", field.label),
+            makeElement("dd", "field-value", field.value),
+          );
+        });
+        fieldSection.append(fieldTable);
+        extraContent.append(fieldSection);
+      }
+      details.append(extraContent);
+      content.append(details);
+    }
   }
 
   async function loadDetail(entryKey) {
@@ -265,7 +304,8 @@
     byId("entryList").classList.add("is-loading");
     const query = new URLSearchParams({
       category: state.category,
-      search: state.search,
+      name_search: state.nameSearch,
+      material_search: state.materialSearch,
       completion: state.completion,
     });
     try {
@@ -313,6 +353,7 @@
       renderSource();
       renderSync();
       renderFilters();
+      renderSearchControls();
 
       if (initial || revisionChanged || !state.loaded) {
         await loadEntries();
@@ -341,6 +382,7 @@
       state.category = category;
       state.selectedKey = null;
       renderCategories();
+      renderSearchControls();
       loadEntries();
     });
 
@@ -353,22 +395,42 @@
       loadEntries();
     });
 
-    byId("searchInput").addEventListener("input", (event) => {
-      state.search = event.target.value;
+    function scheduleSearch() {
       window.clearTimeout(bindEvents.searchTimer);
       bindEvents.searchTimer = window.setTimeout(() => {
         state.selectedKey = null;
         loadEntries();
       }, 180);
+    }
+
+    byId("nameSearchInput").addEventListener("input", (event) => {
+      state.nameSearch = event.target.value;
+      scheduleSearch();
     });
+
+    byId("materialSearchInput").addEventListener("input", (event) => {
+      state.materialSearch = event.target.value;
+      scheduleSearch();
+    });
+
+    function selectEntry(target) {
+      if (!target) return;
+      state.selectedKey = target.dataset.entryKey;
+      renderEntries();
+      loadDetail(state.selectedKey);
+    }
 
     byId("entryList").addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target : null;
-      const button = target && target.closest("[data-entry-key]");
-      if (!button) return;
-      state.selectedKey = button.dataset.entryKey;
-      renderEntries();
-      loadDetail(state.selectedKey);
+      selectEntry(target && target.closest("[data-entry-key]"));
+    });
+
+    byId("entryList").addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target instanceof Element ? event.target.closest("[data-entry-key]") : null;
+      if (!target) return;
+      event.preventDefault();
+      selectEntry(target);
     });
   }
 

@@ -33,6 +33,9 @@ _VENDOR_CANDIDATES = (
     _PROJECT_DIR.parent / "_vendor_unitypy",
     _PROJECT_DIR.parent / "000" / "_vendor_unitypy",
 )
+_bundle_root = getattr(sys, "_MEIPASS", None)
+if _bundle_root:
+    _VENDOR_CANDIDATES = (Path(_bundle_root) / "_vendor_unitypy", *_VENDOR_CANDIDATES)
 _configured_vendor = os.environ.get("SURVIVALLOG_UNITYPY_DIR")
 VENDOR_DIR = (
     Path(_configured_vendor)
@@ -52,7 +55,8 @@ def load_unitypy() -> Any:
     except ImportError as exc:  # pragma: no cover - only used on a new machine
         raise RuntimeError(
             f"缺少 UnityPy。请先运行：python -m pip install --target "
-            f"\"{VENDOR_DIR}\" UnityPy，或设置 SURVIVALLOG_UNITYPY_DIR"
+            f"\"{VENDOR_DIR}\" UnityPy，或设置 SURVIVALLOG_UNITYPY_DIR；"
+            f"导入错误：{exc}"
         ) from exc
     return UnityPy
 
@@ -1061,13 +1065,13 @@ def render_dish_markdown(context: ExtractionContext) -> str:
 
 
 OUTPUT_FILENAMES = {
-    "food": "SurvivalLog食品.md",
-    "dish": "SurvivalLog菜肴.md",
-    "plant": "SurvivalLog植物.md",
-    "prey": "SurvivalLog猎物.md",
-    "craft": "SurvivalLog制造.md",
-    "furniture": "SurvivalLog家具.md",
-    "auxiliary": "SurvivalLog图鉴辅助配置.md",
+    "food": "survival_log_food.md",
+    "dish": "survival_log_dish.md",
+    "plant": "survival_log_plant.md",
+    "prey": "survival_log_prey.md",
+    "craft": "survival_log_craft.md",
+    "furniture": "survival_log_furniture.md",
+    "auxiliary": "survival_log_auxiliary.md",
 }
 
 

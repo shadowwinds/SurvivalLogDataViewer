@@ -4,15 +4,15 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机的 `HistorySave.bytes` 图鉴完成状态；不启动游戏，不修改存档、mod DLL 或游戏资源。
 
-当前本地游戏资源版本为 `1.0.14956`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
+当前本地游戏资源版本为 `1.0.15029`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
 
-- [SurvivalLog食品.md](./SurvivalLog食品.md)
-- [SurvivalLog菜肴.md](./SurvivalLog菜肴.md)
-- [SurvivalLog植物.md](./SurvivalLog植物.md)
-- [SurvivalLog猎物.md](./SurvivalLog猎物.md)
-- [SurvivalLog制造.md](./SurvivalLog制造.md)
-- [SurvivalLog家具.md](./SurvivalLog家具.md)
-- [SurvivalLog图鉴辅助配置.md](./SurvivalLog图鉴辅助配置.md)
+- [survival_log_food.md](./survival_log_food.md)
+- [survival_log_dish.md](./survival_log_dish.md)
+- [survival_log_plant.md](./survival_log_plant.md)
+- [survival_log_prey.md](./survival_log_prey.md)
+- [survival_log_craft.md](./survival_log_craft.md)
+- [survival_log_furniture.md](./survival_log_furniture.md)
+- [survival_log_auxiliary.md](./survival_log_auxiliary.md)
 
 当前版本主图鉴数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87。参考图片中的完成进度为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，合计 `366/935`，约为 39%。这些完成数量只用于验收和前端参考，离线解析器不会据此伪造具体完成 ID。
 
@@ -34,9 +34,9 @@
 
 `%USERPROFILE%\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes`
 
-独立解析器 [图鉴存档解析.py](./图鉴存档解析.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到 `CodexUnlocked`，校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
+独立解析器 [codex_save.py](./codex_save.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到 `CodexUnlocked`，校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
 
-当前存档的分类完成数量为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，分类映射合计 `366/935`。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
+当前存档的分类完成数量由 `HistorySave.bytes` 实时读取，六类分类映射合计 `935`；具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
 ## 主图鉴分类规则
 
@@ -62,7 +62,7 @@
 | 制造 | `Config_ProductionList` | `Config_ProductionLv`、`Config_Item` |
 | 家具 | `Config_Furniture` | `Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner` |
 
-主 Markdown 只展开主表条目。物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `SurvivalLog图鉴辅助配置.md`。
+主 Markdown 只展开主表条目。物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `survival_log_auxiliary.md`。
 
 所有关联字段保留原始数字并尽量解析名称。无法解析的 ID 显示为 `ID:xxxx`；空值和游戏使用的 0 哨兵显示为“无”。本地化名称按本地化字段、非本地化配置键、ID 顺序回退。
 
@@ -84,10 +84,10 @@ data[i] ^= key[i % 32]
 
 ## 命令行
 
-解析脚本为 [图鉴解析工具.py](./图鉴解析工具.py)。默认生成全部七份 Markdown：
+解析脚本为 [codex_parser.py](./codex_parser.py)。默认生成全部七份 Markdown：
 
 ```powershell
-python "图鉴解析工具.py" `
+python "codex_parser.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
   --output-dir "."
 ```
@@ -95,22 +95,22 @@ python "图鉴解析工具.py" `
 单独导出菜肴：
 
 ```powershell
-python "图鉴解析工具.py" `
+python "codex_parser.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
   --category dish `
-  --output "SurvivalLog菜肴.md"
+  --output "survival_log_dish.md"
 ```
 
 可用分类为 `food|dish|plant|prey|craft|furniture|auxiliary`。`all` 模式使用 `--output-dir`，单分类模式可以使用 `--output`。输出路径不能位于游戏安装目录中。
 
 ## SQLite 数据库
 
-[图鉴数据库.py](./图鉴数据库.py) 复用解析器读取上下文并构建 SQLite 数据库：
+[codex_database.py](./codex_database.py) 复用解析器读取上下文并构建 SQLite 数据库：
 
 ```powershell
-python "图鉴数据库.py" `
+python "codex_database.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database "SurvivalLog图鉴.sqlite3" `
+  --database "survival_log_codex.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
@@ -120,27 +120,31 @@ python "图鉴数据库.py" `
 
 ## 轻量本地网页
 
-[图鉴前端.py](./图鉴前端.py) 使用 Python 标准库启动仅监听 `127.0.0.1` 的本地 HTTP 服务，网页资源位于 `web/`，不依赖 Streamlit。浏览器每 5 秒请求一次状态接口；服务端先比较 `HistorySave.bytes` 和同名 `.bak` 的路径、大小、修改时间，只有签名变化时才解析存档并同步数据库。
+[codex_server.py](./codex_server.py) 使用 Python 标准库启动仅监听 `127.0.0.1` 的本地 HTTP 服务，网页资源位于 `web/`，不依赖 Streamlit。浏览器每 5 秒请求一次状态接口；服务端先比较 `HistorySave.bytes` 和同名 `.bak` 的路径、大小、修改时间，只有签名变化时才解析存档并同步数据库。
 
 ```powershell
-python "图鉴前端.py" `
-  --database "SurvivalLog图鉴.sqlite3" `
+python "codex_server.py" `
+  --database "survival_log_codex.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端提供六类分类、总体进度、搜索、完成状态筛选、全量条目列表、关联数据和配置字段详情。完成状态只读显示游戏存档中的图鉴状态；存档写入中或解析失败时保留上一次有效数据库状态，并在页面提示错误。前端不会写回存档。
+前端提供六类分类、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。条目按 ID 升序排列，点击整行即可切换右侧详情；详情按分类高亮重点字段，其余词条默认折叠。完成状态只读显示游戏存档中的图鉴状态；存档写入中或解析失败时保留上一次有效数据库状态，并在页面提示错误。前端不会写回存档。
+
+### 启动时自动更新
+
+独立版启动器会先读取 Steam 的 `steamapps/libraryfolders.vdf`，检查每个库中的 `steamapps/common/Survival Log`，再使用 `SurvivalLog_Data/StreamingAssets/PackageManifest` 和 catalog 校验游戏目录。Steam 库未找到有效目录时，会在本机各磁盘的常见 Steam/Games 路径做有限备用搜索。只有游戏资源版本与数据库 metadata 中的 `game_version` 不同，才会重新解析配置并导入 SQLite；更新失败时保留原数据库。
 
 ### Windows 独立版
 
-使用 [打包图鉴前端.ps1](./打包图鉴前端.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容只包含精简 Python 运行时、标准库服务、网页资源和预生成 SQLite 数据库，不再携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
+使用 [package_frontend.ps1](./package_frontend.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 和预生成 SQLite 数据库，不再携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
 
 ```powershell
-PowerShell -ExecutionPolicy Bypass -File ".\打包图鉴前端.ps1"
+PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 ```
 
-分发目录为 `dist/SurvivalLog图鉴/`，其中的 `SurvivalLog图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe；构建产物不包含游戏安装目录、bundle、catalog 或原始存档。
+分发目录为 `dist/SurvivalLogDataViewer/`，其中的 `生存日志图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe；构建产物不包含游戏安装目录、bundle、catalog 或原始存档。
 
-独立版直接使用 exe 同目录中的 `SurvivalLog图鉴.sqlite3`，不创建或读取用户目录数据库副本；存档同步后的完成状态直接写回该数据库。普通启动不显示终端，浏览器关闭后连续约 30 秒没有网页心跳时服务自动退出；`--headless` 模式保持后台常驻。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
+独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本；存档同步后的完成状态直接写回该数据库。普通启动不显示终端，浏览器关闭后连续约 30 秒没有网页心跳时服务自动退出；`--headless` 模式保持后台常驻。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
 
 ## 已知限制
 

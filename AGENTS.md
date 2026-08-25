@@ -8,9 +8,9 @@
 
 - 本项目是 Survival Log 的离线图鉴数据解析工具，不是游戏本体，也不是运行时 mod。
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
-- 当前主要脚本为 `图鉴解析工具.py`，主要说明为 `SurvivalLog图鉴解析说明.md`。
-- 默认输出七份 UTF-8 Markdown：六类主图鉴 `SurvivalLog食品.md`、`SurvivalLog菜肴.md`、`SurvivalLog植物.md`、`SurvivalLog猎物.md`、`SurvivalLog制造.md`、`SurvivalLog家具.md`，以及 `SurvivalLog图鉴辅助配置.md`。
-- 数据库构建脚本为 `图鉴数据库.py`，存档读取脚本为 `图鉴存档解析.py`，本地标准库网页服务为 `图鉴前端.py`，静态资源位于 `web/`；数据库默认文件为 `SurvivalLog图鉴.sqlite3`。
+- 当前主要脚本为 `codex_parser.py`，主要技术说明为 `parser_notes.md`，用户入口为 `README.md`。
+- 默认输出七份 UTF-8 Markdown：六类主图鉴 `survival_log_food.md`、`survival_log_dish.md`、`survival_log_plant.md`、`survival_log_prey.md`、`survival_log_craft.md`、`survival_log_furniture.md`，以及 `survival_log_auxiliary.md`。
+- 数据库构建脚本为 `codex_database.py`，存档读取脚本为 `codex_save.py`，本地标准库网页服务为 `codex_server.py`，自动更新模块为 `codex_update.py`，静态资源位于 `web/`；数据库默认文件为 `survival_log_codex.sqlite3`。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他安装位置时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
 
@@ -100,7 +100,7 @@
 
 窄范围代码改动至少执行语法检查和对应分类验证；涉及解析 schema、资源定位、分类规则或共用导出层时执行完整验证。
 
-- 运行 `python -m py_compile "图鉴解析工具.py" "图鉴存档解析.py" "图鉴数据库.py" "图鉴前端.py"`。
+- 运行 `python -m py_compile "codex_parser.py" "codex_save.py" "codex_database.py" "codex_server.py" "codex_launcher.py" "codex_update.py"`。
 - 使用当前完整游戏目录运行一次默认全量导出，确认生成七个 UTF-8 Markdown。
 - 分别运行七个 `--category` 入口，确认输出路径、退出码、数量和内容正常。
 - 校验当前主图鉴数量：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87；原始配置表数量不能直接当作图鉴数量。
@@ -113,7 +113,7 @@
 
 ## 10. 文档、状态与版本控制
 
-- 解析行为、资源来源、版本号、分类规则、已知限制或 CLI 发生变化时，同步更新 `SurvivalLog图鉴解析说明.md`，但不复制整份工作规范。
+- 解析行为、资源来源、版本号、分类规则、已知限制或 CLI 发生变化时，同步更新 `parser_notes.md`，但不复制整份工作规范。
 - 不创建与用户要求无关的日志、缓存、测试数据或多余文档文件。
 - 不自动把游戏资源、存档、生成的大型 Markdown、SQLite 数据库或临时文件加入 Git；检查 `.gitignore` 后再决定是否纳入版本控制。
 - 完成一个逻辑完整、经过验证的功能单元后，默认创建一次本地 commit。commit 只包含本任务明确修改的文件。有外部未提交修改时不得擅自提交或重写历史。
