@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
-"""Streamlit frontend for the offline Survival Log codex database."""
+"""Serve the offline Survival Log codex through a standard-library web app."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-from html import escape
+import threading
+import urllib.parse
+import webbrowser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-
-import streamlit as st
 
 from 图鉴数据库 import (
     CATEGORY_LABELS,
     CATEGORY_ORDER,
+    CompletionSyncResult,
     get_category_summaries,
     get_entry,
     get_entry_relations,
     get_metadata,
+    get_overall_summary,
     open_database,
     query_entries,
     sync_game_completion,
@@ -27,6 +31,8 @@ from 图鉴存档解析 import default_save_file
 from 图鉴解析工具 import FIELD_LABELS, format_scalar
 
 
+APP_DATABASE_NAME = "SurvivalLog图鉴.sqlite3"
+POLL_INTERVAL_SECONDS = 5
 CATEGORY_EMOJI = {
     "food": "🍞",
     "dish": "🍳",
@@ -35,437 +41,341 @@ CATEGORY_EMOJI = {
     "craft": "🔧",
     "furniture": "🛋️",
 }
-
-
-APP_CSS = """
-<style>
-:root {
-    --codex-ink: #1f2933;
-    --codex-muted: #6b7785;
-    --codex-border: #dfe6eb;
-    --codex-surface: #ffffff;
-    --codex-background: #f5f7f9;
-    --codex-accent: #1f7a6d;
-    --codex-accent-soft: #e8f5f1;
-    --codex-success: #397b50;
-    --codex-success-soft: #e8f4eb;
-    --codex-pending: #b7791f;
-    --codex-pending-soft: #fff6df;
+STATIC_FILES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
 }
 
-[data-testid="stAppViewContainer"] {
-    background: var(--codex-background);
-}
 
-[data-testid="stHeader"] {
-    background: transparent;
-}
-
-[data-testid="stSidebar"] {
-    background: #edf2f4;
-    border-right: 1px solid var(--codex-border);
-}
-
-[data-testid="stSidebar"] > div:first-child {
-    padding-top: 1.25rem;
-}
-
-.block-container {
-    max-width: 1480px;
-    padding-top: 1.5rem;
-    padding-bottom: 2rem;
-}
-
-[data-testid="stVerticalBlockBorderWrapper"] {
-    border-color: var(--codex-border);
-    border-radius: 10px;
-    background: var(--codex-surface);
-}
-
-[data-testid="stVerticalBlockBorderWrapper"]:has(.entry-row-marker) {
-    transition: border-color 120ms ease, box-shadow 120ms ease;
-}
-
-[data-testid="stVerticalBlockBorderWrapper"]:has(.entry-row-marker):hover {
-    border-color: #b7d8d1;
-    box-shadow: 0 3px 12px rgba(31, 122, 109, 0.08);
-}
-
-.entry-row-marker {
-    width: 8px;
-    height: 8px;
-    margin: 0.35rem auto 0;
-    border-radius: 50%;
-    background: var(--codex-pending);
-}
-
-.entry-row-marker.completed {
-    background: var(--codex-success);
-}
-
-.entry-name {
-    color: var(--codex-ink);
-    font-size: 1rem;
-    font-weight: 650;
-    line-height: 1.35;
-}
-
-.entry-meta {
-    color: var(--codex-muted);
-    font-size: 0.78rem;
-    line-height: 1.35;
-    margin-top: 0.18rem;
-}
-
-.status-pill {
-    display: inline-block;
-    border-radius: 999px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    line-height: 1.4;
-    padding: 0.22rem 0.55rem;
-    white-space: nowrap;
-}
-
-.status-pill.completed {
-    background: var(--codex-success-soft);
-    color: var(--codex-success);
-}
-
-.status-pill.pending {
-    background: var(--codex-pending-soft);
-    color: var(--codex-pending);
-}
-
-.section-summary {
-    color: var(--codex-muted);
-    font-size: 0.82rem;
-    margin-top: 0.25rem;
-}
-
-.data-source-label {
-    color: var(--codex-muted);
-    font-size: 0.78rem;
-    line-height: 1.5;
-}
-
-.stButton > button {
-    border: 1px solid var(--codex-border);
-    border-radius: 8px;
-    color: var(--codex-ink);
-    min-height: 2.25rem;
-    transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.stButton > button:hover {
-    border-color: var(--codex-accent);
-    color: var(--codex-accent);
-    background: var(--codex-accent-soft);
-}
-
-[data-testid="stProgressBarTrack"] {
-    background: var(--codex-border);
-}
-
-[data-testid="stProgressBarTrack"] > div {
-    background: var(--codex-accent);
-}
-
-[data-testid="stTextInput"] input:focus {
-    border-color: var(--codex-accent);
-    box-shadow: 0 0 0 1px var(--codex-accent);
-}
-
-[data-testid="stExpander"] {
-    border-color: var(--codex-border);
-    background: var(--codex-surface);
-}
-</style>
-"""
+def default_database_path() -> Path:
+    return Path(__file__).resolve().parent / APP_DATABASE_NAME
 
 
-def parse_script_args() -> argparse.Namespace:
-    raw_args = sys.argv[1:]
-    if "--" in raw_args:
-        raw_args = raw_args[raw_args.index("--") + 1 :]
-    parser = argparse.ArgumentParser(add_help=False)
+def static_root() -> Path:
+    candidates = [Path(__file__).resolve().parent / "web"]
+    candidates.append(Path(sys.executable).resolve().parent / "web")
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        candidates.append(Path(bundle_root) / "web")
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError("找不到本地网页资源目录：web")
+
+
+def _first_query_value(values: dict[str, list[str]], name: str, default: str = "") -> str:
+    return values.get(name, [default])[0]
+
+
+def _json_safe_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in entry.items() if key != "raw_json"}
+
+
+class CodexService:
+    """Serialize database access and avoid parsing the save when its signature is unchanged."""
+
+    def __init__(self, database_path: Path, save_file: Path):
+        self.database_path = database_path.expanduser().resolve()
+        self.save_file = save_file.expanduser().resolve()
+        self.connection = open_database(self.database_path, check_same_thread=False)
+        self._lock = threading.RLock()
+        self._last_success_signature: tuple[Any, ...] | None = None
+        self._last_sync: CompletionSyncResult | None = None
+
+    @staticmethod
+    def _file_signature(path: Path) -> tuple[Any, ...]:
+        try:
+            stat = path.stat()
+        except OSError:
+            return (str(path), False, 0, 0)
+        if not path.is_file():
+            return (str(path), False, 0, 0)
+        return (str(path), True, stat.st_size, stat.st_mtime_ns)
+
+    def _save_signature(self) -> tuple[Any, ...]:
+        return (
+            self._file_signature(self.save_file),
+            self._file_signature(Path(f"{self.save_file}.bak")),
+        )
+
+    def _ensure_sync(self) -> CompletionSyncResult:
+        signature = self._save_signature()
+        with self._lock:
+            if (
+                self._last_sync is not None
+                and self._last_success_signature == signature
+                and self._last_sync.status in {"ok", "fallback"}
+            ):
+                return CompletionSyncResult(
+                    status=self._last_sync.status,
+                    changed=False,
+                    save_path=self._last_sync.save_path,
+                    category_counts=self._last_sync.category_counts,
+                    unknown_ids=self._last_sync.unknown_ids,
+                    updated_entries=0,
+                    used_backup=self._last_sync.used_backup,
+                    message="存档未变化，完成状态无需更新",
+                )
+
+            result = sync_game_completion(self.connection, self.save_file)
+            self._last_sync = result
+            if result.status in {"ok", "fallback"}:
+                self._last_success_signature = signature
+            else:
+                self._last_success_signature = None
+            return result
+
+    def _revision(self, metadata: dict[str, str], result: CompletionSyncResult) -> str:
+        return json.dumps(
+            {
+                "path": metadata.get("save_path", str(result.save_path)),
+                "sha256": metadata.get("save_sha256", ""),
+                "mtime_ns": metadata.get("save_mtime_ns", ""),
+                "status": metadata.get("save_sync_status", result.status),
+                "error": metadata.get("save_sync_error", ""),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    def state(self) -> dict[str, Any]:
+        with self._lock:
+            result = self._ensure_sync()
+            metadata = get_metadata(self.connection)
+            summaries = get_category_summaries(self.connection)
+            summary_by_category = {row["category"]: row for row in summaries}
+            categories = [
+                {
+                    "category": category,
+                    "label": CATEGORY_LABELS[category],
+                    "emoji": CATEGORY_EMOJI[category],
+                    "total": int(summary_by_category.get(category, {}).get("total", 0)),
+                    "completed": int(summary_by_category.get(category, {}).get("completed", 0)),
+                }
+                for category in CATEGORY_ORDER
+            ]
+            sync = {
+                "status": result.status,
+                "changed": result.changed,
+                "message": result.message,
+                "revision": self._revision(metadata, result),
+                "save_path": str(result.save_path),
+                "used_backup": result.used_backup,
+                "updated_entries": result.updated_entries,
+                "category_counts": result.category_counts,
+                "unknown_ids": {
+                    category: list(values) for category, values in result.unknown_ids.items()
+                },
+            }
+            return {
+                "categories": categories,
+                "overall": get_overall_summary(self.connection),
+                "metadata": metadata,
+                "sync": sync,
+                "poll_interval_seconds": POLL_INTERVAL_SECONDS,
+            }
+
+    def entries(self, category: str, search: str, completion_filter: str) -> dict[str, Any]:
+        if category not in CATEGORY_ORDER:
+            raise ValueError(f"未知图鉴分类：{category}")
+        if completion_filter not in {"all", "completed", "pending"}:
+            raise ValueError(f"未知完成状态筛选：{completion_filter}")
+        with self._lock:
+            self._ensure_sync()
+            rows = query_entries(
+                self.connection,
+                category,
+                search,
+                completion_filter,
+                limit=None,
+            )
+            return {
+                "category": category,
+                "label": CATEGORY_LABELS[category],
+                "total": len(rows),
+                "entries": [_json_safe_entry(row) for row in rows],
+            }
+
+    def entry(self, category: str, entry_key: str) -> dict[str, Any] | None:
+        if category not in CATEGORY_ORDER:
+            raise ValueError(f"未知图鉴分类：{category}")
+        if not entry_key:
+            raise ValueError("缺少条目键")
+        with self._lock:
+            self._ensure_sync()
+            row = get_entry(self.connection, entry_key, category)
+            if row is None:
+                return None
+            payload = json.loads(row["raw_json"])
+            fields = [
+                {
+                    "field": field,
+                    "label": FIELD_LABELS.get(field, field),
+                    "value": format_scalar(value),
+                }
+                for field, value in payload.items()
+            ]
+            return {
+                "entry": _json_safe_entry(row),
+                "relations": get_entry_relations(self.connection, entry_key),
+                "fields": fields,
+            }
+
+    def close(self) -> None:
+        with self._lock:
+            self.connection.close()
+
+
+class CodexHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+    def __init__(self, address: tuple[str, int], service: CodexService, assets: Path):
+        super().__init__(address, CodexRequestHandler)
+        self.service = service
+        self.assets = assets
+
+
+class CodexRequestHandler(BaseHTTPRequestHandler):
+    server: CodexHTTPServer
+
+    def _send_bytes(self, status: int, content_type: str, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self._send_bytes(status, "application/json; charset=utf-8", body)
+
+    def _send_error_json(self, status: int, message: str) -> None:
+        self._send_json(status, {"error": message})
+
+    def _serve_static(self, path: str) -> None:
+        asset = STATIC_FILES.get(path)
+        if asset is None:
+            self._send_error_json(HTTPStatus.NOT_FOUND, "找不到网页资源")
+            return
+        filename, content_type = asset
+        asset_path = self.server.assets / filename
+        try:
+            body = asset_path.read_bytes()
+        except OSError as exc:
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"读取网页资源失败：{exc}")
+            return
+        self._send_bytes(HTTPStatus.OK, content_type, body)
+
+    def _handle_api(self, path: str, query: dict[str, list[str]]) -> None:
+        service = self.server.service
+        if path == "/api/state":
+            self._send_json(HTTPStatus.OK, service.state())
+            return
+        if path == "/api/entries":
+            category = _first_query_value(query, "category", "furniture")
+            search = _first_query_value(query, "search")
+            completion = _first_query_value(query, "completion", "all")
+            self._send_json(HTTPStatus.OK, service.entries(category, search, completion))
+            return
+        prefix = "/api/entries/"
+        if path.startswith(prefix):
+            entry_key = urllib.parse.unquote(path[len(prefix) :])
+            category = _first_query_value(query, "category", "furniture")
+            result = service.entry(category, entry_key)
+            if result is None:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "找不到图鉴条目")
+            else:
+                self._send_json(HTTPStatus.OK, result)
+            return
+        self._send_error_json(HTTPStatus.NOT_FOUND, "找不到 API 接口")
+
+    def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
+        parsed = urllib.parse.urlsplit(self.path)
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        try:
+            if parsed.path.startswith("/api/"):
+                self._handle_api(parsed.path, query)
+            else:
+                self._serve_static(parsed.path)
+        except ValueError as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+        except Exception as exc:  # Keep API failures visible without exposing a traceback in the browser.
+            print(f"本地网页请求失败：{exc}", file=sys.stderr)
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"本地服务处理失败：{exc}")
+
+    def log_message(self, format: str, *args: Any) -> None:
+        print(f"{self.address_string()} - {format % args}", file=sys.stderr)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="启动 Survival Log 生存图鉴本地网页")
+    parser.add_argument("--port", type=int, default=8501, help="本地服务端口")
     parser.add_argument(
         "--database",
         type=Path,
-        default=Path(__file__).resolve().parent / "SurvivalLog图鉴.sqlite3",
+        default=default_database_path(),
+        help="SQLite 数据库路径",
     )
     parser.add_argument(
         "--save-file",
         type=Path,
         default=default_save_file(),
+        help="HistorySave.bytes 存档路径",
     )
-    return parser.parse_args(raw_args)
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="启动服务但不自动打开浏览器",
+    )
+    return parser.parse_args()
 
 
-def format_ratio(completed: int, total: int) -> str:
-    if not total:
-        return "0%"
-    return f"{completed * 100 / total:.0f}%"
-
-
-def get_selected_key() -> str | None:
-    value = st.session_state.get("selected_entry_key")
-    return str(value) if value else None
-
-
-def inject_styles() -> None:
-    st.markdown(APP_CSS, unsafe_allow_html=True)
-
-
-def render_sidebar(
-    summaries: list[dict[str, Any]],
-    selected_category: str,
-    metadata: dict[str, str],
+def run_local_server(
+    database_path: Path,
     save_file: Path,
-    sync_status: str,
-) -> tuple[str, str, str]:
-    summary_by_category = {row["category"]: row for row in summaries}
-    overall_total = sum(int(row["total"]) for row in summaries)
-    overall_completed = sum(int(row["completed"]) for row in summaries)
-    st.sidebar.title("生存图鉴")
-    st.sidebar.metric(
-        "总体进度",
-        f"{overall_completed}/{overall_total}",
-    )
-    st.sidebar.progress(
-        min(1.0, overall_completed / overall_total) if overall_total else 0.0
-    )
-    st.sidebar.caption(f"完成率 {format_ratio(overall_completed, overall_total)}")
-    st.sidebar.divider()
-
-    labels = []
-    for category in CATEGORY_ORDER:
-        row = summary_by_category.get(category, {"completed": 0, "total": 0})
-        labels.append(
-            f"{CATEGORY_EMOJI[category]}  {CATEGORY_LABELS[category]}  "
-            f"{row['completed']}/{row['total']}"
-        )
-    selected_label = st.sidebar.radio(
-        "分类",
-        labels,
-        index=CATEGORY_ORDER.index(selected_category),
-        label_visibility="collapsed",
-    )
-    selected_category = CATEGORY_ORDER[labels.index(selected_label)]
-
-    st.sidebar.divider()
-    st.sidebar.subheader("筛选")
-    search = st.sidebar.text_input(
-        "搜索条目",
-        placeholder="名称、名称键或 ID",
-        key="codex_search",
-    )
-    filter_label = st.sidebar.radio(
-        "完成状态",
-        ["全部", "已完成", "未完成"],
-        horizontal=True,
-        key="codex_completion_filter",
-    )
-    filter_value = {"全部": "all", "已完成": "completed", "未完成": "pending"}[filter_label]
-
-    st.sidebar.divider()
-    st.sidebar.caption(sync_status)
-    with st.sidebar.expander("数据源", expanded=False):
-        resource_version = metadata.get("game_version", "未知")
-        source_path = metadata.get("save_path", str(save_file))
-        st.markdown(
-            f'<div class="data-source-label">游戏版本 {escape(resource_version)}</div>',
-            unsafe_allow_html=True,
-        )
-        st.code(source_path, language="text")
-
-    return selected_category, search, filter_value
-
-
-def render_entry_row(entry: dict[str, Any]) -> None:
-    entry_key = entry["entry_key"]
-    completed = bool(entry["completed"])
-    selected = entry_key == get_selected_key()
-    status_class = "completed" if completed else "pending"
-    status_label = "已解锁" if completed else "未解锁"
-    source_label = f"{entry['source_table']} · ID {entry['source_id']}"
-    with st.container(border=True):
-        marker_column, content_column, status_column, action_column = st.columns(
-            [0.18, 3.8, 1.05, 1.05],
-            gap="small",
-        )
-        with marker_column:
-            st.markdown(
-                f'<div class="entry-row-marker {status_class}"></div>',
-                unsafe_allow_html=True,
-            )
-        with content_column:
-            st.markdown(
-                f'<div class="entry-name">{escape(str(entry["name"]))}</div>'
-                f'<div class="entry-meta">{escape(source_label)}</div>',
-                unsafe_allow_html=True,
-            )
-        with status_column:
-            st.markdown(
-                f'<span class="status-pill {status_class}">{status_label}</span>',
-                unsafe_allow_html=True,
-            )
-            if selected:
-                st.caption("当前查看")
-        with action_column:
-            if st.button(
-                "详情",
-                key=f"detail:{entry_key}",
-                use_container_width=True,
-            ):
-                st.session_state.selected_entry_key = entry_key
-                st.rerun()
-
-
-def render_entry_list(
-    entries: list[dict[str, Any]],
+    port: int = 8501,
+    headless: bool = False,
 ) -> None:
-    if not entries:
-        st.info("没有符合条件的条目")
-        return
-    with st.container(height=680, border=False):
-        for entry in entries:
-            render_entry_row(entry)
-
-
-def render_details(connection: Any, entry_key: str | None, category: str) -> None:
-    st.subheader("条目详情")
-    if not entry_key:
-        st.info("选择一个条目查看详情")
-        return
-    entry = get_entry(connection, entry_key, category)
-    if entry is None:
-        st.warning("条目已不存在或尚未完成数据库刷新")
-        return
-    payload = json.loads(entry["raw_json"])
-    st.markdown(f"### {entry['name']}")
-    st.caption(f"{entry['source_table']} · ID {entry['source_id']}")
-    if entry["description"]:
-        st.write(entry["description"])
-    status = "已完成" if entry["completed"] else "未完成"
-    st.write(f"状态：**{status}**")
-
-    relations = get_entry_relations(connection, entry_key)
-    if relations:
-        grouped: dict[str, list[str]] = {}
-        for relation in relations:
-            grouped.setdefault(relation["relation_type"], []).append(
-                f"{relation['target_name']}（ID {relation['target_id']}）"
-            )
-        with st.expander("关联数据", expanded=True):
-            for relation_type, values in grouped.items():
-                st.markdown(f"**{relation_type}**：{'、'.join(values)}")
-
-    with st.expander("配置字段", expanded=False):
-        rows = []
-        for field, value in payload.items():
-            rows.append(
-                {
-                    "字段": FIELD_LABELS.get(field, field),
-                    "原始字段": field,
-                    "值": format_scalar(value),
-                }
-            )
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-
-
-def render_page(database_path: Path, save_file: Path) -> None:
+    service = CodexService(database_path, save_file)
     try:
-        connection = open_database(database_path)
-    except Exception as exc:
-        st.error(f"无法打开图鉴数据库：{exc}")
-        st.code(
-            f'python "图鉴数据库.py" --database "{database_path}"',
-            language="powershell",
-        )
-        st.stop()
+        server = CodexHTTPServer(("127.0.0.1", port), service, static_root())
+    except Exception:
+        service.close()
+        raise
 
+    url = f"http://127.0.0.1:{port}/"
+    print(f"图鉴本地网页：{url}")
+    print(f"数据库：{service.database_path}")
+    print(f"存档：{service.save_file}")
+    if not headless:
+        browser_timer = threading.Timer(0.25, webbrowser.open, args=(url,))
+        browser_timer.daemon = True
+        browser_timer.start()
     try:
-        try:
-            sync_result = sync_game_completion(connection, save_file)
-        except Exception as exc:
-            sync_result = None
-            st.error(f"图鉴存档同步失败：{exc}")
-
-        metadata = get_metadata(connection)
-        if sync_result is not None and sync_result.status == "error":
-            st.warning(f"未能读取游戏图鉴存档：{sync_result.message}")
-            sync_status = "存档同步未完成，请查看页面提示"
-        elif sync_result is not None and sync_result.status == "fallback":
-            st.warning(f"当前使用存档备份同步：{sync_result.message}")
-            sync_status = "已使用存档备份"
-        elif sync_result is None:
-            sync_status = "存档同步失败，请查看页面提示"
-        else:
-            last_read = metadata.get("save_read_at", "未知")
-            sync_status = f"存档已同步 · 最近读取 {last_read}"
-
-        summaries = get_category_summaries(connection)
-        selected_category = st.session_state.get("selected_category", "furniture")
-        selected_category, search, filter_value = render_sidebar(
-            summaries,
-            selected_category,
-            metadata,
-            save_file,
-            sync_status,
-        )
-        st.session_state.selected_category = selected_category
-
-        summary_by_category = {row["category"]: row for row in summaries}
-        current = summary_by_category[selected_category]
-        query_signature = (selected_category, search.strip(), filter_value)
-        if st.session_state.get("entry_query_signature") != query_signature:
-            st.session_state.entry_query_signature = query_signature
-            st.session_state.selected_entry_key = None
-        entries = query_entries(
-            connection,
-            selected_category,
-            search,
-            filter_value,
-            limit=None,
-        )
-        entry_keys = {entry["entry_key"] for entry in entries}
-        if entries and get_selected_key() not in entry_keys:
-            st.session_state.selected_entry_key = entries[0]["entry_key"]
-        elif not entries:
-            st.session_state.selected_entry_key = None
-
-        grid_column, detail_column = st.columns([3, 2], gap="large")
-        with grid_column:
-            heading_column, summary_column = st.columns([3, 2], gap="small")
-            with heading_column:
-                st.subheader(f"{CATEGORY_EMOJI[selected_category]} {CATEGORY_LABELS[selected_category]}")
-            with summary_column:
-                st.markdown(
-                    f'<div class="section-summary">已完成 {current["completed"]}/{current["total"]} · '
-                    f'当前显示 {len(entries)} 条</div>',
-                    unsafe_allow_html=True,
-                )
-            render_entry_list(entries)
-        with detail_column:
-            render_details(connection, get_selected_key(), selected_category)
+        server.serve_forever(poll_interval=0.5)
     finally:
-        connection.close()
+        server.server_close()
+        service.close()
 
 
-def main() -> None:
-    st.set_page_config(page_title="Survival Log 生存图鉴", layout="wide")
-    inject_styles()
-    args = parse_script_args()
-    if hasattr(st, "fragment"):
-        @st.fragment(run_every="5s")
-        def render_live_page() -> None:
-            render_page(args.database, args.save_file)
-
-        render_live_page()
-    else:
-        render_page(args.database, args.save_file)
+def main() -> int:
+    try:
+        args = parse_args()
+        if not 1 <= args.port <= 65535:
+            raise ValueError(f"端口必须在 1 到 65535 之间：{args.port}")
+        run_local_server(args.database, args.save_file, args.port, args.headless)
+    except KeyboardInterrupt:
+        return 0
+    except Exception as exc:
+        print(f"图鉴本地网页启动失败：{exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

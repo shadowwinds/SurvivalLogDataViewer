@@ -10,7 +10,7 @@
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
 - 当前主要脚本为 `图鉴解析工具.py`，主要说明为 `SurvivalLog图鉴解析说明.md`。
 - 默认输出七份 UTF-8 Markdown：六类主图鉴 `SurvivalLog食品.md`、`SurvivalLog菜肴.md`、`SurvivalLog植物.md`、`SurvivalLog猎物.md`、`SurvivalLog制造.md`、`SurvivalLog家具.md`，以及 `SurvivalLog图鉴辅助配置.md`。
-- 数据库构建脚本为 `图鉴数据库.py`，存档读取脚本为 `图鉴存档解析.py`，本地 Streamlit 前端为 `图鉴前端.py`；数据库默认文件为 `SurvivalLog图鉴.sqlite3`。
+- 数据库构建脚本为 `图鉴数据库.py`，存档读取脚本为 `图鉴存档解析.py`，本地标准库网页服务为 `图鉴前端.py`，静态资源位于 `web/`；数据库默认文件为 `SurvivalLog图鉴.sqlite3`。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他安装位置时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
 
@@ -104,7 +104,7 @@
 - 使用当前完整游戏目录运行一次默认全量导出，确认生成七个 UTF-8 Markdown。
 - 分别运行七个 `--category` 入口，确认输出路径、退出码、数量和内容正常。
 - 校验当前主图鉴数量：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87；原始配置表数量不能直接当作图鉴数量。
-- 构建 SQLite 数据库，确认六类分类映射合计 935，读取 `HistorySave.bytes` 得到 `366/935` 和 `61/93/14/15/110/73`；食品/猎物重叠条目共享主完成状态，启动 Streamlit 前端验证存档同步和只读状态展示。
+- 构建 SQLite 数据库，确认六类分类映射合计 935，读取 `HistorySave.bytes` 得到 `366/935` 和 `61/93/14/15/110/73`；食品/猎物重叠条目共享主完成状态，启动本地网页服务验证存档同步和只读状态展示。
 - 确认所有解析表读取到 EOF，无未捕获 schema 错误；检查未知关联 ID 是否明确显示为 `ID:xxxx`。
 - 抽查参考仓库和本地数据中的佛跳墙、清炒菌菇、蛋炒饭、松茸、硬纸、箱子和小家鼠等条目。
 - 对资源缺失、catalog 版本变化、空列表、空本地化名称和未知 ID 做隔离测试；测试不得改动游戏目录。

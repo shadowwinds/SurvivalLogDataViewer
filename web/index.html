@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Survival Log 生存图鉴</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="图鉴导航">
+        <div class="brand">
+          <div class="brand-mark">SL</div>
+          <div>
+            <div class="brand-kicker">OFFLINE CODEX</div>
+            <h1>生存图鉴</h1>
+          </div>
+        </div>
+
+        <section class="overall-block" aria-labelledby="overall-title">
+          <div class="section-label" id="overall-title">总体进度</div>
+          <div class="overall-number" id="overallNumber">--/--</div>
+          <div class="progress-track" aria-hidden="true">
+            <div class="progress-value" id="overallProgress"></div>
+          </div>
+          <div class="overall-rate" id="overallRate">正在读取</div>
+        </section>
+
+        <nav class="category-nav" id="categoryNav" aria-label="图鉴分类"></nav>
+
+        <section class="source-block">
+          <div class="section-label">数据源</div>
+          <div class="source-version" id="gameVersion">游戏版本 --</div>
+          <div class="source-status" id="syncStatus" data-status="loading">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>正在连接本地服务</span>
+          </div>
+          <div class="source-path" id="savePath" title="存档路径">存档路径读取中</div>
+        </section>
+      </aside>
+
+      <main class="main-content">
+        <header class="page-header">
+          <div>
+            <div class="page-kicker">SURVIVAL LOG</div>
+            <h2 id="categoryTitle">生存图鉴</h2>
+            <p class="page-summary" id="categorySummary">正在读取分类数据</p>
+          </div>
+          <div class="header-sync" id="headerSync" data-status="loading">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>等待同步</span>
+          </div>
+        </header>
+
+        <section class="toolbar" aria-label="条目筛选">
+          <label class="search-box">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <span class="sr-only">搜索条目</span>
+            <input id="searchInput" type="search" placeholder="搜索名称、名称键或 ID" autocomplete="off">
+          </label>
+          <div class="filter-group" id="filterGroup" role="group" aria-label="完成状态">
+            <button type="button" class="filter-button active" data-filter="all">全部</button>
+            <button type="button" class="filter-button" data-filter="completed">已解锁</button>
+            <button type="button" class="filter-button" data-filter="pending">未解锁</button>
+          </div>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="entries-panel" aria-labelledby="entriesTitle">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-kicker">ENTRIES</div>
+                <h3 id="entriesTitle">条目列表</h3>
+              </div>
+              <div class="result-count" id="resultCount">-- 条</div>
+            </div>
+            <div class="entry-list" id="entryList" aria-live="polite">
+              <div class="loading-state">正在读取图鉴条目</div>
+            </div>
+          </section>
+
+          <aside class="detail-panel" aria-labelledby="detailTitle">
+            <div class="panel-heading">
+              <div>
+                <div class="panel-kicker">DETAIL</div>
+                <h3 id="detailTitle">条目详情</h3>
+              </div>
+            </div>
+            <div class="detail-content" id="detailContent">
+              <div class="empty-state">选择一个条目查看详情</div>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

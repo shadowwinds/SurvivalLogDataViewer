@@ -118,19 +118,21 @@ python "图鉴数据库.py" `
 
 没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
 
-## Streamlit 前端
+## 轻量本地网页
 
-[图鉴前端.py](./图鉴前端.py) 读取 SQLite，并每 5 秒轮询存档修改时间；存档变化后自动同步分类完成状态。前端在侧边栏提供分类、搜索、完成状态筛选和数据源信息，主区域以全量可滚动的长条列表展示条目，并在右侧显示详情；完成状态只读显示游戏解锁状态，不再分页：
+[图鉴前端.py](./图鉴前端.py) 使用 Python 标准库启动仅监听 `127.0.0.1` 的本地 HTTP 服务，网页资源位于 `web/`，不依赖 Streamlit。浏览器每 5 秒请求一次状态接口；服务端先比较 `HistorySave.bytes` 和同名 `.bak` 的路径、大小、修改时间，只有签名变化时才解析存档并同步数据库。
 
 ```powershell
-streamlit run "图鉴前端.py" -- --database "SurvivalLog图鉴.sqlite3" --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
+python "图鉴前端.py" `
+  --database "SurvivalLog图鉴.sqlite3" `
+  --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端显示静态总数，不复现游戏网页在部分分类中以 `???` 隐藏总数的行为。游戏运行时只有在写入存档后，前端才能在下一次轮询中看到变化；前端不会写回存档。
+前端提供六类分类、总体进度、搜索、完成状态筛选、全量条目列表、关联数据和配置字段详情。完成状态只读显示游戏存档中的图鉴状态；存档写入中或解析失败时保留上一次有效数据库状态，并在页面提示错误。前端不会写回存档。
 
 ### Windows 独立版
 
-使用 [打包图鉴前端.ps1](./打包图鉴前端.ps1) 可以生成不依赖 Python 和 Streamlit 的 Windows 文件夹版应用：
+使用 [打包图鉴前端.ps1](./打包图鉴前端.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容只包含精简 Python 运行时、标准库服务、网页资源和预生成 SQLite 数据库，不再携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File ".\打包图鉴前端.ps1"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch the bundled Survival Log Streamlit frontend."""
+"""Launch the bundled Survival Log local web frontend."""
 
 from __future__ import annotations
 
@@ -10,23 +10,17 @@ import shutil
 import sys
 from pathlib import Path
 
+from 图鉴前端 import run_local_server
+
 
 APP_NAME = "SurvivalLogDataViewer"
 DATABASE_NAME = "SurvivalLog图鉴.sqlite3"
-FRONTEND_NAME = "图鉴前端.py"
 
 
 def application_directory() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
-
-
-def bundled_directory() -> Path:
-    bundle_root = getattr(sys, "_MEIPASS", None)
-    if bundle_root:
-        return Path(bundle_root)
-    return application_directory()
 
 
 def default_save_file() -> Path:
@@ -42,8 +36,8 @@ def default_save_file() -> Path:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="启动 Survival Log 生存图鉴前端")
-    parser.add_argument("--port", type=int, default=8501, help="Streamlit 服务端口")
+    parser = argparse.ArgumentParser(description="启动 Survival Log 生存图鉴本地网页")
+    parser.add_argument("--port", type=int, default=8501, help="本地服务端口")
     parser.add_argument(
         "--database",
         type=Path,
@@ -96,33 +90,13 @@ def show_error(message: str) -> None:
 
 
 def run_frontend(args: argparse.Namespace) -> None:
-    os.environ["STREAMLIT_SERVER_PORT"] = str(args.port)
-    os.environ["STREAMLIT_SERVER_HEADLESS"] = str(args.headless).lower()
-    os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
-    os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
-
-    from streamlit.web import bootstrap
-
-    frontend_path = bundled_directory() / FRONTEND_NAME
-    if not frontend_path.exists():
-        raise FileNotFoundError(f"分发包中找不到前端脚本：{frontend_path}")
-
     database_path = prepare_database(args.database)
-    flag_options = {
-        "server_port": args.port,
-        "server_headless": args.headless,
-        "global_developmentMode": False,
-        "browser_gatherUsageStats": False,
-        "server_fileWatcherType": "none",
-    }
-    app_args = [
-        "--database",
-        str(database_path),
-        "--save-file",
-        str(args.save_file.expanduser().resolve()),
-    ]
-    bootstrap.load_config_options(flag_options)
-    bootstrap.run(str(frontend_path), False, app_args, flag_options)
+    run_local_server(
+        database_path,
+        args.save_file.expanduser().resolve(),
+        args.port,
+        args.headless,
+    )
 
 
 def main() -> int:
@@ -134,7 +108,7 @@ def main() -> int:
     except KeyboardInterrupt:
         return 0
     except Exception as exc:
-        show_error(f"图鉴前端启动失败：{exc}")
+        show_error(f"图鉴本地网页启动失败：{exc}")
         return 1
     return 0
 

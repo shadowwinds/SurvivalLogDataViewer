@@ -703,10 +703,18 @@ def build_database(
         connection.close()
 
 
-def open_database(database_path: Path) -> sqlite3.Connection:
+def open_database(
+    database_path: Path,
+    *,
+    check_same_thread: bool = True,
+) -> sqlite3.Connection:
     if not database_path.exists():
         raise FileNotFoundError(f"找不到图鉴数据库：{database_path}")
-    connection = sqlite3.connect(str(database_path), timeout=30)
+    connection = sqlite3.connect(
+        str(database_path),
+        timeout=30,
+        check_same_thread=check_same_thread,
+    )
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     try:
