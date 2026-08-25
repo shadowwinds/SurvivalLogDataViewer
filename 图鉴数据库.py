@@ -755,7 +755,7 @@ def query_entries(
     category: str,
     search: str = "",
     completion_filter: str = "all",
-    limit: int = 24,
+    limit: int | None = 24,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     clauses = ["ec.category = ?", "e.is_current = 1"]
@@ -770,9 +770,7 @@ def query_entries(
         clauses.append("COALESCE(cc.completed, 0) = 0")
     if completion_filter not in {"all", "completed", "pending"}:
         raise ValueError(f"未知完成状态筛选：{completion_filter}")
-    params.extend([max(1, min(limit, 100)), max(0, offset)])
-    rows = connection.execute(
-        f"""
+    query = f"""
         SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
                e.description, e.icon_path, e.raw_json,
                COALESCE(cc.completed, 0) AS completed
@@ -782,10 +780,15 @@ def query_entries(
             ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
         ORDER BY e.name COLLATE NOCASE, e.source_id
-        LIMIT ? OFFSET ?
-        """,
-        params,
-    ).fetchall()
+    """
+    if limit is None:
+        if offset:
+            query += " LIMIT -1 OFFSET ?"
+            params.append(max(0, offset))
+    else:
+        params.extend([max(1, min(limit, 100)), max(0, offset)])
+        query += " LIMIT ? OFFSET ?"
+    rows = connection.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
 

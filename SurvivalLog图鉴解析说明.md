@@ -120,7 +120,7 @@ python "图鉴数据库.py" `
 
 ## Streamlit 前端
 
-[图鉴前端.py](./图鉴前端.py) 读取 SQLite，并每 5 秒轮询存档修改时间；存档变化后自动同步分类完成状态。前端提供分类、搜索、完成状态筛选、条目网格和详情，完成复选框只读显示游戏解锁状态：
+[图鉴前端.py](./图鉴前端.py) 读取 SQLite，并每 5 秒轮询存档修改时间；存档变化后自动同步分类完成状态。前端在侧边栏提供分类、搜索、完成状态筛选和数据源信息，主区域以全量可滚动的长条列表展示条目，并在右侧显示详情；完成状态只读显示游戏解锁状态，不再分页：
 
 ```powershell
 streamlit run "图鉴前端.py" -- --database "SurvivalLog图鉴.sqlite3" --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
