@@ -111,7 +111,10 @@
   function renderSource() {
     const version = state.metadata.game_version || "未知";
     const savePath = (state.metadata.save_path || (state.sync && state.sync.save_path) || state.metadata.save_requested_path || "未指定");
-    byId("gameVersion").querySelector(".source-version-value").textContent = version;
+    const versionParts = version.split(" / catalog ", 2);
+    byId("gameVersion").querySelector(".source-version-value").textContent = versionParts[0] || "未知";
+    byId("gameVersion").querySelector(".source-catalog-value").textContent =
+      versionParts[1] ? `catalog ${versionParts[1]}` : "catalog 未知";
     byId("savePath").textContent = savePath;
     byId("savePath").title = savePath;
   }

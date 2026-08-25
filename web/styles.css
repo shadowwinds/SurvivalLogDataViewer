@@ -157,10 +157,20 @@ button {
   line-height: 1.3;
 }
 
+.source-version-line {
+  white-space: nowrap;
+}
+
 .source-version-value {
   color: var(--ink);
   font-weight: 650;
   overflow-wrap: anywhere;
+}
+
+.source-catalog-value {
+  color: var(--ink);
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .overall-rate {
@@ -339,9 +349,9 @@ button {
 .search-field-group {
   display: flex;
   flex: 1 1 360px;
+  align-items: center;
   min-width: 180px;
-  flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .search-box {
@@ -355,6 +365,12 @@ button {
   border-radius: 7px;
   background: var(--surface);
   transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.search-field-group .search-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
 }
 
 .search-field {
