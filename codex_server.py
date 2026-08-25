@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import threading
 import time
@@ -104,9 +105,18 @@ def _format_relation_values(
         for (target_id, target_name), count in counts.items():
             quantity = f" × {count}" if count > 1 else ""
             identity = f"（ID {target_id}）" if include_id else ""
-            items.append(f"{target_name}{quantity}{identity}")
+            display_name = str(target_name)
+            if not include_id and re.fullmatch(r"ID\s*:?\s*\d+", display_name):
+                display_name = "未知关联"
+            items.append(f"{display_name}{quantity}{identity}")
         text = "、".join(items) or "无"
-        parts.append(f"{relation_type}：{text}" if include_group else text)
+        display_relation_type = relation_type
+        if not include_id:
+            display_relation_type = re.sub(r"\s*ID\s*:?\s*\d+", "", display_relation_type)
+            display_relation_type = display_relation_type.replace("（）", "")
+        parts.append(
+            f"{display_relation_type}：{text}" if include_group else text
+        )
     return "；".join(parts) or "无"
 
 
@@ -143,7 +153,9 @@ def _build_detail_fields(
                 if relation["relation_type"] == prefix
             ]
             if matching:
-                acquisition_parts.append(f"{prefix}：{_format_relation_values(matching)}")
+                acquisition_parts.append(
+                    f"{prefix}：{_format_relation_values(matching, include_id=False)}"
+                )
         highlights.append(
             {
                 "field": "acquisition",
@@ -167,7 +179,9 @@ def _build_detail_fields(
             {
                 "field": "ingredients",
                 "label": "制作需要的食材",
-                "value": _format_relation_values(ingredients, include_group=True),
+                "value": _format_relation_values(
+                    ingredients, include_group=True, include_id=False
+                ),
             }
         )
         highlighted_fields.update({"SpecificItems", "TagCombo"})
@@ -194,7 +208,9 @@ def _build_detail_fields(
             {
                 "field": "materials",
                 "label": "制造材料（所需数量）",
-                "value": _format_relation_values(materials, include_group=True),
+                "value": _format_relation_values(
+                    materials, include_group=True, include_id=False
+                ),
             }
         )
         highlighted_fields.add("MaterialList")
@@ -218,7 +234,9 @@ def _build_detail_fields(
             {
                 "field": "materials",
                 "label": "制造材料（所需数量）",
-                "value": _format_relation_values(materials, include_group=True),
+                "value": _format_relation_values(
+                    materials, include_group=True, include_id=False
+                ),
             }
         )
         levels = [
@@ -230,7 +248,9 @@ def _build_detail_fields(
             {
                 "field": "level",
                 "label": "要求等级",
-                "value": _format_relation_values(levels, include_group=True, include_id=False),
+                "value": _format_relation_values(
+                    levels, include_group=True, include_id=False
+                ),
             }
         )
 
@@ -246,6 +266,24 @@ def _build_detail_fields(
             }
         )
     return highlights, fields, list(highlighted_relation_prefixes)
+
+
+def _highlight_summary(
+    category: str,
+    raw: dict[str, Any],
+    relations: list[dict[str, Any]],
+) -> str:
+    highlights, _fields, _prefixes = _build_detail_fields(category, raw, relations)
+    values: list[str] = []
+    for field in highlights:
+        value = str(field["value"])
+        if not value:
+            continue
+        parts = []
+        for part in value.split("；"):
+            parts.append(part.split("：", 1)[-1])
+        values.append("、".join(part for part in parts if part))
+    return "；".join(values)
 
 
 class CodexService:
@@ -375,6 +413,10 @@ class CodexService:
                 limit=None,
                 material_search=material_search,
             )
+            for row in rows:
+                raw = json.loads(row["raw_json"])
+                relations = get_entry_relations(self.connection, row["entry_key"])
+                row["highlight_summary"] = _highlight_summary(category, raw, relations)
             return {
                 "category": category,
                 "label": CATEGORY_LABELS[category],

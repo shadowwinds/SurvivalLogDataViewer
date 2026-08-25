@@ -528,6 +528,16 @@ button {
   line-height: 1.35;
 }
 
+.entry-highlight {
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .entry-status,
 .detail-status {
   display: inline-flex;

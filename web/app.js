@@ -173,6 +173,9 @@
         makeElement("div", "entry-name", entry.name),
         makeElement("div", "entry-meta", `${entry.source_table} · ID ${entry.source_id}`),
       );
+      if (entry.highlight_summary) {
+        body.append(makeElement("div", "entry-highlight", entry.highlight_summary));
+      }
 
       const status = makeElement(
         "span",

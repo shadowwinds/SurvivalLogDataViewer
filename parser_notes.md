@@ -34,7 +34,7 @@
 
 `%USERPROFILE%\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes`
 
-独立解析器 [codex_save.py](./codex_save.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到 `CodexUnlocked`，校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
+独立解析器 [codex_save.py](./codex_save.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到图鉴完成映射：当前游戏版本将分类到条目 ID 列表保存在 `PlayerSelectSaveFileMap`，而 `CodexUnlocked` 是独立的整数列表。解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
 
 当前存档的分类完成数量由 `HistorySave.bytes` 实时读取，六类分类映射合计 `935`；具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 

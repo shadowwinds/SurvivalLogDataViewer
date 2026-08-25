@@ -220,26 +220,27 @@ def _skip_history_child(reader: _Reader, index: int) -> None:
 
 def _read_codex_map(reader: _Reader) -> tuple[dict[int, tuple[int, ...]], int]:
     codex_offset = reader.pos
-    count = reader.collection_count("CodexUnlocked")
+    field = "PlayerSelectSaveFileMap"
+    count = reader.collection_count(field)
     if count is None:
         return {}, codex_offset
     if count > len(CODEX_CATEGORY_IDS):
-        raise SaveParseError(f"CodexUnlocked 分类数量超出已知范围：{count}")
+        raise SaveParseError(f"{field} 分类数量超出已知范围：{count}")
 
     raw_categories: dict[int, tuple[int, ...]] = {}
     for index in range(count):
-        category_id = reader.i32(f"CodexUnlocked[{index}].category_id")
+        category_id = reader.i32(f"{field}[{index}].category_id")
         if category_id not in CODEX_CATEGORY_IDS:
             raise SaveParseError(
-                f"CodexUnlocked 出现未知分类 ID：{category_id} at offset={reader.pos - 4}"
+                f"{field} 出现未知分类 ID：{category_id} at offset={reader.pos - 4}"
             )
         if category_id in raw_categories:
-            raise SaveParseError(f"CodexUnlocked 出现重复分类 ID：{category_id}")
-        ids = reader.int_list(f"CodexUnlocked[{index}].ids") or ()
+            raise SaveParseError(f"{field} 出现重复分类 ID：{category_id}")
+        ids = reader.int_list(f"{field}[{index}].ids") or ()
         if any(source_id <= 0 for source_id in ids):
-            raise SaveParseError(f"CodexUnlocked[{index}] 包含非法源 ID：{ids!r}")
+            raise SaveParseError(f"{field}[{index}] 包含非法源 ID：{ids!r}")
         if len(set(ids)) != len(ids):
-            raise SaveParseError(f"CodexUnlocked[{index}] 包含重复源 ID")
+            raise SaveParseError(f"{field}[{index}] 包含重复源 ID")
         raw_categories[category_id] = ids
     return raw_categories, codex_offset
 
@@ -265,10 +266,10 @@ def parse_codex_save_bytes(
     reader.int_list("UnlockedPlayerSelectIds")
     reader.int_list("ClearedEndings")
     reader.int_int_map("GlobalEasterEggFlags")
-    reader.int_string_map("PlayerSelectSaveFileMap")
+    # In the current game schema the category-to-entry mapping is stored in
+    # PlayerSelectSaveFileMap. CodexUnlocked itself is a separate int list.
     raw_categories, codex_offset = _read_codex_map(reader)
-
-    # These fields immediately follow CodexUnlocked and validate the boundary.
+    reader.int_list("CodexUnlocked")
     reader.int_list("CodexMilestonesClaimed")
     reader.int_list("PendingUnlockNoticeIds")
 
