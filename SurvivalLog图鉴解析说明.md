@@ -128,6 +128,18 @@ streamlit run "图鉴前端.py" -- --database "SurvivalLog图鉴.sqlite3" --save
 
 前端显示静态总数，不复现游戏网页在部分分类中以 `???` 隐藏总数的行为。游戏运行时只有在写入存档后，前端才能在下一次轮询中看到变化；前端不会写回存档。
 
+### Windows 独立版
+
+使用 [打包图鉴前端.ps1](./打包图鉴前端.ps1) 可以生成不依赖 Python 和 Streamlit 的 Windows 文件夹版应用：
+
+```powershell
+PowerShell -ExecutionPolicy Bypass -File ".\打包图鉴前端.ps1"
+```
+
+分发目录为 `dist/SurvivalLog图鉴/`，其中的 `SurvivalLog图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe；构建产物不包含游戏安装目录、bundle、catalog 或原始存档。
+
+独立版首次启动时会将分发包中的 SQLite 初始数据库复制到 `%LOCALAPPDATA%\SurvivalLogDataViewer\`，后续完成状态写入用户自己的数据库副本。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
+
 ## 已知限制
 
 - 静态解析器不推断完成状态；数据库和前端只读读取 `HistorySave.bytes` 的持久化图鉴列表，不读取存档中的玩家库存或其他运行时动态数据。
