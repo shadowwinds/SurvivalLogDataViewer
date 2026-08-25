@@ -31,8 +31,11 @@
         <nav class="category-nav" id="categoryNav" aria-label="图鉴分类"></nav>
 
         <section class="source-block">
-          <div class="section-label">数据源</div>
-          <div class="source-version" id="gameVersion">游戏版本 --</div>
+          <div class="section-label source-label">数据源</div>
+          <div class="source-version" id="gameVersion">
+            <span class="source-version-label">游戏版本</span>
+            <span class="source-version-value">--</span>
+          </div>
           <div class="source-status" id="syncStatus" data-status="loading">
             <span class="status-dot" aria-hidden="true"></span>
             <span>正在连接本地服务</span>
@@ -44,17 +47,22 @@
       <main class="main-content">
         <section class="toolbar" aria-label="条目筛选">
           <div class="search-fields">
-            <label class="search-box search-field">
-              <span class="search-icon" aria-hidden="true">⌕</span>
-              <span class="search-label">成品名称</span>
-              <input id="nameSearchInput" type="search" placeholder="名称、名称键或 ID" autocomplete="off">
-            </label>
-            <label class="search-box search-field material-search-field">
-              <span class="search-icon" aria-hidden="true">⌕</span>
-              <span class="search-label">材料</span>
-              <input id="materialSearchInput" type="search" placeholder="材料名称或 ID" autocomplete="off">
-            </label>
+            <div class="search-field-group">
+              <label class="search-label" for="nameSearchInput">成品名称</label>
+              <div class="search-box search-field">
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input id="nameSearchInput" type="search" placeholder="名称、名称键或 ID" autocomplete="off">
+              </div>
+            </div>
+            <div class="search-field-group material-search-field">
+              <label class="search-label" for="materialSearchInput">材料</label>
+              <div class="search-box search-field">
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input id="materialSearchInput" type="search" placeholder="材料名称或 ID" autocomplete="off">
+              </div>
+            </div>
           </div>
+          <button type="button" class="clear-filter-button" id="clearTextFilters" title="清除名称和材料筛选">取消筛选</button>
           <div class="filter-group" id="filterGroup" role="group" aria-label="完成状态">
             <button type="button" class="filter-button active" data-filter="all">全部</button>
             <button type="button" class="filter-button" data-filter="completed">已解锁</button>

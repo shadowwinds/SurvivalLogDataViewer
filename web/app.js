@@ -111,7 +111,7 @@
   function renderSource() {
     const version = state.metadata.game_version || "未知";
     const savePath = (state.metadata.save_path || (state.sync && state.sync.save_path) || state.metadata.save_requested_path || "未指定");
-    byId("gameVersion").textContent = `游戏版本 ${version}`;
+    byId("gameVersion").querySelector(".source-version-value").textContent = version;
     byId("savePath").textContent = savePath;
     byId("savePath").title = savePath;
   }
@@ -414,6 +414,15 @@
     byId("materialSearchInput").addEventListener("input", (event) => {
       state.materialSearch = event.target.value;
       scheduleSearch();
+    });
+
+    byId("clearTextFilters").addEventListener("click", () => {
+      state.nameSearch = "";
+      state.materialSearch = "";
+      state.selectedKey = null;
+      byId("nameSearchInput").value = "";
+      byId("materialSearchInput").value = "";
+      loadEntries();
     });
 
     function selectEntry(target) {

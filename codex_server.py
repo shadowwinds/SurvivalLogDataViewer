@@ -178,10 +178,8 @@ def _build_detail_fields(
         highlights.append(
             {
                 "field": "ingredients",
-                "label": "制作需要的食材",
-                "value": _format_relation_values(
-                    ingredients, include_group=True, include_id=False
-                ),
+                "label": "制作所需食材",
+                "value": _format_relation_values(ingredients, include_id=False),
             }
         )
         highlighted_fields.update({"SpecificItems", "TagCombo"})
@@ -207,10 +205,8 @@ def _build_detail_fields(
         highlights.append(
             {
                 "field": "materials",
-                "label": "制造材料（所需数量）",
-                "value": _format_relation_values(
-                    materials, include_group=True, include_id=False
-                ),
+                "label": "制作所需材料",
+                "value": _format_relation_values(materials, include_id=False),
             }
         )
         highlighted_fields.add("MaterialList")
@@ -233,10 +229,8 @@ def _build_detail_fields(
         highlights.append(
             {
                 "field": "materials",
-                "label": "制造材料（所需数量）",
-                "value": _format_relation_values(
-                    materials, include_group=True, include_id=False
-                ),
+                "label": "制作所需材料",
+                "value": _format_relation_values(materials, include_id=False),
             }
         )
         levels = [
