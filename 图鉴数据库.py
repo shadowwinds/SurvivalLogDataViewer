@@ -7,6 +7,7 @@ import argparse
 import json
 import sqlite3
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,12 @@ from 图鉴解析工具 import (
     config_row_name,
     build_extraction_context,
 )
+from 图鉴存档解析 import (
+    CODEX_CATEGORY_SOURCE_TABLES,
+    SaveParseError,
+    default_save_file,
+    read_codex_save,
+)
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -27,7 +34,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 1
+DATABASE_SCHEMA_VERSION = 2
 CATEGORY_LABELS = {
     "food": "食品",
     "dish": "菜肴",
@@ -37,6 +44,18 @@ CATEGORY_LABELS = {
     "furniture": "家具",
 }
 CATEGORY_ORDER = tuple(CATEGORY_LABELS)
+
+
+@dataclass(frozen=True)
+class CompletionSyncResult:
+    status: str
+    changed: bool
+    save_path: Path
+    category_counts: dict[str, int]
+    unknown_ids: dict[str, tuple[int, ...]]
+    updated_entries: int
+    used_backup: bool
+    message: str
 
 
 SCHEMA_SQL = """
@@ -82,6 +101,16 @@ CREATE TABLE IF NOT EXISTS completion (
     FOREIGN KEY (entry_key) REFERENCES codex_entries(entry_key)
 );
 
+CREATE TABLE IF NOT EXISTS category_completion (
+    entry_key TEXT NOT NULL,
+    category TEXT NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (entry_key, category),
+    FOREIGN KEY (entry_key) REFERENCES codex_entries(entry_key),
+    FOREIGN KEY (category) REFERENCES codex_categories(category)
+);
+
 CREATE TABLE IF NOT EXISTS entry_relations (
     source_entry_key TEXT NOT NULL,
     relation_type TEXT NOT NULL,
@@ -108,6 +137,8 @@ CREATE INDEX IF NOT EXISTS idx_codex_entries_name
     ON codex_entries(name);
 CREATE INDEX IF NOT EXISTS idx_entry_relations_source
     ON entry_relations(source_entry_key);
+CREATE INDEX IF NOT EXISTS idx_category_completion_category
+    ON category_completion(category, completed);
 """
 
 
@@ -311,7 +342,237 @@ def initialize_database(connection: sqlite3.Connection) -> None:
         )
 
 
-def build_database(game_root: Path, database_path: Path) -> dict[str, int]:
+def _upsert_metadata(connection: sqlite3.Connection, values: dict[str, str]) -> None:
+    connection.executemany(
+        """
+        INSERT INTO metadata(key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """,
+        values.items(),
+    )
+
+
+def sync_game_completion(
+    connection: sqlite3.Connection,
+    save_file: Path | None = None,
+    *,
+    force: bool = False,
+) -> CompletionSyncResult:
+    """Synchronize completion.completed from the read-only HistorySave file."""
+
+    requested_path = Path(save_file or default_save_file()).expanduser()
+    try:
+        state = read_codex_save(requested_path)
+    except (OSError, SaveParseError) as exc:
+        message = str(exc)
+        existing = get_metadata(connection)
+        if (
+            existing.get("save_sync_status") != "error"
+            or existing.get("save_sync_error") != message
+        ):
+            with connection:
+                _upsert_metadata(
+                    connection,
+                    {
+                        "save_requested_path": str(requested_path.resolve()),
+                        "save_sync_status": "error",
+                        "save_sync_error": message,
+                        "save_last_attempt_at": utc_now(),
+                    },
+                )
+        return CompletionSyncResult(
+            status="error",
+            changed=False,
+            save_path=requested_path,
+            category_counts={},
+            unknown_ids={},
+            updated_entries=0,
+            used_backup=False,
+            message=message,
+        )
+
+    metadata = get_metadata(connection)
+    category_completion_rows = int(
+        connection.execute("SELECT COUNT(*) FROM category_completion").fetchone()[0]
+    )
+    expected_category_completion_rows = int(
+        connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM codex_entry_categories ec
+            JOIN codex_entries e ON e.entry_key = ec.entry_key
+            WHERE e.is_current = 1
+            """
+        ).fetchone()[0]
+    )
+    if (
+        not force
+        and metadata.get("save_sha256") == state.file_info.sha256
+        and metadata.get("save_path") == str(state.file_info.path)
+        and metadata.get("save_sync_status") in {"ok", "fallback"}
+        and category_completion_rows == expected_category_completion_rows
+    ):
+        return CompletionSyncResult(
+            status=metadata.get("save_sync_status", "ok"),
+            changed=False,
+            save_path=state.file_info.path,
+            category_counts=state.category_counts,
+            unknown_ids={},
+            updated_entries=0,
+            used_backup=state.file_info.used_backup,
+            message="存档未变化，完成状态无需更新",
+        )
+
+    category_entries: dict[str, dict[int, str]] = {
+        category: {} for category in CATEGORY_ORDER
+    }
+    current_entry_keys: set[str] = set()
+    current_category_pairs: set[tuple[str, str]] = set()
+    rows = connection.execute(
+        """
+        SELECT ec.category, e.entry_key, e.source_table, e.source_id
+        FROM codex_entry_categories ec
+        JOIN codex_entries e ON e.entry_key = ec.entry_key
+        WHERE e.is_current = 1
+        """
+    ).fetchall()
+    for category, entry_key, source_table, source_id in rows:
+        expected_table = CODEX_CATEGORY_SOURCE_TABLES.get(category)
+        if expected_table is None:
+            raise RuntimeError(f"数据库包含未知图鉴分类：{category}")
+        if source_table != expected_table:
+            raise RuntimeError(
+                f"图鉴分类映射 schema 不匹配：{category} 应使用 {expected_table}，实际为 {source_table}"
+            )
+        if source_id in category_entries[category] and category_entries[category][source_id] != entry_key:
+            raise RuntimeError(f"图鉴分类 {category} 出现重复源 ID：{source_id}")
+        category_entries[category][source_id] = entry_key
+        current_entry_keys.add(entry_key)
+
+    desired_entry_keys: set[str] = set()
+    desired_category_keys: dict[str, set[str]] = {
+        category: set() for category in CATEGORY_ORDER
+    }
+    unknown_ids: dict[str, tuple[int, ...]] = {}
+    for category in CATEGORY_ORDER:
+        source_ids = state.category_ids.get(category, ())
+        known_ids = category_entries[category]
+        unknown = tuple(sorted(source_id for source_id in source_ids if source_id not in known_ids))
+        if unknown:
+            unknown_ids[category] = unknown
+        desired_category_keys[category].update(
+            known_ids[source_id] for source_id in source_ids if source_id in known_ids
+        )
+        desired_entry_keys.update(desired_category_keys[category])
+        current_category_pairs.update(
+            (entry_key, category) for entry_key in known_ids.values()
+        )
+
+    now = utc_now()
+    updated_entries = 0
+    with connection:
+        connection.executemany(
+            """
+            INSERT OR IGNORE INTO category_completion(
+                entry_key, category, completed, updated_at
+            ) VALUES (?, ?, 0, ?)
+            """,
+            ((entry_key, category, now) for entry_key, category in current_category_pairs),
+        )
+        for category in CATEGORY_ORDER:
+            cursor = connection.execute(
+                """
+                UPDATE category_completion
+                SET completed = 0, updated_at = ?
+                WHERE category = ? AND entry_key IN (
+                    SELECT ec.entry_key
+                    FROM codex_entry_categories ec
+                    JOIN codex_entries e ON e.entry_key = ec.entry_key
+                    WHERE ec.category = ? AND e.is_current = 1
+                ) AND completed <> 0
+                """,
+                (now, category, category),
+            )
+            updated_entries += max(0, cursor.rowcount)
+            category_keys = desired_category_keys[category]
+            if category_keys:
+                placeholders = ",".join("?" for _ in category_keys)
+                cursor = connection.execute(
+                    f"""
+                    UPDATE category_completion
+                    SET completed = 1, updated_at = ?
+                    WHERE category = ? AND entry_key IN ({placeholders}) AND completed <> 1
+                    """,
+                    (now, category, *sorted(category_keys)),
+                )
+                updated_entries += max(0, cursor.rowcount)
+        if current_entry_keys:
+            cursor = connection.execute(
+                """
+                UPDATE completion
+                SET completed = 0, updated_at = ?
+                WHERE entry_key IN (
+                    SELECT entry_key FROM codex_entries WHERE is_current = 1
+                ) AND completed <> 0
+                """,
+                (now,),
+            )
+            updated_entries += max(0, cursor.rowcount)
+        if desired_entry_keys:
+            placeholders = ",".join("?" for _ in desired_entry_keys)
+            cursor = connection.execute(
+                f"""
+                UPDATE completion
+                SET completed = 1, updated_at = ?
+                WHERE entry_key IN ({placeholders}) AND completed <> 1
+                """,
+                (now, *sorted(desired_entry_keys)),
+            )
+            updated_entries += max(0, cursor.rowcount)
+
+        status = "fallback" if state.file_info.used_backup else "ok"
+        _upsert_metadata(
+            connection,
+            {
+                "save_requested_path": str(requested_path.resolve()),
+                "save_path": str(state.file_info.path),
+                "save_sha256": state.file_info.sha256,
+                "save_size": str(state.file_info.size),
+                "save_mtime_ns": str(state.file_info.mtime_ns),
+                "save_read_at": state.file_info.read_at,
+                "save_sync_status": status,
+                "save_sync_error": "",
+                "save_category_counts": json_text(state.category_counts),
+                "save_total_memberships": str(state.total_memberships),
+                "save_unknown_ids": json_text(unknown_ids),
+            },
+        )
+
+    message = (
+        f"已同步游戏存档：{state.total_memberships} 个分类完成状态"
+        + ("（使用 .bak 备份）" if state.file_info.used_backup else "")
+    )
+    if unknown_ids:
+        message += f"；未匹配源 ID：{sum(len(values) for values in unknown_ids.values())} 个"
+    return CompletionSyncResult(
+        status=status,
+        changed=True,
+        save_path=state.file_info.path,
+        category_counts=state.category_counts,
+        unknown_ids=unknown_ids,
+        updated_entries=updated_entries,
+        used_backup=state.file_info.used_backup,
+        message=message,
+    )
+
+
+def build_database(
+    game_root: Path,
+    database_path: Path,
+    save_file: Path | None = None,
+    *,
+    sync_save: bool = True,
+) -> dict[str, Any]:
     ensure_database_outside_game_root(game_root, database_path)
     context = build_extraction_context(game_root)
     entries, memberships = collect_entries(context)
@@ -320,6 +581,7 @@ def build_database(game_root: Path, database_path: Path) -> dict[str, int]:
 
     connection = sqlite3.connect(str(database_path), timeout=30)
     try:
+        connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         initialize_database(connection)
         imported_at = utc_now()
@@ -378,6 +640,14 @@ def build_database(game_root: Path, database_path: Path) -> dict[str, int]:
             )
             connection.executemany(
                 """
+                INSERT OR IGNORE INTO category_completion(
+                    entry_key, category, completed, updated_at
+                ) VALUES (?, ?, 0, ?)
+                """,
+                ((entry_key, category, imported_at) for entry_key, category, _ in memberships),
+            )
+            connection.executemany(
+                """
                 INSERT INTO entry_relations(
                     source_entry_key, relation_type, target_table, target_id,
                     target_name, ordinal, raw_value
@@ -406,13 +676,17 @@ def build_database(game_root: Path, database_path: Path) -> dict[str, int]:
                 "main_entry_count": str(len(entries)),
                 "category_mapping_count": str(len(memberships)),
             }
-            connection.executemany(
-                """
-                INSERT INTO metadata(key, value) VALUES (?, ?)
-                ON CONFLICT(key) DO UPDATE SET value=excluded.value
-                """,
-                metadata.items(),
+            _upsert_metadata(connection, metadata)
+
+        save_sync: CompletionSyncResult | None = None
+        if sync_save:
+            save_sync = sync_game_completion(
+                connection,
+                save_file or default_save_file(),
+                force=True,
             )
+            if save_sync.status == "error":
+                raise RuntimeError(save_sync.message)
 
         return {
             "entries": len(entries),
@@ -423,6 +697,7 @@ def build_database(game_root: Path, database_path: Path) -> dict[str, int]:
                 category: len(rows)
                 for category, rows in category_rows(context).items()
             },
+            "save_sync": save_sync,
         }
     finally:
         connection.close()
@@ -454,11 +729,12 @@ def get_category_summaries(connection: sqlite3.Connection) -> list[dict[str, Any
         """
         SELECT c.category, c.label,
                COUNT(DISTINCT e.entry_key) AS total,
-               COUNT(DISTINCT CASE WHEN co.completed = 1 THEN e.entry_key END) AS completed
+               COUNT(DISTINCT CASE WHEN cc.completed = 1 THEN e.entry_key END) AS completed
         FROM codex_categories c
         LEFT JOIN codex_entry_categories ec ON ec.category = c.category
         LEFT JOIN codex_entries e ON e.entry_key = ec.entry_key AND e.is_current = 1
-        LEFT JOIN completion co ON co.entry_key = e.entry_key
+        LEFT JOIN category_completion cc
+            ON cc.entry_key = e.entry_key AND cc.category = c.category
         GROUP BY c.category, c.label, c.sort_order
         ORDER BY c.sort_order
         """
@@ -489,19 +765,21 @@ def query_entries(
         pattern = f"%{search.strip()}%"
         params.extend([pattern, pattern, pattern])
     if completion_filter == "completed":
-        clauses.append("co.completed = 1")
+        clauses.append("cc.completed = 1")
     elif completion_filter == "pending":
-        clauses.append("co.completed = 0")
+        clauses.append("COALESCE(cc.completed, 0) = 0")
     if completion_filter not in {"all", "completed", "pending"}:
         raise ValueError(f"未知完成状态筛选：{completion_filter}")
     params.extend([max(1, min(limit, 100)), max(0, offset)])
     rows = connection.execute(
         f"""
         SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
-               e.description, e.icon_path, e.raw_json, co.completed
+               e.description, e.icon_path, e.raw_json,
+               COALESCE(cc.completed, 0) AS completed
         FROM codex_entry_categories ec
         JOIN codex_entries e ON e.entry_key = ec.entry_key
-        JOIN completion co ON co.entry_key = e.entry_key
+        LEFT JOIN category_completion cc
+            ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
         ORDER BY e.name COLLATE NOCASE, e.source_id
         LIMIT ? OFFSET ?
@@ -527,9 +805,9 @@ def count_entries(
         pattern = f"%{search.strip()}%"
         params.extend([pattern, pattern, pattern])
     if completion_filter == "completed":
-        clauses.append("co.completed = 1")
+        clauses.append("cc.completed = 1")
     elif completion_filter == "pending":
-        clauses.append("co.completed = 0")
+        clauses.append("COALESCE(cc.completed, 0) = 0")
     elif completion_filter != "all":
         raise ValueError(f"未知完成状态筛选：{completion_filter}")
     row = connection.execute(
@@ -537,7 +815,8 @@ def count_entries(
         SELECT COUNT(*)
         FROM codex_entry_categories ec
         JOIN codex_entries e ON e.entry_key = ec.entry_key
-        JOIN completion co ON co.entry_key = e.entry_key
+        LEFT JOIN category_completion cc
+            ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
         """,
         params,
@@ -545,17 +824,35 @@ def count_entries(
     return int(row[0])
 
 
-def get_entry(connection: sqlite3.Connection, entry_key: str) -> dict[str, Any] | None:
-    row = connection.execute(
-        """
-        SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
-               e.description, e.icon_path, e.raw_json, e.is_current, co.completed
-        FROM codex_entries e
-        JOIN completion co ON co.entry_key = e.entry_key
-        WHERE e.entry_key = ?
-        """,
-        (entry_key,),
-    ).fetchone()
+def get_entry(
+    connection: sqlite3.Connection,
+    entry_key: str,
+    category: str | None = None,
+) -> dict[str, Any] | None:
+    if category is None:
+        row = connection.execute(
+            """
+            SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
+                   e.description, e.icon_path, e.raw_json, e.is_current, co.completed
+            FROM codex_entries e
+            JOIN completion co ON co.entry_key = e.entry_key
+            WHERE e.entry_key = ?
+            """,
+            (entry_key,),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            """
+            SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
+                   e.description, e.icon_path, e.raw_json, e.is_current,
+                   COALESCE(cc.completed, 0) AS completed
+            FROM codex_entries e
+            LEFT JOIN category_completion cc
+                ON cc.entry_key = e.entry_key AND cc.category = ?
+            WHERE e.entry_key = ?
+            """,
+            (category, entry_key),
+        ).fetchone()
     return dict(row) if row else None
 
 
@@ -573,13 +870,7 @@ def get_entry_relations(connection: sqlite3.Connection, entry_key: str) -> list[
 
 
 def set_completion(connection: sqlite3.Connection, entry_key: str, completed: bool) -> None:
-    with connection:
-        cursor = connection.execute(
-            "UPDATE completion SET completed = ?, updated_at = ? WHERE entry_key = ?",
-            (1 if completed else 0, utc_now(), entry_key),
-        )
-    if cursor.rowcount != 1:
-        raise KeyError(f"找不到图鉴条目完成状态：{entry_key}")
+    raise RuntimeError("完成状态由游戏 HistorySave 存档同步，不能手动修改")
 
 
 def main() -> int:
@@ -596,9 +887,25 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "SurvivalLog图鉴.sqlite3",
         help="SQLite 数据库路径",
     )
+    parser.add_argument(
+        "--save-file",
+        type=Path,
+        default=default_save_file(),
+        help="HistorySave.bytes 存档路径",
+    )
+    parser.add_argument(
+        "--no-save-sync",
+        action="store_true",
+        help="只构建静态数据库，不读取游戏存档完成状态",
+    )
     args = parser.parse_args()
     try:
-        counts = build_database(args.game_root, args.database)
+        counts = build_database(
+            args.game_root,
+            args.database,
+            args.save_file,
+            sync_save=not args.no_save_sync,
+        )
         print(f"数据库：{args.database}")
         for category in CATEGORY_ORDER:
             print(f"{CATEGORY_LABELS[category]}：{counts[category]} 条")
@@ -606,6 +913,11 @@ def main() -> int:
             f"主条目：{counts['entries']}，分类映射：{counts['category_mappings']}，"
             f"关联：{counts['relations']}，辅助配置：{counts['auxiliary_rows']}"
         )
+        if counts["save_sync"] is not None:
+            save_sync: CompletionSyncResult = counts["save_sync"]
+            print(f"存档同步：{save_sync.message}")
+        else:
+            print("存档同步：已跳过（--no-save-sync）")
         print("数据库构建完成")
     except Exception as exc:
         print(f"数据库构建失败：{exc}", file=sys.stderr)

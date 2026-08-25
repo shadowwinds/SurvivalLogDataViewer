@@ -2,7 +2,7 @@
 
 ## 结论
 
-本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏，不读取或修改存档、mod DLL 或游戏资源。
+本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机的 `HistorySave.bytes` 图鉴完成状态；不启动游戏，不修改存档、mod DLL 或游戏资源。
 
 当前本地游戏资源版本为 `1.0.14956`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
 
@@ -26,7 +26,17 @@
 - `Assets/GameCore/HotUpdate/ReduxUI/WebUI/WebUIMsg/WebUI_Codex.cs`
 - `Assets/GameCore/HotUpdate/Config/ConfigData/Config_CodexMilestone.cs`
 
-元数据中还包含 `IsInCodex`、`GetUnlockedCount`、`GetTotalCount`、`IsEntryUnlocked`、`BuildTotalCache`、`GetEntryName` 和 `GetEntryIcon` 等成员。网页界面由运行时发送分类列表和条目列表；存档解锁状态属于运行时数据，解析器不模拟它。
+元数据中还包含 `IsInCodex`、`GetUnlockedCount`、`GetTotalCount`、`IsEntryUnlocked`、`BuildTotalCache`、`GetEntryName` 和 `GetEntryIcon` 等成员。`CodexManager._unlockedMap` 是运行时映射，`PersistToHistory`/`SaveCodexUnlocked` 将其写入 `HistoryData.CodexUnlocked`；本项目从存档读取这个持久化分类 ID 列表，不读取 `Save_*.bytes` 中只用于界面快照的 `CodexUnlocked` 汇总值。
+
+## 游戏存档完成状态
+
+默认存档路径为：
+
+`%USERPROFILE%\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes`
+
+独立解析器 [图鉴存档解析.py](./图鉴存档解析.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到 `CodexUnlocked`，校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
+
+当前存档的分类完成数量为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，分类映射合计 `366/935`。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
 ## 主图鉴分类规则
 
@@ -100,25 +110,28 @@ python "图鉴解析工具.py" `
 ```powershell
 python "图鉴数据库.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database "SurvivalLog图鉴.sqlite3"
+  --database "SurvivalLog图鉴.sqlite3" `
+  --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-数据库保存主条目、分类映射、共享完成状态、关联关系、辅助配置原始行和资源元数据。重新导入使用事务和 upsert，不重置已有完成状态；数据库文件不会写入游戏目录。
+数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行和资源元数据。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。数据库文件不会写入游戏目录或存档目录。
+
+没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
 
 ## Streamlit 前端
 
-[图鉴前端.py](./图鉴前端.py) 读取 SQLite 并提供分类、搜索、完成状态筛选、条目网格、详情和手动完成勾选：
+[图鉴前端.py](./图鉴前端.py) 读取 SQLite，并每 5 秒轮询存档修改时间；存档变化后自动同步分类完成状态。前端提供分类、搜索、完成状态筛选、条目网格和详情，完成复选框只读显示游戏解锁状态：
 
 ```powershell
-streamlit run "图鉴前端.py" -- --database "SurvivalLog图鉴.sqlite3"
+streamlit run "图鉴前端.py" -- --database "SurvivalLog图鉴.sqlite3" --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端显示静态总数，不复现游戏网页在部分分类中以 `???` 隐藏总数的行为。前端勾选是本地数据库中的用户记录，不代表存档解锁状态。
+前端显示静态总数，不复现游戏网页在部分分类中以 `???` 隐藏总数的行为。游戏运行时只有在写入存档后，前端才能在下一次轮询中看到变化；前端不会写回存档。
 
 ## 已知限制
 
-- 解析的是当前安装版本的静态配置，不包含存档解锁、玩家库存或运行时动态修改。
+- 静态解析器不推断完成状态；数据库和前端只读读取 `HistorySave.bytes` 的持久化图鉴列表，不读取存档中的玩家库存或其他运行时动态数据。
 - `Config_CodexMilestone` 用于游戏图鉴里程碑，不参与六类主条目数量和完成勾选。
 - 条件组、奖励组、动作、房间和掉落组等没有独立解析表的引用保留原始 ID，并以 `ID:xxxx` 标明。
 - 参考仓库只用于字段命名和交叉校验，最终数据源始终是当前本地游戏资源。
-- 重新运行只覆盖用户指定输出目录中的目标 Markdown 或数据库，不修改游戏文件、mod DLL、存档或 catalog。
+- 重新运行只覆盖用户指定输出目录中的目标 Markdown 或 SQLite 派生数据，不修改游戏文件、mod DLL、存档、Steam Cloud 或 catalog。

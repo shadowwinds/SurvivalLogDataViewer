@@ -22,8 +22,9 @@ from 图鉴数据库 import (
     get_overall_summary,
     open_database,
     query_entries,
-    set_completion,
+    sync_game_completion,
 )
+from 图鉴存档解析 import default_save_file
 from 图鉴解析工具 import FIELD_LABELS, format_scalar
 
 
@@ -35,16 +36,6 @@ CATEGORY_EMOJI = {
     "craft": "🔧",
     "furniture": "🛋️",
 }
-REFERENCE_PROGRESS = {
-    "food": 61,
-    "dish": 93,
-    "plant": 14,
-    "prey": 15,
-    "craft": 110,
-    "furniture": 73,
-}
-
-
 def parse_script_args() -> argparse.Namespace:
     raw_args = sys.argv[1:]
     if "--" in raw_args:
@@ -54,6 +45,11 @@ def parse_script_args() -> argparse.Namespace:
         "--database",
         type=Path,
         default=Path(__file__).resolve().parent / "SurvivalLog图鉴.sqlite3",
+    )
+    parser.add_argument(
+        "--save-file",
+        type=Path,
+        default=default_save_file(),
     )
     return parser.parse_args(raw_args)
 
@@ -103,26 +99,25 @@ def render_sidebar(
     return CATEGORY_ORDER[labels.index(selected_label)]
 
 
-def render_entry_card(connection: Any, entry: dict[str, Any], column: Any) -> None:
+def render_entry_card(entry: dict[str, Any], column: Any) -> None:
     entry_key = entry["entry_key"]
     with column.container(border=True):
         st.markdown(f"**{entry['name']}**")
         st.caption(f"ID {entry['source_id']}")
-        checked = st.checkbox(
-            "完成",
+        st.checkbox(
+            "已解锁",
             value=bool(entry["completed"]),
-            key=f"completion:{entry_key}",
+            key=f"game-completion:{entry_key}:{int(bool(entry['completed']))}",
+            disabled=True,
+            label_visibility="collapsed",
         )
-        if checked != bool(entry["completed"]):
-            set_completion(connection, entry_key, checked)
-            st.rerun()
+        st.caption("游戏存档：已解锁" if entry["completed"] else "游戏存档：未解锁")
         if st.button("查看详情", key=f"detail:{entry_key}", use_container_width=True):
             st.session_state.selected_entry_key = entry_key
             st.rerun()
 
 
 def render_grid(
-    connection: Any,
     entries: list[dict[str, Any]],
     category: str,
     page: int,
@@ -134,7 +129,7 @@ def render_grid(
         return
     columns = st.columns(4, gap="small")
     for index, entry in enumerate(entries):
-        render_entry_card(connection, entry, columns[index % len(columns)])
+        render_entry_card(entry, columns[index % len(columns)])
     if page_count > 1:
         new_page = st.number_input(
             "页码",
@@ -150,12 +145,12 @@ def render_grid(
         st.caption(f"第 {page} / {page_count} 页")
 
 
-def render_details(connection: Any, entry_key: str | None) -> None:
+def render_details(connection: Any, entry_key: str | None, category: str) -> None:
     st.subheader("条目详情")
     if not entry_key:
         st.info("选择一个条目查看详情")
         return
-    entry = get_entry(connection, entry_key)
+    entry = get_entry(connection, entry_key, category)
     if entry is None:
         st.warning("条目已不存在或尚未完成数据库刷新")
         return
@@ -191,21 +186,34 @@ def render_details(connection: Any, entry_key: str | None) -> None:
         st.dataframe(rows, use_container_width=True, hide_index=True)
 
 
-def main() -> None:
-    st.set_page_config(page_title="Survival Log 生存图鉴", layout="wide")
-    args = parse_script_args()
+def render_page(database_path: Path, save_file: Path) -> None:
     try:
-        connection = open_database(args.database)
+        connection = open_database(database_path)
     except Exception as exc:
         st.error(f"无法打开图鉴数据库：{exc}")
         st.code(
-            f'python "图鉴数据库.py" --database "{args.database}"',
+            f'python "图鉴数据库.py" --database "{database_path}"',
             language="powershell",
         )
         st.stop()
 
     try:
+        try:
+            sync_result = sync_game_completion(connection, save_file)
+        except Exception as exc:
+            sync_result = None
+            st.error(f"图鉴存档同步失败：{exc}")
+
         metadata = get_metadata(connection)
+        if sync_result is not None and sync_result.status == "error":
+            st.warning(f"未能读取游戏图鉴存档：{sync_result.message}")
+        elif sync_result is not None and sync_result.status == "fallback":
+            st.warning(f"当前使用存档备份同步：{sync_result.message}")
+        else:
+            source_path = metadata.get("save_path", str(save_file))
+            last_read = metadata.get("save_read_at", "未知")
+            st.caption(f"游戏存档已同步：`{source_path}` · 最近读取 {last_read}")
+
         summaries = get_category_summaries(connection)
         overall = get_overall_summary(connection)
         selected_category = st.session_state.get("selected_category", "furniture")
@@ -254,20 +262,24 @@ def main() -> None:
 
         grid_column, detail_column = st.columns([3, 2], gap="large")
         with grid_column:
-            render_grid(connection, entries, selected_category, page, page_count)
+            render_grid(entries, selected_category, page, page_count)
         with detail_column:
-            render_details(connection, get_selected_key())
-
-        with st.expander("验收参考进度", expanded=False):
-            st.caption("参考值只用于核对当前版本，不会自动写入完成状态。")
-            st.write(
-                "；".join(
-                    f"{CATEGORY_LABELS[category]} {REFERENCE_PROGRESS[category]}/{summary_by_category[category]['total']}"
-                    for category in CATEGORY_ORDER
-                )
-            )
+            render_details(connection, get_selected_key(), selected_category)
     finally:
         connection.close()
+
+
+def main() -> None:
+    st.set_page_config(page_title="Survival Log 生存图鉴", layout="wide")
+    args = parse_script_args()
+    if hasattr(st, "fragment"):
+        @st.fragment(run_every="5s")
+        def render_live_page() -> None:
+            render_page(args.database, args.save_file)
+
+        render_live_page()
+    else:
+        render_page(args.database, args.save_file)
 
 
 if __name__ == "__main__":
