@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 import threading
+import time
 import urllib.parse
 import webbrowser
 from http import HTTPStatus
@@ -33,6 +34,7 @@ from 图鉴解析工具 import FIELD_LABELS, format_scalar
 
 APP_DATABASE_NAME = "SurvivalLog图鉴.sqlite3"
 POLL_INTERVAL_SECONDS = 5
+DISCONNECT_GRACE_SECONDS = 30
 CATEGORY_EMOJI = {
     "food": "🍞",
     "dish": "🍳",
@@ -176,6 +178,7 @@ class CodexService:
                 "metadata": metadata,
                 "sync": sync,
                 "poll_interval_seconds": POLL_INTERVAL_SECONDS,
+                "disconnect_grace_seconds": DISCONNECT_GRACE_SECONDS,
             }
 
     def entries(self, category: str, search: str, completion_filter: str) -> dict[str, Any]:
@@ -232,10 +235,47 @@ class CodexService:
 class CodexHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], service: CodexService, assets: Path):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        service: CodexService,
+        assets: Path,
+        *,
+        auto_exit: bool,
+    ):
         super().__init__(address, CodexRequestHandler)
         self.service = service
         self.assets = assets
+        self.auto_exit = auto_exit
+        self._activity_lock = threading.Lock()
+        self._last_activity = time.monotonic()
+        self._has_client = False
+        self._stopping = threading.Event()
+        if self.auto_exit:
+            monitor = threading.Thread(
+                target=self._monitor_client,
+                name="codex-client-monitor",
+                daemon=True,
+            )
+            monitor.start()
+
+    def note_client_activity(self) -> None:
+        with self._activity_lock:
+            self._last_activity = time.monotonic()
+            self._has_client = True
+
+    def _monitor_client(self) -> None:
+        while not self._stopping.wait(POLL_INTERVAL_SECONDS):
+            with self._activity_lock:
+                has_client = self._has_client
+                last_activity = self._last_activity
+            if has_client and time.monotonic() - last_activity >= DISCONNECT_GRACE_SECONDS:
+                self.shutdown()
+                return
+
+    def server_close(self) -> None:
+        self._stopping.set()
+        super().server_close()
 
 
 class CodexRequestHandler(BaseHTTPRequestHandler):
@@ -295,6 +335,7 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
         self._send_error_json(HTTPStatus.NOT_FOUND, "找不到 API 接口")
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
+        self.server.note_client_activity()
         parsed = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
         try:
@@ -343,7 +384,12 @@ def run_local_server(
 ) -> None:
     service = CodexService(database_path, save_file)
     try:
-        server = CodexHTTPServer(("127.0.0.1", port), service, static_root())
+        server = CodexHTTPServer(
+            ("127.0.0.1", port),
+            service,
+            static_root(),
+            auto_exit=not headless,
+        )
     except Exception:
         service.close()
         raise

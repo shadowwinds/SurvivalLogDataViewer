@@ -5,15 +5,12 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import os
-import shutil
 import sys
 from pathlib import Path
 
 from 图鉴前端 import run_local_server
 
 
-APP_NAME = "SurvivalLogDataViewer"
 DATABASE_NAME = "SurvivalLog图鉴.sqlite3"
 
 
@@ -41,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--database",
         type=Path,
-        help="指定运行数据库路径；不指定时使用用户数据目录中的数据库",
+        help="指定运行数据库路径；不指定时使用 exe 同目录中的数据库",
     )
     parser.add_argument(
         "--save-file",
@@ -57,27 +54,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def user_data_directory() -> Path:
-    local_app_data = Path.home() / "AppData" / "Local"
-    if sys.platform == "win32":
-        local_app_data = Path(os.environ.get("LOCALAPPDATA", local_app_data))
-    return local_app_data / APP_NAME
+def default_database_path() -> Path:
+    return application_directory() / DATABASE_NAME
 
 
-def prepare_database(requested_path: Path | None) -> Path:
+def resolve_database(requested_path: Path | None) -> Path:
     if requested_path is not None:
         return requested_path.expanduser().resolve()
 
-    seed_path = application_directory() / DATABASE_NAME
-    runtime_path = user_data_directory() / DATABASE_NAME
-    if runtime_path.exists():
-        return runtime_path
-    if not seed_path.exists():
-        raise FileNotFoundError(f"分发包中找不到数据库：{seed_path}")
-
-    runtime_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(seed_path, runtime_path)
-    return runtime_path
+    database_path = default_database_path()
+    if not database_path.exists():
+        raise FileNotFoundError(f"程序目录中找不到数据库：{database_path}")
+    return database_path
 
 
 def show_error(message: str) -> None:
@@ -90,7 +78,7 @@ def show_error(message: str) -> None:
 
 
 def run_frontend(args: argparse.Namespace) -> None:
-    database_path = prepare_database(args.database)
+    database_path = resolve_database(args.database)
     run_local_server(
         database_path,
         args.save_file.expanduser().resolve(),

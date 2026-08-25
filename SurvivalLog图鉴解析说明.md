@@ -140,7 +140,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\打包图鉴前端.ps1"
 
 分发目录为 `dist/SurvivalLog图鉴/`，其中的 `SurvivalLog图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe；构建产物不包含游戏安装目录、bundle、catalog 或原始存档。
 
-独立版首次启动时会将分发包中的 SQLite 初始数据库复制到 `%LOCALAPPDATA%\SurvivalLogDataViewer\`，后续完成状态写入用户自己的数据库副本。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
+独立版直接使用 exe 同目录中的 `SurvivalLog图鉴.sqlite3`，不创建或读取用户目录数据库副本；存档同步后的完成状态直接写回该数据库。普通启动不显示终端，浏览器关闭后连续约 30 秒没有网页心跳时服务自动退出；`--headless` 模式保持后台常驻。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
 
 ## 已知限制
 
