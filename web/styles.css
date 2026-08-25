@@ -163,13 +163,13 @@ button {
 
 .source-version-value {
   color: var(--ink);
-  font-weight: 650;
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
 .source-catalog-value {
   color: var(--ink);
-  font-weight: 650;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -340,17 +340,17 @@ button {
 
 .search-fields {
   display: flex;
-  flex: 1 1 640px;
-  gap: 10px;
-  max-width: 900px;
+  flex: 1 1 auto;
+  gap: 14px;
+  max-width: 920px;
   min-width: 0;
 }
 
 .search-field-group {
   display: flex;
-  flex: 1 1 360px;
+  flex: 1 1 0;
   align-items: center;
-  min-width: 180px;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -368,7 +368,7 @@ button {
 }
 
 .search-field-group .search-box {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   max-width: none;
 }
@@ -391,10 +391,11 @@ button {
 }
 
 .search-label {
-  flex: 0 0 auto;
+  flex: 0 0 48px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -420,6 +421,7 @@ button {
 .filter-group {
   display: inline-flex;
   flex: 0 0 auto;
+  height: 42px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -428,8 +430,8 @@ button {
 
 .clear-filter-button {
   flex: 0 0 auto;
-  align-self: flex-end;
-  height: 40px;
+  align-self: center;
+  height: 42px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -448,7 +450,7 @@ button {
 
 .filter-button {
   min-width: 68px;
-  height: 40px;
+  height: 42px;
   padding: 0 12px;
   border: 0;
   border-right: 1px solid var(--border);
@@ -529,7 +531,7 @@ button {
 
 .entry-row {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-height: 68px;
@@ -570,7 +572,16 @@ button {
   min-width: 0;
 }
 
+.entry-title-line {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 8px;
+}
+
 .entry-name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--ink);
   font-size: 14px;
@@ -580,7 +591,18 @@ button {
   white-space: nowrap;
 }
 
-.entry-meta,
+.entry-id {
+  flex: 0 0 auto;
+  overflow: hidden;
+  max-width: 40%;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detail-source {
   margin-top: 4px;
   color: var(--muted);
@@ -589,8 +611,12 @@ button {
 }
 
 .entry-highlight {
+  display: block;
   overflow: hidden;
   margin-top: 5px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(31, 122, 109, 0.08);
   color: var(--accent);
   font-size: 11px;
   line-height: 1.35;

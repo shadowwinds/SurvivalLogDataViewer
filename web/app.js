@@ -172,13 +172,15 @@
       const indicator = makeElement("span", "entry-indicator");
       indicator.classList.toggle("completed", Boolean(entry.completed));
       const body = makeElement("div", "entry-body");
-      body.append(
+      const titleLine = makeElement("div", "entry-title-line");
+      titleLine.append(
         makeElement("div", "entry-name", entry.name),
-        makeElement("div", "entry-meta", `${entry.source_table} · ID ${entry.source_id}`),
+        makeElement("span", "entry-id", `ID ${entry.source_id}`),
       );
-      if (entry.highlight_summary) {
-        body.append(makeElement("div", "entry-highlight", entry.highlight_summary));
-      }
+      body.append(
+        titleLine,
+        makeElement("div", "entry-highlight", entry.highlight_summary || "无"),
+      );
 
       const status = makeElement(
         "span",
