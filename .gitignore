@@ -5,3 +5,4 @@ __pycache__/
 *.sqlite3-shm
 *.sqlite3-wal
 *.sqlite3-journal
+/test

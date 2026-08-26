@@ -24,8 +24,10 @@ from codex_parser import (
 from codex_save import (
     CODEX_CATEGORY_SOURCE_TABLES,
     SaveParseError,
+    build_save_diagnostic,
     default_save_file,
     read_codex_save,
+    write_save_diagnostic,
 )
 
 
@@ -57,6 +59,11 @@ class CompletionSyncResult:
     updated_entries: int
     used_backup: bool
     message: str
+    schema_profile: str = ""
+    codex_offset: int | None = None
+    codex_end_offset: int | None = None
+    candidate_count: int = 0
+    candidate_score: tuple[int, ...] = ()
 
 
 SCHEMA_SQL = """
@@ -386,19 +393,62 @@ def _upsert_metadata(connection: sqlite3.Connection, values: dict[str, str]) -> 
     )
 
 
+def _current_category_entries(
+    connection: sqlite3.Connection,
+) -> tuple[dict[str, dict[int, str]], set[str]]:
+    category_entries: dict[str, dict[int, str]] = {
+        category: {} for category in CATEGORY_ORDER
+    }
+    current_entry_keys: set[str] = set()
+    rows = connection.execute(
+        """
+        SELECT ec.category, e.entry_key, e.source_table, e.source_id
+        FROM codex_entry_categories ec
+        JOIN codex_entries e ON e.entry_key = ec.entry_key
+        WHERE e.is_current = 1
+        """
+    ).fetchall()
+    for category, entry_key, source_table, source_id in rows:
+        expected_table = CODEX_CATEGORY_SOURCE_TABLES.get(category)
+        if expected_table is None:
+            raise RuntimeError(f"数据库包含未知图鉴分类：{category}")
+        if source_table != expected_table:
+            raise RuntimeError(
+                f"图鉴分类映射 schema 不匹配：{category} 应使用 {expected_table}，实际为 {source_table}"
+            )
+        if source_id in category_entries[category] and category_entries[category][source_id] != entry_key:
+            raise RuntimeError(f"图鉴分类 {category} 出现重复源 ID：{source_id}")
+        category_entries[category][source_id] = entry_key
+        current_entry_keys.add(entry_key)
+    return category_entries, current_entry_keys
+
+
 def sync_game_completion(
     connection: sqlite3.Connection,
     save_file: Path | None = None,
     *,
     force: bool = False,
+    log_path: Path | None = None,
 ) -> CompletionSyncResult:
     """Synchronize completion.completed from the read-only HistorySave file."""
 
     requested_path = Path(save_file or default_save_file()).expanduser()
+    category_entries, current_entry_keys = _current_category_entries(connection)
+    known_category_ids = {
+        category: set(source_ids)
+        for category, source_ids in category_entries.items()
+    }
     try:
-        state = read_codex_save(requested_path)
+        state = read_codex_save(
+            requested_path,
+            known_category_ids=known_category_ids,
+        )
     except (OSError, SaveParseError) as exc:
         message = str(exc)
+        write_save_diagnostic(
+            log_path,
+            build_save_diagnostic(requested_path, status="error", error=exc),
+        )
         existing = get_metadata(connection)
         if (
             existing.get("save_sync_status") != "error"
@@ -444,8 +494,21 @@ def sync_game_completion(
         and metadata.get("save_sha256") == state.file_info.sha256
         and metadata.get("save_path") == str(state.file_info.path)
         and metadata.get("save_sync_status") in {"ok", "fallback"}
+        and metadata.get("save_schema_profile") == state.schema_profile
+        and metadata.get("save_codex_offset") == str(state.codex_offset)
+        and metadata.get("save_codex_end_offset") == str(state.codex_end_offset)
+        and metadata.get("save_candidate_count") == str(state.candidate_count)
+        and metadata.get("save_candidate_score") == json_text(list(state.candidate_score))
         and category_completion_rows == expected_category_completion_rows
     ):
+        write_save_diagnostic(
+            log_path,
+            build_save_diagnostic(
+                requested_path,
+                status=metadata.get("save_sync_status", "ok"),
+                state=state,
+            ),
+        )
         return CompletionSyncResult(
             status=metadata.get("save_sync_status", "ok"),
             changed=False,
@@ -455,34 +518,14 @@ def sync_game_completion(
             updated_entries=0,
             used_backup=state.file_info.used_backup,
             message="存档未变化，完成状态无需更新",
+            schema_profile=state.schema_profile,
+            codex_offset=state.codex_offset,
+            codex_end_offset=state.codex_end_offset,
+            candidate_count=state.candidate_count,
+            candidate_score=state.candidate_score,
         )
 
-    category_entries: dict[str, dict[int, str]] = {
-        category: {} for category in CATEGORY_ORDER
-    }
-    current_entry_keys: set[str] = set()
     current_category_pairs: set[tuple[str, str]] = set()
-    rows = connection.execute(
-        """
-        SELECT ec.category, e.entry_key, e.source_table, e.source_id
-        FROM codex_entry_categories ec
-        JOIN codex_entries e ON e.entry_key = ec.entry_key
-        WHERE e.is_current = 1
-        """
-    ).fetchall()
-    for category, entry_key, source_table, source_id in rows:
-        expected_table = CODEX_CATEGORY_SOURCE_TABLES.get(category)
-        if expected_table is None:
-            raise RuntimeError(f"数据库包含未知图鉴分类：{category}")
-        if source_table != expected_table:
-            raise RuntimeError(
-                f"图鉴分类映射 schema 不匹配：{category} 应使用 {expected_table}，实际为 {source_table}"
-            )
-        if source_id in category_entries[category] and category_entries[category][source_id] != entry_key:
-            raise RuntimeError(f"图鉴分类 {category} 出现重复源 ID：{source_id}")
-        category_entries[category][source_id] = entry_key
-        current_entry_keys.add(entry_key)
-
     desired_entry_keys: set[str] = set()
     desired_category_keys: dict[str, set[str]] = {
         category: set() for category in CATEGORY_ORDER
@@ -579,9 +622,22 @@ def sync_game_completion(
                 "save_category_counts": json_text(state.category_counts),
                 "save_total_memberships": str(state.total_memberships),
                 "save_unknown_ids": json_text(unknown_ids),
+                "save_schema_profile": state.schema_profile,
+                "save_codex_offset": str(state.codex_offset),
+                "save_codex_end_offset": str(state.codex_end_offset),
+                "save_candidate_count": str(state.candidate_count),
+                "save_candidate_score": json_text(list(state.candidate_score)),
             },
         )
 
+    write_save_diagnostic(
+        log_path,
+        build_save_diagnostic(
+            requested_path,
+            status=status,
+            state=state,
+        ),
+    )
     message = (
         f"已同步游戏存档：{state.total_memberships} 个分类完成状态"
         + ("（使用 .bak 备份）" if state.file_info.used_backup else "")
@@ -597,6 +653,11 @@ def sync_game_completion(
         updated_entries=updated_entries,
         used_backup=state.file_info.used_backup,
         message=message,
+        schema_profile=state.schema_profile,
+        codex_offset=state.codex_offset,
+        codex_end_offset=state.codex_end_offset,
+        candidate_count=state.candidate_count,
+        candidate_score=state.candidate_score,
     )
 
 
@@ -718,6 +779,7 @@ def build_database(
                 connection,
                 save_file or default_save_file(),
                 force=True,
+                log_path=database_path.with_suffix(".log"),
             )
             if save_sync.status == "error":
                 raise RuntimeError(save_sync.message)

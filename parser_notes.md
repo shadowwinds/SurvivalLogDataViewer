@@ -34,7 +34,11 @@
 
 `%USERPROFILE%\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes`
 
-独立解析器 [codex_save.py](./codex_save.py) 按当前 `HistoryData` MemoryPack 字段顺序读取到图鉴完成映射：当前游戏版本将分类到条目 ID 列表保存在 `PlayerSelectSaveFileMap`，而 `CodexUnlocked` 是独立的整数列表。解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。
+独立解析器 [codex_save.py](./codex_save.py) 先校验 `HistoryData` 根对象、历史条目和公共前缀，再从公共前缀之后扫描所有字节 offset 寻找图鉴分类映射，不假设图鉴字段位于固定位置或全局 4 字节对齐。候选必须通过分类 ID、集合边界、正数且不重复的条目 ID，以及后续整数列表链校验；数据库同步时还使用当前六类配置的源 ID 集合参与评分。评分相同但映射相同的候选可以合并，评分相同且映射不同则报告歧义并保留上一次状态。
+
+解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，会只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。未识别的存档条目 ID 会保留在诊断结果中，不会被静默转换为其他条目。
+
+网页服务和数据库同步可以将诊断写入数据库同目录的 UTF-8 JSON Lines 日志：源码数据库对应 `survival_log_codex.log`，独立版数据库对应 `SurvivalLogDataViewer.log`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；数据库目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
 
 当前存档的分类完成数量由 `HistorySave.bytes` 实时读取，六类分类映射合计 `935`；具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 

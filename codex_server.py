@@ -324,9 +324,18 @@ class CodexService:
                     updated_entries=0,
                     used_backup=self._last_sync.used_backup,
                     message="存档未变化，完成状态无需更新",
+                    schema_profile=self._last_sync.schema_profile,
+                    codex_offset=self._last_sync.codex_offset,
+                    codex_end_offset=self._last_sync.codex_end_offset,
+                    candidate_count=self._last_sync.candidate_count,
+                    candidate_score=self._last_sync.candidate_score,
                 )
 
-            result = sync_game_completion(self.connection, self.save_file)
+            result = sync_game_completion(
+                self.connection,
+                self.save_file,
+                log_path=self.database_path.with_suffix(".log"),
+            )
             self._last_sync = result
             if result.status in {"ok", "fallback"}:
                 self._last_success_signature = signature
@@ -373,6 +382,11 @@ class CodexService:
                 "used_backup": result.used_backup,
                 "updated_entries": result.updated_entries,
                 "category_counts": result.category_counts,
+                "schema_profile": result.schema_profile,
+                "codex_offset": result.codex_offset,
+                "codex_end_offset": result.codex_end_offset,
+                "candidate_count": result.candidate_count,
+                "candidate_score": list(result.candidate_score),
                 "unknown_ids": {
                     category: list(values) for category, values in result.unknown_ids.items()
                 },
