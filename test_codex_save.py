@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import shutil
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
+import codex_database
 from codex_database import get_category_summaries, open_database, sync_game_completion
 from codex_save import (
     MAX_DIAGNOSTIC_LOG_BYTES,
@@ -23,7 +26,7 @@ from codex_save import (
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE_DIR = ROOT / "test"
-DATABASE = ROOT / "survival_log_codex.sqlite3"
+DATABASE = ROOT / "data" / "survival_log_codex.sqlite3"
 
 
 EXPECTED_COUNTS = {
@@ -109,6 +112,109 @@ class PublicSaveTests(unittest.TestCase):
                     self.assertTrue(database.with_suffix(".log").is_file())
                 finally:
                     connection.close()
+
+
+class DatabasePathTests(unittest.TestCase):
+    def test_legacy_database_is_migrated_after_integrity_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "survival_log_codex.sqlite3"
+            target = root / "data" / "survival_log_codex.sqlite3"
+            connection = sqlite3.connect(legacy)
+            try:
+                connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
+                connection.execute("INSERT INTO marker VALUES ('legacy')")
+                connection.commit()
+            finally:
+                connection.close()
+
+            with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
+                codex_database, "DEFAULT_DATABASE_PATH", target
+            ):
+                resolved = codex_database.resolve_default_database_path()
+
+            self.assertEqual(resolved, target)
+            self.assertTrue(target.is_file())
+            self.assertFalse(legacy.exists())
+            migrated = sqlite3.connect(target)
+            try:
+                self.assertEqual(migrated.execute("SELECT value FROM marker").fetchone()[0], "legacy")
+                self.assertEqual(migrated.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            finally:
+                migrated.close()
+
+    def test_legacy_database_with_wal_sidecar_is_left_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "survival_log_codex.sqlite3"
+            target = root / "data" / "survival_log_codex.sqlite3"
+            legacy.write_bytes(b"legacy")
+            Path(f"{legacy}-wal").write_bytes(b"wal")
+
+            with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
+                codex_database, "DEFAULT_DATABASE_PATH", target
+            ):
+                resolved = codex_database.resolve_default_database_path()
+
+            self.assertEqual(resolved, legacy)
+            self.assertTrue(legacy.is_file())
+            self.assertFalse(target.exists())
+
+    def test_legacy_log_moves_with_the_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "survival_log_codex.sqlite3"
+            target = root / "data" / "survival_log_codex.sqlite3"
+            connection = sqlite3.connect(legacy)
+            try:
+                connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
+                connection.commit()
+            finally:
+                connection.close()
+            legacy_log = legacy.with_suffix(".log")
+            legacy_log.write_text("legacy log\n", encoding="utf-8")
+
+            with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
+                codex_database, "DEFAULT_DATABASE_PATH", target
+            ):
+                resolved = codex_database.resolve_default_database_path()
+
+            self.assertEqual(resolved, target)
+            self.assertEqual(target.with_suffix(".log").read_text(encoding="utf-8"), "legacy log\n")
+            self.assertFalse(legacy_log.exists())
+
+    def test_existing_target_wins_without_overwriting_legacy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "survival_log_codex.sqlite3"
+            target = root / "data" / "survival_log_codex.sqlite3"
+            target.parent.mkdir()
+            legacy.write_bytes(b"legacy")
+            target.write_bytes(b"target")
+
+            with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
+                codex_database, "DEFAULT_DATABASE_PATH", target
+            ):
+                resolved = codex_database.resolve_default_database_path()
+
+            self.assertEqual(resolved, target)
+            self.assertEqual(legacy.read_bytes(), b"legacy")
+            self.assertEqual(target.read_bytes(), b"target")
+
+    def test_migration_function_refuses_target_race(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "survival_log_codex.sqlite3"
+            target = root / "data" / "survival_log_codex.sqlite3"
+            legacy.write_bytes(b"legacy")
+            target.parent.mkdir()
+            target.write_bytes(b"target")
+
+            with self.assertRaisesRegex(FileExistsError, "目标数据库已存在"):
+                codex_database._migrate_legacy_database(legacy, target)
+
+            self.assertEqual(legacy.read_bytes(), b"legacy")
+            self.assertEqual(target.read_bytes(), b"target")
 
     def test_invalid_candidate_shapes_are_rejected(self) -> None:
         duplicate_category = _pack_map_entries([(1, (100,)), (1, (101,))])

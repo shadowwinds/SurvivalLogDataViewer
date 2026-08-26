@@ -114,11 +114,13 @@ python "codex_parser.py" `
 ```powershell
 python "codex_database.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database "survival_log_codex.sqlite3" `
+  --database "data\survival_log_codex.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
 数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行和资源元数据。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。数据库文件不会写入游戏目录或存档目录。
+
+源码运行的默认数据库为 `data/survival_log_codex.sqlite3`，诊断日志写在同一目录。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
 
 没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
 
@@ -128,7 +130,7 @@ python "codex_database.py" `
 
 ```powershell
 python "codex_server.py" `
-  --database "survival_log_codex.sqlite3" `
+  --database "data\survival_log_codex.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
@@ -140,7 +142,7 @@ python "codex_server.py" `
 
 ### Windows 独立版
 
-使用 [package_frontend.ps1](./package_frontend.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 和预生成 SQLite 数据库，不再携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
+使用 [package_frontend.ps1](./package_frontend.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 核心导入图和预生成 SQLite 数据库，不再携带 UnityPy 的导出/CLI 工具、缓存和调试符号，也不携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"

@@ -10,7 +10,7 @@
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
 - 当前主要脚本为 `codex_parser.py`，主要技术说明为 `parser_notes.md`，用户入口为 `README.md`。
 - 默认输出七份 UTF-8 Markdown：六类主图鉴 `survival_log_food.md`、`survival_log_dish.md`、`survival_log_plant.md`、`survival_log_prey.md`、`survival_log_craft.md`、`survival_log_furniture.md`，以及 `survival_log_auxiliary.md`。
-- 数据库构建脚本为 `codex_database.py`，存档读取脚本为 `codex_save.py`，本地标准库网页服务为 `codex_server.py`，自动更新模块为 `codex_update.py`，静态资源位于 `web/`；数据库默认文件为 `survival_log_codex.sqlite3`。
+- 数据库构建脚本为 `codex_database.py`，存档读取脚本为 `codex_save.py`，本地标准库网页服务为 `codex_server.py`，自动更新模块为 `codex_update.py`，静态资源位于 `web/`；源码数据库默认文件为 `data/survival_log_codex.sqlite3`，独立版数据库仍位于 exe 同目录。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他安装位置时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
 

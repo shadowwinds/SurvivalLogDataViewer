@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import filecmp
 import json
+import os
+import shutil
 import sqlite3
 import sys
-import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +41,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 DATABASE_SCHEMA_VERSION = 2
+PROJECT_DIR = Path(__file__).resolve().parent
+DATA_DIR = PROJECT_DIR / "data"
+DEFAULT_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
+LEGACY_DATABASE_PATH = PROJECT_DIR / "survival_log_codex.sqlite3"
 CATEGORY_LABELS = {
     "food": "食品",
     "dish": "菜肴",
@@ -47,6 +54,95 @@ CATEGORY_LABELS = {
     "furniture": "家具",
 }
 CATEGORY_ORDER = tuple(CATEGORY_LABELS)
+
+
+def _sqlite_integrity_ok(database_path: Path) -> bool:
+    """Return whether a copied SQLite file passes a read-only integrity check."""
+
+    try:
+        connection = sqlite3.connect(str(database_path), timeout=2)
+    except sqlite3.Error:
+        return False
+    try:
+        row = connection.execute("PRAGMA integrity_check").fetchone()
+        return bool(row and row[0] == "ok")
+    except sqlite3.Error:
+        return False
+    finally:
+        connection.close()
+
+
+def _migrate_legacy_log(legacy_database: Path, database_path: Path) -> None:
+    legacy_log = legacy_database.with_suffix(".log")
+    target_log = database_path.with_suffix(".log")
+    if not legacy_log.is_file() or target_log.exists():
+        return
+    try:
+        shutil.copy2(legacy_log, target_log)
+        legacy_log.unlink()
+    except OSError as exc:
+        print(f"旧诊断日志未能迁移到 data 目录：{exc}", file=sys.stderr)
+
+
+def _migrate_legacy_database(legacy_database: Path, database_path: Path) -> Path:
+    """Copy and validate the legacy database before replacing it atomically."""
+
+    if database_path.exists():
+        raise FileExistsError(f"目标数据库已存在，拒绝覆盖：{database_path}")
+    sidecars = (
+        Path(f"{legacy_database}-wal"),
+        Path(f"{legacy_database}-shm"),
+    )
+    if any(path.exists() for path in sidecars):
+        raise RuntimeError("旧数据库存在 SQLite WAL/SHM 旁车文件，请先关闭正在使用它的程序")
+
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{database_path.name}.",
+        suffix=".migrating",
+        dir=database_path.parent,
+    )
+    os.close(fd)
+    temporary_path = Path(temporary_name)
+    try:
+        shutil.copy2(legacy_database, temporary_path)
+        if not _sqlite_integrity_ok(temporary_path):
+            raise sqlite3.DatabaseError("旧数据库完整性检查失败")
+        os.replace(temporary_path, database_path)
+        if not _sqlite_integrity_ok(database_path):
+            database_path.unlink(missing_ok=True)
+            raise sqlite3.DatabaseError("迁移后的数据库完整性检查失败")
+        try:
+            legacy_database.unlink()
+        except OSError as exc:
+            print(f"数据库已复制到 data，但旧文件未能删除：{exc}", file=sys.stderr)
+        _migrate_legacy_log(legacy_database, database_path)
+        return database_path
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def resolve_default_database_path() -> Path:
+    """Resolve the source database and migrate the legacy root file once."""
+
+    if DEFAULT_DATABASE_PATH.is_file():
+        if LEGACY_DATABASE_PATH.is_file() and not filecmp.cmp(
+            DEFAULT_DATABASE_PATH,
+            LEGACY_DATABASE_PATH,
+            shallow=False,
+        ):
+            print(
+                "data 与根目录存在内容不同的同名数据库，继续使用 data 中的数据库；旧文件未删除",
+                file=sys.stderr,
+            )
+        return DEFAULT_DATABASE_PATH
+    if not LEGACY_DATABASE_PATH.is_file():
+        return DEFAULT_DATABASE_PATH
+    try:
+        return _migrate_legacy_database(LEGACY_DATABASE_PATH, DEFAULT_DATABASE_PATH)
+    except (OSError, sqlite3.Error, RuntimeError) as exc:
+        print(f"数据库迁移失败，将继续使用根目录旧数据库：{exc}", file=sys.stderr)
+        return LEGACY_DATABASE_PATH
 
 
 @dataclass(frozen=True)
@@ -1078,7 +1174,7 @@ def main() -> int:
     parser.add_argument(
         "--database",
         type=Path,
-        default=Path(__file__).resolve().parent / "survival_log_codex.sqlite3",
+        default=None,
         help="SQLite 数据库路径",
     )
     parser.add_argument(
@@ -1100,18 +1196,19 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        database_path = args.database or resolve_default_database_path()
         if args.package_copy_from is not None:
-            destination = prepare_packaged_database(args.package_copy_from, args.database)
+            destination = prepare_packaged_database(args.package_copy_from, database_path)
             print(f"打包数据库：{destination}")
             print("完成状态：已清空；save_* 元数据：已清除")
             return 0
         counts = build_database(
             args.game_root,
-            args.database,
+            database_path,
             args.save_file,
             sync_save=not args.no_save_sync,
         )
-        print(f"数据库：{args.database}")
+        print(f"数据库：{database_path}")
         for category in CATEGORY_ORDER:
             print(f"{CATEGORY_LABELS[category]}：{counts[category]} 条")
         print(

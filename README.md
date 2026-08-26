@@ -26,6 +26,35 @@
 - “材料”检索只匹配菜肴食材、制造材料和家具制造材料；两个检索条件可以同时使用。
 - 详情顶部只显示当前分类的重点信息，其余字段默认折叠。
 
+## 文件与存储管理
+
+根目录中的源码和说明文件应保留；7 份 `survival_log_*.md` 是当前解析结果的版本快照，也继续纳入版本控制。
+
+| 文件或目录 | 用途 | 生命周期 |
+| --- | --- | --- |
+| `.gitignore` | Git 忽略规则 | 长期保留 |
+| `AGENTS.md` | 项目安全、数据边界和验收规范 | 长期保留 |
+| `README.md` | 用户和开发者入口说明 | 长期保留 |
+| `parser_notes.md` | 资源格式、schema 和解析限制 | 长期保留 |
+| `codex_parser.py` | 解析游戏资源并导出 Markdown | 源码 |
+| `codex_database.py` | 构建、查询和同步 SQLite | 源码 |
+| `codex_save.py` | 只读解析游戏存档 | 源码 |
+| `codex_server.py` | 本地 HTTP 服务和 API | 源码 |
+| `codex_launcher.py` | 独立版启动和自动更新 | 源码 |
+| `codex_update.py` | Steam 游戏发现和版本更新 | 源码 |
+| `package_frontend.ps1` | PyInstaller 打包入口 | 源码 |
+| `survival_log_codex.spec` | PyInstaller 依赖配置 | 源码 |
+| `survival_log_*.md` | 七类图鉴和辅助配置快照 | 生成后审阅、提交 |
+| `data/` | 源码运行数据库和诊断日志 | 自动生成，可重建 |
+| `web/` | 静态网页资源 | 源码资源 |
+| `test/` | 存档测试夹具和报告 | 本地测试数据 |
+| `_vendor_unitypy/` | 源码解析所需的本地 UnityPy 依赖 | 本地依赖，勿删运行模块 |
+| `build/` | PyInstaller 中间产物 | 可随时删除并重建 |
+| `dist/` | 独立版分发目录和压缩包 | 发布/测试产物 |
+| `__pycache__/` | Python 字节码缓存 | 可随时删除 |
+
+源码数据库默认位于 `data/survival_log_codex.sqlite3`，日志位于同目录。首次运行发现旧的根目录数据库时，程序会先校验并迁移它；迁移失败会保留旧文件。独立版仍使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，分发时必须整体携带 `dist/SurvivalLogDataViewer/`，不能只复制 exe。
+
 ## 从源码运行
 
 需要 Python 3.11 或更高版本。解析游戏资源时需要 UnityPy；项目默认从 `D:\Codex\000\_vendor_unitypy` 查找本地依赖，也可以设置 `SURVIVALLOG_UNITYPY_DIR`。
@@ -33,7 +62,7 @@
 启动本地网页：
 
 ```powershell
-python .\codex_server.py --database .\survival_log_codex.sqlite3
+python .\codex_server.py --database .\data\survival_log_codex.sqlite3
 ```
 
 构建数据库：
@@ -41,7 +70,7 @@ python .\codex_server.py --database .\survival_log_codex.sqlite3
 ```powershell
 python .\codex_database.py `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database .\survival_log_codex.sqlite3
+  --database .\data\survival_log_codex.sqlite3
 ```
 
 导出七份 Markdown：

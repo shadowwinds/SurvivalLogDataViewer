@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 PROJECT_DIR = Path(SPECPATH).resolve()
@@ -12,11 +12,23 @@ if not VENDOR_DIR.is_dir():
     VENDOR_DIR = PROJECT_DIR / "_vendor_unitypy"
 if VENDOR_DIR.is_dir() and str(VENDOR_DIR) not in sys.path:
     sys.path.insert(0, str(VENDOR_DIR))
-UNITYPY_HIDDENIMPORTS = collect_submodules("UnityPy") if VENDOR_DIR.is_dir() else []
+
+
+def include_unitypy_module(name: str) -> bool:
+    """Keep the parser/runtime graph and omit UnityPy's unused export tooling."""
+
+    return not name.startswith(("UnityPy.export", "UnityPy.cli", "UnityPy.tools")) and name != "UnityPy.__main__"
+
+
+UNITYPY_HIDDENIMPORTS = (
+    collect_submodules("UnityPy", filter=include_unitypy_module)
+    if VENDOR_DIR.is_dir()
+    else []
+)
 
 DATA_FILES = [(str(PROJECT_DIR / "web"), "web")]
 if VENDOR_DIR.is_dir():
-    DATA_FILES.append((str(VENDOR_DIR), "_vendor_unitypy"))
+    DATA_FILES.extend(collect_data_files("UnityPy", include_py_files=False))
 
 
 a = Analysis(
@@ -35,7 +47,14 @@ a = Analysis(
         "pandas",
         "plotly",
         "matplotlib",
-        "PIL",
+        "UnityPy.export",
+        "UnityPy.cli",
+        "UnityPy.tools",
+        "astc_encoder",
+        "etcpak",
+        "texture2ddecoder",
+        "fmod_toolkit",
+        "pyfmodex",
     ],
     noarchive=False,
     optimize=0,

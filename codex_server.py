@@ -28,13 +28,13 @@ from codex_database import (
     get_overall_summary,
     open_database,
     query_entries,
+    resolve_default_database_path,
     sync_game_completion,
 )
 from codex_save import default_save_file
 from codex_parser import FIELD_LABELS, format_scalar
 
 
-APP_DATABASE_NAME = "survival_log_codex.sqlite3"
 POLL_INTERVAL_SECONDS = 5
 DISCONNECT_GRACE_SECONDS = 30
 CATEGORY_EMOJI = {
@@ -61,8 +61,9 @@ STATIC_FILES = {
 
 
 def default_database_path() -> Path:
-    directory = Path(__file__).resolve().parent
-    return directory / APP_DATABASE_NAME
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "SurvivalLogDataViewer.sqlite3"
+    return resolve_default_database_path()
 
 
 def static_root() -> Path:
@@ -599,7 +600,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--database",
         type=Path,
-        default=default_database_path(),
+        default=None,
         help="SQLite 数据库路径",
     )
     parser.add_argument(
@@ -654,6 +655,7 @@ def main() -> int:
         args = parse_args()
         if not 1 <= args.port <= 65535:
             raise ValueError(f"端口必须在 1 到 65535 之间：{args.port}")
+        args.database = args.database or default_database_path()
         run_local_server(args.database, args.save_file, args.port, args.headless)
     except KeyboardInterrupt:
         return 0
