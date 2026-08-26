@@ -6,3 +6,5 @@ __pycache__/
 *.sqlite3-wal
 *.sqlite3-journal
 /test
+_vendor_unitypy/
+*.ps1
