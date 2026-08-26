@@ -36,7 +36,7 @@ from codex_parser import FIELD_LABELS, format_scalar
 
 
 POLL_INTERVAL_SECONDS = 5
-DISCONNECT_GRACE_SECONDS = 30
+PAGE_CLOSE_GRACE_SECONDS = 30
 CATEGORY_EMOJI = {
     "food": "🍞",
     "dish": "🍳",
@@ -80,6 +80,12 @@ def static_root() -> Path:
 
 def _first_query_value(values: dict[str, list[str]], name: str, default: str = "") -> str:
     return values.get(name, [default])[0]
+
+
+def _client_id(value: str) -> str | None:
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
+        return value
+    return None
 
 
 def _json_safe_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -398,7 +404,7 @@ class CodexService:
                 "metadata": metadata,
                 "sync": sync,
                 "poll_interval_seconds": POLL_INTERVAL_SECONDS,
-                "disconnect_grace_seconds": DISCONNECT_GRACE_SECONDS,
+                "disconnect_grace_seconds": PAGE_CLOSE_GRACE_SECONDS,
             }
 
     def entries(
@@ -482,9 +488,10 @@ class CodexHTTPServer(ThreadingHTTPServer):
         self.service = service
         self.assets = assets
         self.auto_exit = auto_exit
-        self._activity_lock = threading.Lock()
-        self._last_activity = time.monotonic()
-        self._has_client = False
+        self._lifecycle_lock = threading.Lock()
+        self._active_client_ids: set[str] = set()
+        self._closed_client_ids: set[str] = set()
+        self._page_close_requested_at: float | None = None
         self._stopping = threading.Event()
         if self.auto_exit:
             monitor = threading.Thread(
@@ -494,17 +501,32 @@ class CodexHTTPServer(ThreadingHTTPServer):
             )
             monitor.start()
 
-    def note_client_activity(self) -> None:
-        with self._activity_lock:
-            self._last_activity = time.monotonic()
-            self._has_client = True
+    def note_client_activity(self, client_id: str | None = None) -> None:
+        with self._lifecycle_lock:
+            if client_id:
+                if client_id in self._closed_client_ids:
+                    return
+                self._active_client_ids.add(client_id)
+            self._page_close_requested_at = None
+
+    def note_client_closed(self, client_id: str | None = None) -> None:
+        with self._lifecycle_lock:
+            if client_id:
+                self._closed_client_ids.add(client_id)
+                self._active_client_ids.discard(client_id)
+                if self._active_client_ids:
+                    self._page_close_requested_at = None
+                    return
+            self._page_close_requested_at = time.monotonic()
 
     def _monitor_client(self) -> None:
         while not self._stopping.wait(POLL_INTERVAL_SECONDS):
-            with self._activity_lock:
-                has_client = self._has_client
-                last_activity = self._last_activity
-            if has_client and time.monotonic() - last_activity >= DISCONNECT_GRACE_SECONDS:
+            with self._lifecycle_lock:
+                close_requested_at = self._page_close_requested_at
+            if (
+                close_requested_at is not None
+                and time.monotonic() - close_requested_at >= PAGE_CLOSE_GRACE_SECONDS
+            ):
                 self.shutdown()
                 return
 
@@ -576,16 +598,29 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
         self._send_error_json(HTTPStatus.NOT_FOUND, "找不到 API 接口")
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
-        self.server.note_client_activity()
         parsed = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
         try:
             if parsed.path.startswith("/api/"):
+                self.server.note_client_activity(_client_id(self.headers.get("X-SurvivalLog-Client", "")))
                 self._handle_api(parsed.path, query)
             else:
                 self._serve_static(parsed.path)
         except ValueError as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+        except Exception as exc:  # Keep API failures visible without exposing a traceback in the browser.
+            print(f"本地网页请求失败：{exc}", file=sys.stderr)
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"本地服务处理失败：{exc}")
+
+    def do_POST(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
+        parsed = urllib.parse.urlsplit(self.path)
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        try:
+            if parsed.path == "/api/client/closed":
+                self.server.note_client_closed(_client_id(_first_query_value(query, "client_id")))
+                self._send_json(HTTPStatus.OK, {"status": "accepted"})
+                return
+            self._send_error_json(HTTPStatus.NOT_FOUND, "找不到 API 接口")
         except Exception as exc:  # Keep API failures visible without exposing a traceback in the browser.
             print(f"本地网页请求失败：{exc}", file=sys.stderr)
             self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"本地服务处理失败：{exc}")

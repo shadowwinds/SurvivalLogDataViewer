@@ -150,7 +150,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 
 分发目录为 `dist/SurvivalLogDataViewer/`，其中的 `生存日志图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe；构建产物不包含游戏安装目录、bundle、catalog 或原始存档。
 
-独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本；存档同步后的完成状态直接写回该数据库。普通启动不显示终端，浏览器关闭后连续约 30 秒没有网页心跳时服务自动退出；`--headless` 模式保持后台常驻。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
+独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本；存档同步后的完成状态直接写回该数据库。普通启动不显示终端，图鉴页面明确关闭后服务会在约 30 秒后自动退出；后台标签页或切回游戏导致的浏览器轮询暂停不会触发退出，页面恢复可见时会立即刷新。`--headless` 模式保持后台常驻。程序仍只读读取当前用户的 `HistorySave.bytes`，没有存档时可以浏览静态图鉴但无法同步个人完成状态。
 
 ## 已知限制
 

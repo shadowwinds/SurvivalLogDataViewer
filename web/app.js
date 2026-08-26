@@ -2,6 +2,10 @@
   "use strict";
 
   const FALLBACK_POLL_INTERVAL = 5000;
+  const CLIENT_ID =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
   const state = {
     category: "furniture",
     nameSearch: "",
@@ -32,7 +36,10 @@
   async function requestJson(path) {
     const response = await fetch(path, {
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "X-SurvivalLog-Client": CLIENT_ID,
+      },
     });
     let payload = null;
     try {
@@ -400,6 +407,17 @@
     }
   }
 
+  function notifyLocalServerOfPageExit(event) {
+    if (event.persisted) return;
+    const closeUrl = `/api/client/closed?client_id=${encodeURIComponent(CLIENT_ID)}`;
+    if (navigator.sendBeacon && navigator.sendBeacon(closeUrl)) return;
+    void fetch(closeUrl, {
+      method: "POST",
+      cache: "no-store",
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   function bindEvents() {
     byId("categoryNav").addEventListener("click", (event) => {
       const button = event.target.closest("[data-category]");
@@ -468,6 +486,12 @@
       event.preventDefault();
       selectEntry(target);
     });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshState(false);
+    });
+    window.addEventListener("pageshow", () => refreshState(false));
+    window.addEventListener("pagehide", notifyLocalServerOfPageExit);
   }
 
   bindEvents();
