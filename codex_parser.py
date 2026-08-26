@@ -28,6 +28,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 SALT = b"SL_BundleCrypto_v1_9f3d7a1c"
 _PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_SNAPSHOT_DIR = _PROJECT_DIR / "snapshots"
 _VENDOR_CANDIDATES = (
     _PROJECT_DIR / "_vendor_unitypy",
     _PROJECT_DIR.parent / "_vendor_unitypy",
@@ -1226,8 +1227,8 @@ def main() -> int:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parent,
-        help="图鉴 Markdown 的输出目录",
+        default=DEFAULT_SNAPSHOT_DIR,
+        help="图鉴 Markdown 的输出目录（默认：snapshots）",
     )
     parser.add_argument(
         "--category",

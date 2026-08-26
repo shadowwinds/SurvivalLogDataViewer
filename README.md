@@ -28,7 +28,7 @@
 
 ## 文件与存储管理
 
-根目录中的源码和说明文件应保留；7 份 `survival_log_*.md` 是当前解析结果的版本快照，也继续纳入版本控制。
+根目录中的源码和说明文件应保留；`snapshots/survival_log_*.md` 是当前解析结果的版本快照，也继续纳入版本控制。
 
 | 文件或目录 | 用途 | 生命周期 |
 | --- | --- | --- |
@@ -44,7 +44,7 @@
 | `codex_update.py` | Steam 游戏发现和版本更新 | 源码 |
 | `package_frontend.ps1` | PyInstaller 打包入口 | 源码 |
 | `survival_log_codex.spec` | PyInstaller 依赖配置 | 源码 |
-| `survival_log_*.md` | 七类图鉴和辅助配置快照 | 生成后审阅、提交 |
+| `snapshots/survival_log_*.md` | 七类图鉴和辅助配置快照 | 生成后审阅、提交 |
 | `data/` | 源码运行数据库和诊断日志 | 自动生成，可重建 |
 | `web/` | 静态网页资源 | 源码资源 |
 | `test/` | 存档测试夹具和报告 | 本地测试数据 |
@@ -73,12 +73,12 @@ python .\codex_database.py `
   --database .\data\survival_log_codex.sqlite3
 ```
 
-导出七份 Markdown：
+导出七份 Markdown。默认不指定 `--output-dir` 时也会写入 `snapshots/`：
 
 ```powershell
 python .\codex_parser.py `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --output-dir .
+  --output-dir snapshots
 ```
 
 Windows 文件夹版打包：

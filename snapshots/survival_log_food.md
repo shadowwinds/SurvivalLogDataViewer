@@ -1,6 +1,6 @@
 # Survival Log 食品（离线解析）
 
-- 生成时间：2026-08-26T16:06:43+08:00
+- 生成时间：2026-08-26T20:25:38+08:00
 - 游戏资源版本：1.0.15029 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
 - 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`

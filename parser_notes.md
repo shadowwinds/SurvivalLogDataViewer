@@ -6,13 +6,13 @@
 
 当前本地游戏资源版本为 `1.0.15029`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
 
-- [survival_log_food.md](./survival_log_food.md)
-- [survival_log_dish.md](./survival_log_dish.md)
-- [survival_log_plant.md](./survival_log_plant.md)
-- [survival_log_prey.md](./survival_log_prey.md)
-- [survival_log_craft.md](./survival_log_craft.md)
-- [survival_log_furniture.md](./survival_log_furniture.md)
-- [survival_log_auxiliary.md](./survival_log_auxiliary.md)
+- [survival_log_food.md](./snapshots/survival_log_food.md)
+- [survival_log_dish.md](./snapshots/survival_log_dish.md)
+- [survival_log_plant.md](./snapshots/survival_log_plant.md)
+- [survival_log_prey.md](./snapshots/survival_log_prey.md)
+- [survival_log_craft.md](./snapshots/survival_log_craft.md)
+- [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
+- [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
 当前版本主图鉴数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87。参考图片中的完成进度为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，合计 `366/935`，约为 39%。这些完成数量只用于验收和前端参考，离线解析器不会据此伪造具体完成 ID。
 
@@ -66,7 +66,7 @@
 | 制造 | `Config_ProductionList` | `Config_ProductionLv`、`Config_Item` |
 | 家具 | `Config_Furniture` | `Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner` |
 
-主 Markdown 只展开主表条目。物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `survival_log_auxiliary.md`。
+主 Markdown 只展开主表条目。物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `snapshots/survival_log_auxiliary.md`。
 
 所有关联字段保留原始数字并尽量解析名称。无法解析的 ID 显示为 `ID:xxxx`；空值和游戏使用的 0 哨兵显示为“无”。本地化名称按本地化字段、非本地化配置键、ID 顺序回退。
 
@@ -88,12 +88,12 @@ data[i] ^= key[i % 32]
 
 ## 命令行
 
-解析脚本为 [codex_parser.py](./codex_parser.py)。默认生成全部七份 Markdown：
+解析脚本为 [codex_parser.py](./codex_parser.py)。默认生成全部七份 Markdown 到 `snapshots/`：
 
 ```powershell
 python "codex_parser.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --output-dir "."
+  --output-dir "snapshots"
 ```
 
 单独导出菜肴：
@@ -102,7 +102,7 @@ python "codex_parser.py" `
 python "codex_parser.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
   --category dish `
-  --output "survival_log_dish.md"
+  --output "snapshots/survival_log_dish.md"
 ```
 
 可用分类为 `food|dish|plant|prey|craft|furniture|auxiliary`。`all` 模式使用 `--output-dir`，单分类模式可以使用 `--output`。输出路径不能位于游戏安装目录中。

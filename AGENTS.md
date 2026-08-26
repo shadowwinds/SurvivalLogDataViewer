@@ -9,10 +9,10 @@
 - 本项目是 Survival Log 的离线图鉴数据解析工具，不是游戏本体，也不是运行时 mod。
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
 - 当前主要脚本为 `codex_parser.py`，主要技术说明为 `parser_notes.md`，用户入口为 `README.md`。
-- 默认输出七份 UTF-8 Markdown：六类主图鉴 `survival_log_food.md`、`survival_log_dish.md`、`survival_log_plant.md`、`survival_log_prey.md`、`survival_log_craft.md`、`survival_log_furniture.md`，以及 `survival_log_auxiliary.md`。
+- 默认输出七份 UTF-8 Markdown 到 `snapshots/`：六类主图鉴 `snapshots/survival_log_food.md`、`snapshots/survival_log_dish.md`、`snapshots/survival_log_plant.md`、`snapshots/survival_log_prey.md`、`snapshots/survival_log_craft.md`、`snapshots/survival_log_furniture.md`，以及 `snapshots/survival_log_auxiliary.md`。
 - 数据库构建脚本为 `codex_database.py`，存档读取脚本为 `codex_save.py`，本地标准库网页服务为 `codex_server.py`，自动更新模块为 `codex_update.py`，静态资源位于 `web/`；源码数据库默认文件为 `data/survival_log_codex.sqlite3`，独立版数据库仍位于 exe 同目录。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他安装位置时，以命令参数为准。
-- 输出目录通过 `--output-dir` 指定，默认是脚本所在目录。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
+- 输出目录通过 `--output-dir` 指定，默认是脚本所在目录下的 `snapshots/`。输出文件只能写入用户指定的输出目录，不得写入游戏安装目录。
 
 ## 2. 绝对安全规则
 
@@ -116,5 +116,6 @@
 - 解析行为、资源来源、版本号、分类规则、已知限制或 CLI 发生变化时，同步更新 `parser_notes.md`，但不复制整份工作规范。
 - 不创建与用户要求无关的日志、缓存、测试数据或多余文档文件。
 - 不自动把游戏资源、存档、生成的大型 Markdown、SQLite 数据库或临时文件加入 Git；检查 `.gitignore` 后再决定是否纳入版本控制。
+- `snapshots/` 目录中的七份 Markdown 属于版本化派生结果，继续纳入 Git；其他生成的大型 Markdown 仍不自动加入 Git。
 - 完成一个逻辑完整、经过验证的功能单元后，默认创建一次本地 commit。commit 只包含本任务明确修改的文件。有外部未提交修改时不得擅自提交或重写历史。
 - commit提交信息为 type: description 格式，description 应能概括本次变更。type 为英文格式，description 为中文格式。
