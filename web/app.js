@@ -22,6 +22,9 @@
     polling: false,
     entriesRequest: 0,
     detailRequest: 0,
+    recipeRequest: 0,
+    recipePlan: null,
+    recipeSaveFilter: "all",
   };
 
   const byId = (id) => document.getElementById(id);
@@ -93,7 +96,9 @@
       const count = makeElement(
         "span",
         "category-count",
-        `${category.completed}/${category.total}`,
+        category.category === "recipes"
+          ? "查看"
+          : `${category.completed}/${category.total}`,
       );
       button.append(identity, count);
       fragment.append(button);
@@ -162,6 +167,14 @@
     }
   }
 
+  function renderMainView() {
+    const recipes = state.category === "recipes";
+    byId("entryToolbar").hidden = recipes;
+    byId("codexWorkspace").hidden = recipes;
+    byId("recipeToolbar").hidden = !recipes;
+    byId("recipeView").hidden = !recipes;
+  }
+
   function renderEntries() {
     const list = byId("entryList");
     list.replaceChildren();
@@ -222,6 +235,209 @@
     });
     list.append(fragment);
     renderHeader();
+  }
+
+  function formatRecipeItem(item) {
+    const category = item.sub_category_name || `ID:${item.sub_category}`;
+    return `${item.name || `ID:${item.item_id}`}（ID ${item.item_id}） · ${category} · ${item.source || "未知来源"}`;
+  }
+
+  function renderRecipePlanStatus(payload) {
+    const status = payload && payload.status ? payload.status : "loading";
+    let message = "正在读取菜谱计划";
+    if (status === "ok") {
+      message = `已读取 ${Number(payload.pending_dish_count || 0)} 道未完成菜肴`;
+    } else if (status === "partial") {
+      message = "菜谱已读取，部分存档或配置存在诊断";
+    } else if (status === "error") {
+      message = "菜谱计划读取失败";
+    }
+    setStatusNode(byId("recipePlanStatus"), status, message);
+    byId("recipeToolbarStatus").textContent = message;
+  }
+
+  function renderRecipePending(payload) {
+    const list = byId("recipePendingList");
+    list.replaceChildren();
+    const pending = (payload && payload.pending_dishes) || [];
+    byId("recipePendingCount").textContent = `${pending.length} 道`;
+    if (!pending.length) {
+      list.append(makeElement("div", "empty-state", payload && payload.status === "error" ? "未完成菜肴暂不可用" : "没有未完成菜肴"));
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    pending.forEach((recipe) => {
+      const item = makeElement("span", "recipe-pending-item");
+      item.append(
+        makeElement("span", "recipe-pending-name", recipe.name || `ID:${recipe.recipe_id}`),
+        makeElement("span", "recipe-pending-id", `ID ${recipe.recipe_id}`),
+      );
+      fragment.append(item);
+    });
+    list.append(fragment);
+  }
+
+  function renderRecipeTabs(payload) {
+    const tabs = byId("recipeSaveTabs");
+    tabs.replaceChildren();
+    const saves = (payload && payload.saves) || [];
+    if (state.recipeSaveFilter !== "all" && !saves.some((save) => save.file_name === state.recipeSaveFilter)) {
+      state.recipeSaveFilter = "all";
+    }
+    byId("recipeSaveCount").textContent = `${saves.length} 个存档`;
+    const all = makeElement("button", "recipe-save-tab", "全部存档");
+    all.type = "button";
+    all.dataset.saveFilter = "all";
+    all.setAttribute("role", "tab");
+    all.setAttribute("aria-selected", String(state.recipeSaveFilter === "all"));
+    all.classList.toggle("active", state.recipeSaveFilter === "all");
+    tabs.append(all);
+    saves.forEach((save) => {
+      const button = makeElement("button", "recipe-save-tab", save.name || save.file_name);
+      button.type = "button";
+      button.dataset.saveFilter = save.file_name;
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", String(state.recipeSaveFilter === save.file_name));
+      button.classList.toggle("active", state.recipeSaveFilter === save.file_name);
+      button.title = save.file_name || "";
+      tabs.append(button);
+    });
+  }
+
+  function appendRecipeDiagnostics(parent, diagnostics) {
+    if (!Array.isArray(diagnostics) || !diagnostics.length) return;
+    const section = makeElement("section", "recipe-diagnostics");
+    section.append(makeElement("h5", "recipe-section-title", "诊断信息"));
+    const list = makeElement("ul", "recipe-diagnostic-list");
+    diagnostics.forEach((diagnostic) => list.append(makeElement("li", "recipe-diagnostic", diagnostic)));
+    section.append(list);
+    parent.append(section);
+  }
+
+  function renderRecipeSave(save) {
+    const panel = makeElement("article", "recipe-save-panel");
+    const heading = makeElement("div", "recipe-save-heading");
+    const title = makeElement("div", "recipe-save-title");
+    title.append(
+      makeElement("h4", "recipe-save-name", save.name || save.file_name || "未命名存档"),
+      makeElement("div", "recipe-save-file", save.file_name || ""),
+    );
+    const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
+    heading.append(title, makeElement("span", `recipe-status ${save.status || "error"}`, statusText));
+    panel.append(heading);
+    const meta = makeElement("div", "recipe-save-meta");
+    meta.append(
+      makeElement("span", "recipe-meta-item", save.mode || "未知模式"),
+      makeElement("span", "recipe-meta-item", `第 ${Number(save.max_day || 0)} 天`),
+      makeElement("span", "recipe-meta-item", `主角 ID ${Number(save.player_select_id || 0)}`),
+    );
+    panel.append(meta);
+
+    const inventorySection = makeElement("section", "recipe-section");
+    inventorySection.append(makeElement("h5", "recipe-section-title", "可烹饪食材"));
+    const inventory = Array.isArray(save.inventory) ? save.inventory : [];
+    if (!inventory.length) {
+      inventorySection.append(makeElement("div", "empty-state compact", save.status === "ok" ? "当前没有可烹饪食材" : "库存暂不可用"));
+    } else {
+      const list = makeElement("div", "recipe-inventory-list");
+      inventory.forEach((item) => {
+        const row = makeElement("div", "recipe-inventory-row");
+        row.append(
+          makeElement("span", "recipe-inventory-name", item.name || `ID:${item.item_id}`),
+          makeElement("span", "recipe-inventory-count", `× ${item.count}`),
+          makeElement("span", "recipe-inventory-detail", `${item.sub_category_name || `ID:${item.sub_category}`} · ${item.source || "未知来源"}`),
+        );
+        row.title = formatRecipeItem(item);
+        list.append(row);
+      });
+      inventorySection.append(list);
+    }
+    panel.append(inventorySection);
+
+    const matchSection = makeElement("section", "recipe-section");
+    const matches = Array.isArray(save.matches) ? save.matches : [];
+    matchSection.append(
+      makeElement("h5", "recipe-section-title", "可烹饪结果"),
+      makeElement("span", "recipe-match-count", `${matches.length} 道`),
+    );
+    if (!matches.length) {
+      matchSection.append(makeElement("div", "empty-state compact", "没有满足食材与烹饪档位的未完成菜肴"));
+    } else {
+      const list = makeElement("div", "recipe-match-list");
+      matches.forEach((match) => {
+        const card = makeElement("article", "recipe-match");
+        const matchHeading = makeElement("div", "recipe-match-heading");
+        const matchTitle = makeElement("div", "recipe-match-title");
+        matchTitle.append(
+          makeElement("strong", "recipe-match-name", match.name || `ID:${match.recipe_id}`),
+          makeElement("span", "recipe-match-id", `ID ${match.recipe_id}`),
+        );
+        matchHeading.append(
+          matchTitle,
+          makeElement("span", `recipe-tier tier-${match.tier}`, `${match.tier_label_zh || match.tier_label || "指定食材"} / Tier ${match.tier}`),
+        );
+        card.append(matchHeading);
+        const candidate = Array.isArray(match.candidate_group)
+          ? `TagCombo：${match.candidate_group.join("、")}`
+          : "SpecificItems 精确匹配";
+        card.append(makeElement("div", "recipe-match-candidate", `${candidate} · 候选 ${Array.isArray(match.candidate_recipe_ids) ? match.candidate_recipe_ids.map((id) => `ID ${id}`).join("、") : "无"}`));
+        const combination = makeElement("div", "recipe-combination");
+        (match.representative_combination || []).forEach((item) => {
+          const ingredient = makeElement("span", "recipe-ingredient", `${item.name || `ID:${item.item_id}`}（ID ${item.item_id}） · ${item.sub_category_name || `ID:${item.sub_category}`} · ${item.source || "未知来源"}`);
+          ingredient.title = `${item.name || `ID:${item.item_id}`}，价格 ${item.price}`;
+          combination.append(ingredient);
+        });
+        card.append(combination);
+        card.append(makeElement("div", "recipe-combination-count", `代表组合；其他可行组合 ${Number(match.other_combination_count || 0)} 个`));
+        list.append(card);
+      });
+      matchSection.append(list);
+    }
+    panel.append(matchSection);
+    appendRecipeDiagnostics(panel, save.diagnostics);
+    return panel;
+  }
+
+  function renderRecipeSaves(payload) {
+    const container = byId("recipeSavePanels");
+    container.replaceChildren();
+    const saves = Array.isArray(payload && payload.saves) ? payload.saves : [];
+    const selected = state.recipeSaveFilter === "all"
+      ? saves
+      : saves.filter((save) => save.file_name === state.recipeSaveFilter);
+    if (!selected.length) {
+      container.append(makeElement("div", "empty-state", "没有可显示的存档结果"));
+      return;
+    }
+    selected.forEach((save) => container.append(renderRecipeSave(save)));
+  }
+
+  function renderRecipePlan(payload) {
+    state.recipePlan = payload;
+    renderRecipePlanStatus(payload);
+    renderRecipePending(payload);
+    renderRecipeTabs(payload);
+    renderRecipeSaves(payload);
+    byId("recipeView").querySelectorAll(":scope > .recipe-global-diagnostics").forEach((node) => node.remove());
+    const diagnostics = makeElement("div", "recipe-global-diagnostics");
+    appendRecipeDiagnostics(diagnostics, payload && payload.diagnostics);
+    if (diagnostics.childElementCount) byId("recipeView").append(diagnostics);
+  }
+
+  async function loadRecipePlans() {
+    const requestId = ++state.recipeRequest;
+    byId("recipeView").classList.add("is-loading");
+    renderRecipePlanStatus({ status: "loading" });
+    try {
+      const payload = await requestJson("/api/recipe-plans");
+      if (requestId !== state.recipeRequest) return;
+      renderRecipePlan(payload);
+    } catch (error) {
+      if (requestId !== state.recipeRequest) return;
+      renderRecipePlan({ status: "error", pending_dishes: [], saves: [], diagnostics: [error.message] });
+    } finally {
+      if (requestId === state.recipeRequest) byId("recipeView").classList.remove("is-loading");
+    }
   }
 
   function renderDetailEmpty(message) {
@@ -388,8 +604,11 @@
       renderSync();
       renderFilters();
       renderSearchControls();
+      renderMainView();
 
-      if (initial || revisionChanged || !state.loaded) {
+      if (state.category === "recipes") {
+        await loadRecipePlans();
+      } else if (initial || revisionChanged || !state.loaded) {
         await loadEntries();
       } else {
         renderHeader();
@@ -426,9 +645,12 @@
       if (!category || category === state.category) return;
       state.category = category;
       state.selectedKey = null;
+      if (category === "recipes") state.recipeSaveFilter = "all";
       renderCategories();
       renderSearchControls();
-      loadEntries();
+      renderMainView();
+      if (category === "recipes") loadRecipePlans();
+      else loadEntries();
     });
 
     byId("filterGroup").addEventListener("click", (event) => {
@@ -437,14 +659,14 @@
       state.completion = button.dataset.filter;
       state.selectedKey = null;
       renderFilters();
-      loadEntries();
+      if (state.category !== "recipes") loadEntries();
     });
 
     function scheduleSearch() {
       window.clearTimeout(bindEvents.searchTimer);
       bindEvents.searchTimer = window.setTimeout(() => {
         state.selectedKey = null;
-        loadEntries();
+        if (state.category !== "recipes") loadEntries();
       }, 180);
     }
 
@@ -464,7 +686,15 @@
       state.selectedKey = null;
       byId("nameSearchInput").value = "";
       byId("materialSearchInput").value = "";
-      loadEntries();
+      if (state.category !== "recipes") loadEntries();
+    });
+
+    byId("recipeSaveTabs").addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-save-filter]") : null;
+      if (!target || !state.recipePlan) return;
+      state.recipeSaveFilter = target.dataset.saveFilter || "all";
+      renderRecipeTabs(state.recipePlan);
+      renderRecipeSaves(state.recipePlan);
     });
 
     function selectEntry(target) {

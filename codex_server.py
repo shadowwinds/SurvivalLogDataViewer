@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sqlite3
 import sys
 import threading
 import time
@@ -31,8 +32,9 @@ from codex_database import (
     resolve_default_database_path,
     sync_game_completion,
 )
-from codex_save import default_save_file
+from codex_save import SaveParseError, default_save_file
 from codex_parser import FIELD_LABELS, format_scalar
+from codex_recipe import RecipeConfigError, build_recipe_error, build_recipe_plan
 
 
 POLL_INTERVAL_SECONDS = 5
@@ -44,6 +46,7 @@ CATEGORY_EMOJI = {
     "prey": "🐾",
     "craft": "🔧",
     "furniture": "🛋️",
+    "recipes": "🍲",
 }
 DETAIL_RELATION_PREFIXES = {
     "food": ("关联植物", "目标家具"),
@@ -297,6 +300,8 @@ class CodexService:
         self._lock = threading.RLock()
         self._last_success_signature: tuple[Any, ...] | None = None
         self._last_sync: CompletionSyncResult | None = None
+        self._last_recipe_signature: tuple[Any, ...] | None = None
+        self._last_recipe_plan: dict[str, Any] | None = None
 
     @staticmethod
     def _file_signature(path: Path) -> tuple[Any, ...]:
@@ -313,6 +318,15 @@ class CodexService:
             self._file_signature(self.save_file),
             self._file_signature(Path(f"{self.save_file}.bak")),
         )
+
+    def _recipe_signature(self) -> tuple[Any, ...]:
+        children = []
+        for path in sorted(self.save_file.parent.glob("Save_*.bytes"), key=lambda value: value.name):
+            if not re.fullmatch(r"Save_[A-Za-z0-9_-]+\.bytes", path.name):
+                continue
+            children.append(self._file_signature(path))
+            children.append(self._file_signature(Path(f"{path}.bak")))
+        return self._save_signature() + tuple(children)
 
     def _ensure_sync(self) -> CompletionSyncResult:
         signature = self._save_signature()
@@ -380,6 +394,15 @@ class CodexService:
                 }
                 for category in CATEGORY_ORDER
             ]
+            categories.append(
+                {
+                    "category": "recipes",
+                    "label": "可烹饪菜谱",
+                    "emoji": CATEGORY_EMOJI["recipes"],
+                    "total": None,
+                    "completed": None,
+                }
+            )
             sync = {
                 "status": result.status,
                 "changed": result.changed,
@@ -406,6 +429,31 @@ class CodexService:
                 "poll_interval_seconds": POLL_INTERVAL_SECONDS,
                 "disconnect_grace_seconds": PAGE_CLOSE_GRACE_SECONDS,
             }
+
+    def recipe_plans(self) -> dict[str, Any]:
+        with self._lock:
+            self._ensure_sync()
+            signature = self._recipe_signature()
+            if self._last_recipe_plan is not None and self._last_recipe_signature == signature:
+                return self._last_recipe_plan
+            try:
+                payload = build_recipe_plan(self.connection, self.save_file)
+            except (OSError, RecipeConfigError, SaveParseError, sqlite3.Error) as exc:
+                payload = build_recipe_error(str(exc))
+            payload["revision"] = json.dumps(
+                {
+                    "save_signature": signature,
+                    "history_source": payload.get("history_source"),
+                    "status": payload.get("status"),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            self._last_recipe_signature = signature
+            self._last_recipe_plan = payload
+            return payload
 
     def entries(
         self,
@@ -572,6 +620,9 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
         service = self.server.service
         if path == "/api/state":
             self._send_json(HTTPStatus.OK, service.state())
+            return
+        if path == "/api/recipe-plans":
+            self._send_json(HTTPStatus.OK, service.recipe_plans())
             return
         if path == "/api/entries":
             category = _first_query_value(query, "category", "furniture")

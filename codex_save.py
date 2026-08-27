@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 from collections.abc import Collection, Mapping
@@ -22,6 +23,7 @@ HISTORY_CHILD_MEMBER_COUNT = 26
 ENDING_SNAPSHOT_MEMBER_COUNT = 3
 POST_CODEX_LIST_COUNT = 3
 MAX_DIAGNOSTIC_LOG_BYTES = 2 * 1024 * 1024
+HISTORY_SAVE_FILENAME_RE = re.compile(r"Save_[A-Za-z0-9_-]+\.bytes\Z")
 
 CODEX_CATEGORY_IDS = {
     1: "food",
@@ -71,6 +73,43 @@ class SaveFileInfo:
 
 
 @dataclass(frozen=True)
+class SaveHistoryRecord:
+    """The child-save index stored in HistoryData.HistoryList."""
+
+    file_name: str
+    name: str
+    player_select_id: int
+    max_day: int
+    turn: int
+    is_finished: bool
+    finish_result: int
+    difficulty_preset_id: int
+    difficulty_levels: tuple[int, ...]
+    is_pure_endless: bool
+    endless_start_day: int
+    is_story_endless: bool
+    story_endless_origin_ending: int
+
+
+@dataclass(frozen=True)
+class InventoryItem:
+    """One ItemSave stack with its original storage location."""
+
+    item_config_id: int
+    item_count: int
+    source: str
+    container: str
+
+
+@dataclass(frozen=True)
+class SaveInventoryState:
+    file_info: SaveFileInfo
+    items: tuple[InventoryItem, ...]
+    diagnostics: tuple[str, ...] = ()
+    container_counts: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class CodexMapCandidate:
     """A structurally valid codex mapping found at an arbitrary file offset."""
 
@@ -98,6 +137,7 @@ class CodexSaveState:
     candidate_score: tuple[int, ...] = ()
     candidate_offsets: tuple[int, ...] = ()
     unknown_ids: dict[str, tuple[int, ...]] = field(default_factory=dict)
+    history_records: tuple[SaveHistoryRecord, ...] = ()
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -149,6 +189,24 @@ class _Reader:
         self._need(4, field)
         value = struct.unpack_from("<i", self.data, self.pos)[0]
         self.pos += 4
+        return value
+
+    def i64(self, field: str) -> int:
+        self._need(8, field)
+        value = struct.unpack_from("<q", self.data, self.pos)[0]
+        self.pos += 8
+        return value
+
+    def f32(self, field: str) -> float:
+        self._need(4, field)
+        value = struct.unpack_from("<f", self.data, self.pos)[0]
+        self.pos += 4
+        return value
+
+    def raw(self, size: int, field: str) -> bytes:
+        self._need(size, field)
+        value = self.data[self.pos : self.pos + size]
+        self.pos += size
         return value
 
     def collection_count(self, field: str) -> int | None:
@@ -232,40 +290,930 @@ class _Reader:
             )
 
 
-def _skip_history_child(reader: _Reader, index: int) -> None:
+def _read_history_child(reader: _Reader, index: int) -> SaveHistoryRecord:
     field = f"HistoryList[{index}]"
     reader.object_member_count(HISTORY_CHILD_MEMBER_COUNT, field)
-    reader.memorypack_string(f"{field}.FileName")
-    reader.memorypack_string(f"{field}.Name")
-    for name in ("PlayerSelectId", "MaxDay", "Turn"):
-        reader.i32(f"{field}.{name}")
+    file_name = reader.memorypack_string(f"{field}.FileName") or ""
+    name = reader.memorypack_string(f"{field}.Name") or ""
+    player_select_id = reader.i32(f"{field}.PlayerSelectId")
+    max_day = reader.i32(f"{field}.MaxDay")
+    turn = reader.i32(f"{field}.Turn")
     reader.boolean(f"{field}.HasProgressMeta")
-    for name in ("InitChapterId", "GameTime", "Day", "ExtraCountDownTime"):
-        reader.i32(f"{field}.{name}")
-    reader.boolean(f"{field}.IsFinished")
-    reader.i32(f"{field}.FinishResult")
+    for field_name in ("InitChapterId", "GameTime", "Day", "ExtraCountDownTime"):
+        reader.i32(f"{field}.{field_name}")
+    is_finished = reader.boolean(f"{field}.IsFinished")
+    finish_result = reader.i32(f"{field}.FinishResult")
     reader.boolean(f"{field}.HasProgressMetaV2")
-    reader.i32(f"{field}.DifficultyPresetId")
-    reader.int_list(f"{field}.DifficultyLevels")
+    difficulty_preset_id = reader.i32(f"{field}.DifficultyPresetId")
+    difficulty_levels = reader.int_list(f"{field}.DifficultyLevels") or ()
     reader.boolean(f"{field}.HasDifficultyMeta")
-    reader.boolean(f"{field}.IsPureEndless")
-    reader.i32(f"{field}.EndlessStartDay")
+    is_pure_endless = reader.boolean(f"{field}.IsPureEndless")
+    endless_start_day = reader.i32(f"{field}.EndlessStartDay")
     reader.boolean(f"{field}.HasEndlessMeta")
     reader.i32(f"{field}.SaveOrigin")
-    reader.boolean(f"{field}.IsStoryEndless")
-    reader.i32(f"{field}.StoryEndlessOriginEnding")
+    is_story_endless = reader.boolean(f"{field}.IsStoryEndless")
+    story_endless_origin_ending = reader.i32(f"{field}.StoryEndlessOriginEnding")
     reader.boolean(f"{field}.HasEndingSnapshot")
     reader.i32(f"{field}.SnapshotEnding")
     reader.i32(f"{field}.SnapshotDay")
     snapshot_count = reader.collection_count(f"{field}.EndingSnapshots")
-    if snapshot_count is None:
+    if snapshot_count is not None:
+        for snapshot_index in range(snapshot_count):
+            snapshot_field = f"{field}.EndingSnapshots[{snapshot_index}]"
+            reader.object_member_count(ENDING_SNAPSHOT_MEMBER_COUNT, snapshot_field)
+            reader.i32(f"{snapshot_field}.EndingId")
+            reader.i32(f"{snapshot_field}.Day")
+            reader.i32(f"{snapshot_field}.TurnIndex")
+    return SaveHistoryRecord(
+        file_name=file_name,
+        name=name,
+        player_select_id=player_select_id,
+        max_day=max_day,
+        turn=turn,
+        is_finished=is_finished,
+        finish_result=finish_result,
+        difficulty_preset_id=difficulty_preset_id,
+        difficulty_levels=tuple(difficulty_levels),
+        is_pure_endless=is_pure_endless,
+        endless_start_day=endless_start_day,
+        is_story_endless=is_story_endless,
+        story_endless_origin_ending=story_endless_origin_ending,
+    )
+
+
+def _skip_history_child(reader: _Reader, index: int) -> None:
+    _read_history_child(reader, index)
+
+
+def _read_history_int_list_map(reader: _Reader, field: str) -> dict[int, tuple[int, ...]]:
+    count = reader.collection_count(field)
+    if count is None:
+        return {}
+    result: dict[int, tuple[int, ...]] = {}
+    for index in range(count):
+        entry_field = f"{field}[{index}]"
+        key = reader.i32(f"{entry_field}.key")
+        if key in result:
+            raise SaveParseError(f"存档字段 {field} 出现重复键：{key}")
+        result[key] = reader.int_list(f"{entry_field}.value") or ()
+    return result
+
+
+def _read_history_string_bool_map(reader: _Reader, field: str) -> dict[str, bool]:
+    count = reader.collection_count(field)
+    if count is None:
+        return {}
+    result: dict[str, bool] = {}
+    for index in range(count):
+        entry_field = f"{field}[{index}]"
+        key = reader.memorypack_string(f"{entry_field}.key") or ""
+        if key in result:
+            raise SaveParseError(f"存档字段 {field} 出现重复键：{key}")
+        result[key] = reader.boolean(f"{entry_field}.value")
+    return result
+
+
+def _read_history_int_string_map(reader: _Reader, field: str) -> dict[int, str]:
+    count = reader.collection_count(field)
+    if count is None:
+        return {}
+    result: dict[int, str] = {}
+    for index in range(count):
+        entry_field = f"{field}[{index}]"
+        key = reader.i32(f"{entry_field}.key")
+        if key in result:
+            raise SaveParseError(f"存档字段 {field} 出现重复键：{key}")
+        result[key] = reader.memorypack_string(f"{entry_field}.value") or ""
+    return result
+
+
+def _read_history_best_records(reader: _Reader, field: str) -> None:
+    count = reader.collection_count(field)
+    if count is None:
         return
-    for snapshot_index in range(snapshot_count):
-        snapshot_field = f"{field}.EndingSnapshots[{snapshot_index}]"
-        reader.object_member_count(ENDING_SNAPSHOT_MEMBER_COUNT, snapshot_field)
-        reader.i32(f"{snapshot_field}.EndingId")
-        reader.i32(f"{snapshot_field}.Day")
-        reader.i32(f"{snapshot_field}.TurnIndex")
+    for index in range(count):
+        item_field = f"{field}[{index}]"
+        reader.object_member_count(5, item_field)
+        reader.i32(f"{item_field}.PlayerSelectId")
+        reader.i32(f"{item_field}.BestDays")
+        reader.i32(f"{item_field}.Tier")
+        reader.memorypack_string(f"{item_field}.AchievedDate")
+        reader.memorypack_string(f"{item_field}.PayloadJson")
+
+
+def _read_history_dossier_records(reader: _Reader, field: str) -> None:
+    count = reader.collection_count(field)
+    if count is None:
+        return
+    for index in range(count):
+        item_field = f"{field}[{index}]"
+        reader.object_member_count(7, item_field)
+        reader.i32(f"{item_field}.PlayerSelectId")
+        reader.i32(f"{item_field}.BestScore")
+        reader.memorypack_string(f"{item_field}.BestRank")
+        reader.i32(f"{item_field}.BestDays")
+        reader.memorypack_string(f"{item_field}.ResultText")
+        reader.memorypack_string(f"{item_field}.AchievedDate")
+        reader.memorypack_string(f"{item_field}.DimsJson")
+
+
+def _parse_history_data_strict(
+    data: bytes,
+    *,
+    source_path: Path | None = None,
+    file_info: SaveFileInfo | None = None,
+) -> CodexSaveState:
+    """Read the current HistoryData schema, including its global codex state."""
+
+    reader = _Reader(data)
+    reader.object_member_count(HISTORY_DATA_MEMBER_COUNT, "HistoryData")
+    history_count = reader.collection_count("HistoryList")
+    history_records: list[SaveHistoryRecord] = []
+    if history_count is not None:
+        for index in range(history_count):
+            history_records.append(_read_history_child(reader, index))
+
+    reader.memorypack_string("LastPlayFileName")
+    reader.int_list("UnlockedAchievementIds")
+    reader.int_list("UnlockedPlayerSelectIds")
+    _read_history_int_list_map(reader, "ClearedEndings")
+    _read_history_string_bool_map(reader, "GlobalEasterEggFlags")
+    _read_history_int_string_map(reader, "PlayerSelectSaveFileMap")
+    codex_offset = reader.pos
+    raw_categories = _read_history_int_list_map(reader, "CodexUnlocked")
+    _ = reader.int_list("CodexMilestonesClaimed")
+    _ = reader.int_list("PendingUnlockNoticeIds")
+    _read_history_best_records(reader, "EndlessBestRecords")
+    reader.boolean("EndlessModeUnlocked")
+    _read_history_dossier_records(reader, "BestDossierRecords")
+    reader.i32("DataOrigin")
+    reader.int_list("EndlessCharUnlockedIds")
+    reader.int_list("SeenProloguePlayerSelectIds")
+    if reader.pos != len(data):
+        raise SaveParseError(
+            f"HistoryData 未读取到文件末尾：offset={reader.pos}, total={len(data)}",
+            code="history_trailing_bytes",
+            stage="history_eof",
+            offset=reader.pos,
+        )
+
+    for category_id, source_ids in raw_categories.items():
+        if category_id not in CODEX_CATEGORY_IDS:
+            raise SaveParseError(f"CodexUnlocked 出现未知分类 ID：{category_id}")
+        if any(source_id <= 0 for source_id in source_ids):
+            raise SaveParseError(f"CodexUnlocked[{category_id}] 包含非法源 ID：{source_ids!r}")
+        if len(set(source_ids)) != len(source_ids):
+            raise SaveParseError(f"CodexUnlocked[{category_id}] 包含重复源 ID")
+
+    for record in history_records:
+        if (
+            not record.file_name
+            or Path(record.file_name).name != record.file_name
+            or "/" in record.file_name
+            or "\\" in record.file_name
+            or not HISTORY_SAVE_FILENAME_RE.fullmatch(record.file_name)
+        ):
+            raise SaveParseError(
+                f"HistoryList 子存档文件名非法：{record.file_name!r}",
+                code="history_child_filename",
+                stage="history_schema",
+            )
+
+    if file_info is None:
+        path = source_path or Path("<memory>")
+        file_info = SaveFileInfo(
+            path=path,
+            sha256=hashlib.sha256(data).hexdigest(),
+            size=len(data),
+            mtime_ns=0,
+            read_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        )
+    category_ids = {
+        category: tuple(raw_categories.get(category_id, ()))
+        for category_id, category in CODEX_CATEGORY_IDS.items()
+    }
+    total_ids = sum(len(ids) for ids in raw_categories.values())
+    return CodexSaveState(
+        file_info=file_info,
+        category_ids=category_ids,
+        raw_category_ids=raw_categories,
+        codex_offset=codex_offset,
+        trailing_offset=reader.pos,
+        codex_end_offset=reader.pos,
+        schema_profile="historydata-v16",
+        candidate_count=1,
+        candidate_score=(3, len(raw_categories), 1000, total_ids, 0),
+        candidate_offsets=(codex_offset,),
+        history_records=tuple(history_records),
+    )
+
+
+_SAVE_SCHEMAS: dict[str, tuple[tuple[str, str], ...]] = {
+    "GameSaveData": (
+        ("Name", "string"), ("FileName", "string"), ("IsSubGame", "bool"),
+        ("InitChapterId", "int"), ("InitPlayerId", "int"), ("InitMapConfigId", "int"),
+        ("Event", "int"), ("DynamicNpcList", "List<DynamicNpc>"),
+        ("HistoryMaxDay", "int"), ("FaithPoint", "int"), ("TurnIndex", "int"),
+        ("RebirthAwakeningPlayed", "bool"), ("CrisisPointMap", "Dictionary<int,CrisisPointSave>"),
+        ("TalentData", "TalentSave"), ("SymbolData", "SymbolSave"),
+        ("ExploreReward", "ExploreRewardSave"), ("isFinished", "bool"), ("FinishResult", "int"),
+        ("History", "List<SaveChildData>"), ("CurSave", "SaveChildData"),
+        ("ProficiencyData", "ProficiencySave"), ("VisitedMapPointIds", "List<int>"),
+        ("NpcAffinityCarryDict", "Dictionary<int,float>"), ("RushDoneNodeIds", "List<int>"),
+        ("MetNpcConfigIds", "List<int>"), ("PlayerSelectId", "int"), ("OwnedVehicleGrade", "int"),
+        ("PendingRebirthNotebooks", "Dictionary<int,int>"), ("RebirthLog2AwakeningPlayed", "bool"),
+        ("PendingFullLoadBuffId", "int"), ("HasSeenCookingGuide", "bool"),
+        ("DifficultyPresetId", "int"), ("DifficultyLevels", "List<int>"),
+        ("EndlessActive", "bool"), ("IsPureEndless", "bool"), ("EndlessStartDay", "int"),
+        ("FallenMapPointIds", "List<int>"), ("EndlessSetupDone", "bool"),
+        ("EndlessLastWaveDay", "int"), ("RebirthChancesUsed", "int"),
+        ("FaithSpentThisRound", "int"), ("HpMaxPenaltyStacks", "int"),
+        ("DaySnapshotDays", "int[]"), ("RebirthGuideShown", "bool"),
+        ("EndlessOriginEnding", "int"), ("StoryEndlessIntroPlayed", "bool"),
+        ("EndlessCrises", "List<EndlessCrisisSave>"), ("FurnPlanGuideShown", "int"),
+        ("FurnPlanGuideLearned", "bool"), ("ShopTrunkGuideGrade", "int"),
+        ("BagTrunkGuideGrade", "int"), ("CookFridgeGuideShown", "bool"),
+        ("ToolCabinetGuideShown", "bool"), ("ToolTableCollapsedNoteCats", "int"),
+        ("PlantChoreReplantOn", "bool"), ("PendingRoundRestartUpgrade", "bool"),
+        ("ToolTableRecentRecipeKeys", "List<string>"),
+    ),
+    "DynamicNpc": (("PlayerId", "int"), ("InitMapConfigId", "int"), ("StartPosName", "string")),
+    "CrisisPointSave": (("ConfigId", "int"), ("TimeStamp", "int"), ("Day", "int"), ("TurnIndex", "int")),
+    "TalentSave": (("TalentLevelMap", "Dictionary<int,int>"), ("BuffRefreshApplied", "List<int>")),
+    "SymbolSave": (("SymbolMap", "Dictionary<string,bool>"),),
+    "ExploreRewardSave": (("Result", "int"), ("NewItems", "List<ItemRewardSave>"), ("MapConfigId", "int")),
+    "ProficiencySave": (("LevelMap", "Dictionary<int,int>"), ("ExpMap", "Dictionary<int,int>")),
+    "EndlessCrisisSave": (
+        ("PoolRowId", "int"), ("StartEventId", "int"), ("EndEventId", "int"),
+        ("StartDay", "int"), ("EndDay", "int"), ("WeatherPoolId", "int"),
+        ("StartHour", "int"), ("State", "byte"),
+    ),
+    "SaveChildData": (
+        ("LeadingRole", "AgentSave"), ("ChapterAgentMap", "Dictionary<int,List<AgentSave>>"),
+        ("Day", "int"), ("GameTime", "int"), ("VitalityHistory", "List<VitalityChangeRecord>"),
+        ("LeadingRoleUsedItemsHistory", "List<ItemUsageRecord>"),
+        ("LeadingRoleUsedActionsHistory", "List<ActionRecord>"),
+        ("LeadingRoleBuffChanges", "List<BuffChangeRecord>"), ("EventLogHistory", "List<EventLogRecord>"),
+        ("DataCollectionCount", "int"), ("CurrentWish", "WishData"), ("WishConsecutiveMiss", "int"),
+        ("DynamicEventSave", "DynamicEventSave"), ("TagSave", "TagSave"),
+        ("Permissions", "PermissionsSave"), ("Power", "PowerSave"),
+        ("PromptTriggerSave", "PromptTriggerSave"), ("Statistics", "PreDisasterStatistics"),
+        ("IsPerfectPreparation", "bool"), ("DayDescriptionLog_CN", "List<string>"),
+        ("DayDescriptionLog_EN", "List<string>"), ("SurvivalPoint", "int"),
+        ("SurvivalTotalPoints", "int"), ("CachedFaithPoints", "int"), ("DayCachePoint", "int"),
+        ("ItemDailyUsageDict", "Dictionary<int,int>"), ("CompletedWishes", "List<CompletedWishRecord>"),
+        ("ToolTableDataList", "List<ToolTableData>"), ("ProductionRecordList", "List<string>"),
+        ("PreDisasterPurchaseRecords", "Dictionary<int,int>"),
+        ("PaperAirplaneSaveList", "List<PaperAirplaneSaveData>"), ("ExtraCountDownTime", "int"),
+        ("DropItemSaveList", "List<DropItemSaveData>"), ("WeatherConfigId", "int"),
+        ("PlacedTrapSaveList", "List<PlacedTrapSave>"),
+        ("ProficiencyDiscoveryData", "ProficiencyDiscoverySave"),
+        ("BasketPendingReturns", "List<BasketScheduledReturn>"), ("NeighborRescueProgress", "int"),
+        ("NeighborTodayWishCategories", "List<int>"), ("NeighborMilestoneDone", "List<int>"),
+        ("NeighborAffinityOnceFlags", "List<string>"), ("NeighborLastRollDay", "int"),
+        ("PhoneSMSConvList", "List<PhoneSMSConvSave>"), ("NpcCommonStateList", "List<NpcCommonState>"),
+        ("NeighborAffinity", "int"), ("NeighborLastProactiveGiftDay", "int"),
+        ("NeighborAffinitySeeded", "bool"), ("StrangerTradeActiveLastDealDay", "int"),
+        ("StrangerTradeDroneDepartSec", "int"), ("StrangerTradeDroneReturnSec", "int"),
+        ("StrangerTradeDroneCargoJson", "string"), ("StrangerTradeDroneOwnerId", "long"),
+        ("StrangerTradeActiveDealCountToday", "int"), ("GossipLastPushedDay", "int"),
+        ("NeighborPendingDeathEventId", "int"), ("NeighborCrisisFiredIdxList", "List<int>"),
+        ("NeighborRescueTriggerDay", "int"), ("NeighborActiveRescueLineId", "int"),
+        ("PhoneSMSNpcReplyQueue", "List<PhoneSMSNpcReplyTask>"), ("LoanSharkCompromiseTier", "int"),
+        ("LoanSharkFedCount", "int"), ("LoanSharkCompromiseDay", "int"),
+        ("StrangerTradeDroneTripType", "int"), ("StrangerTradeDroneEncounterDone", "bool"),
+        ("VehicleTrunkItems", "List<ItemSave>"), ("DoorBoxItems", "List<ItemSave>"),
+        ("GossipTodayPushDay", "int"), ("GossipMorningTopic", "int"), ("GossipEveningTopic", "int"),
+        ("GossipDrawnTopicIds", "List<int>"), ("GossipSpokeTopicIds", "List<int>"),
+        ("GroupAnger", "int"), ("GossipLastRaidDay", "int"), ("NeighborCrisisActiveIndex", "int"),
+        ("NeighborCrisisRequiredCategory", "int"), ("NeighborCrisisDeadlineDay", "int"),
+        ("NeighborLastCrisisDay", "int"), ("NeighborLastReturnSmsStamp", "int"),
+        ("StrangerTradeNpcStockJson", "string"), ("StrangerTradeDroneIsCharity", "bool"),
+        ("PhoneSMSQueuePlanDay", "int"), ("PhoneSMSQueuePlan", "List<PhoneSMSQueuePlanEntry>"),
+        ("DoorBoxItems2", "List<ItemSave>"), ("BuildShopStockSnapshot", "Dictionary<int,Dictionary<int,int>>"),
+        ("PendingDaySettlement", "bool"), ("PendingSettlement_Day", "int"),
+        ("PendingSettlement_HistoryMaxDay", "int"), ("PendingSettlement_Morale", "int"),
+        ("PendingSettlement_DailyPoints", "int"), ("PendingSettlement_Points", "int[]"),
+        ("PendingSettlement_WishCount", "int"), ("PendingSettlement_SurvivalPlanIds", "List<int>"),
+        ("IsFaithSettled", "bool"), ("FaithSettledTotal", "int"), ("FaithSettledStages", "int[]"),
+        ("GameCounterDict", "Dictionary<string,int>"), ("FoodPollutionFurnitureIds", "List<long>"),
+        ("FoodPollutionLastResetDay", "int"), ("CityChatPushedStamp", "int"),
+        ("SeenProductionRecipeKeys", "List<string>"), ("CraftUnlockedProductionIds", "List<int>"),
+        ("CompanionRescueProgress", "int"), ("CompanionAffinity", "int"),
+        ("CompanionTodayWishCategories", "List<int>"), ("CompanionMilestoneDone", "List<int>"),
+        ("CompanionAffinityOnceFlags", "List<string>"), ("CompanionLastRollDay", "int"),
+        ("CompanionLastProactiveGiftDay", "int"), ("CompanionAffinitySeeded", "bool"),
+        ("CompanionPendingDeathEventId", "int"), ("CompanionCrisisFiredIdxList", "List<int>"),
+        ("CompanionRescueTriggerDay", "int"), ("CompanionActiveRescueLineId", "int"),
+        ("CompanionCrisisActiveIndex", "int"), ("CompanionCrisisRequiredCategory", "int"),
+        ("CompanionCrisisDeadlineDay", "int"), ("CompanionLastCrisisDay", "int"),
+        ("CompanionLastReturnSmsStamp", "int"),
+        ("GroundLootBatchMap", "Dictionary<int,List<GroundLootEntrySave>>"),
+        ("DossierPayloadJson", "string"), ("StrangerSupportJson", "string"),
+        ("TowerDefenseSave", "TowerDefenseSaveData"), ("NeighborLastCompanionSmsDay", "int"),
+        ("CompanionLastCompanionSmsDay", "int"), ("EndlessSettlementJson", "string"),
+        ("WorkbenchDrawerItems", "List<ItemSave>"), ("SceneRatCatchCooldownEndHour", "int"),
+        ("PurchaseSafetyState", "PurchaseSafetyState"), ("ExploreVisitedList", "List<ExploreVisitedEntry>"),
+        ("ConsumedWeightTrimmed", "long"), ("NeighborNeglectAnchorSeconds", "int"),
+        ("NeighborLastSendDay", "int"), ("NeighborConsecutiveSendDays", "int"),
+        ("NeighborWishIndex", "int"), ("NeighborStruggleState", "int"),
+        ("NeighborStruggleDeadlineSeconds", "int"), ("NeighborStruggleCount", "int"),
+        ("NeighborDeathDayBonus", "int"), ("FoodPollutionCellMap", "Dictionary<long,List<int>>"),
+        ("FoodPollutionLastSpreadHour", "int"), ("PendingDeathChoice", "bool"),
+        ("PendingDeath_Day", "int"), ("PendingDeath_Hour", "int"), ("PendingDeath_CauseJson", "string"),
+        ("SeenNewSlotNames", "List<string>"), ("FoodPollutionLastShrinkHour", "int"),
+        ("FoodPollutionCrisisStartDay", "int"), ("FoodPollutionLastSeedDay", "int"),
+        ("FoodPollutionMinorCabinetId", "long"), ("LoanSharkAppViewed", "bool"),
+        ("NeighborSurvivalTier", "int"), ("NeighborTierAnchorSeconds", "int"),
+        ("NeighborWishPendingReveal", "bool"), ("LoanSharkRevengeTier", "int"),
+        ("LoanSharkRevengeDay", "int"), ("LoanSharkRevengeCount", "int"),
+        ("LoanSharkStalkTier", "int"), ("LoanSharkStalkDay", "int"), ("LoanSharkStalkCount", "int"),
+        ("CompanionNeglectAnchorSeconds", "int"), ("CompanionSurvivalTier", "int"),
+        ("CompanionTierAnchorSeconds", "int"), ("CompanionWishPendingReveal", "bool"),
+        ("CompanionStruggleState", "int"), ("CompanionStruggleDeadlineSeconds", "int"),
+        ("CompanionStruggleCount", "int"), ("CompanionLastSendDay", "int"),
+        ("CompanionConsecutiveSendDays", "int"), ("CompanionWishIndex", "int"),
+        ("LoanSharkGnawRemainDamage", "int"), ("LoanSharkGnawRemainTicks", "int"),
+        ("LoanSharkGnawNextSeconds", "int"), ("LoanSharkGnawEventId", "int"),
+        ("PreDisasterFurniturePurchaseRecords", "Dictionary<int,int>"), ("PhoneMuted", "bool"),
+        ("RainedToday", "bool"),
+    ),
+    "ItemSave": (
+        ("ItemConfigId", "int"), ("ItemCount", "int"), ("BagPos", "int[]"),
+        ("StartTime", "int"), ("TimeLeft", "int"), ("UseTimes", "int"), ("TimeScale", "float"),
+        ("OriginalTimeLeft", "int"), ("InstanceVD", "float[]"), ("InstanceEffectEnd", "float[]"),
+        ("MaxUseTimes", "int"), ("InstanceBurnValue", "int"), ("Polluted", "bool"),
+        ("IsMapPreset", "bool"), ("NoPackage", "bool"), ("InstanceWeight", "int"),
+    ),
+    "AgentSave": (
+        ("NewInstanceId", "long"), ("SaveInstanceId", "long"), ("InstanceIdType", "int"),
+        ("AgentConfigId", "int"), ("AttrDict", "Dictionary<int,int>"), ("BuffArgsList", "List<BuffSave>"),
+        ("FurnitureDurability", "int"), ("ShopConfigId", "int"), ("ShopCache", "Dictionary<int,int>"),
+        ("ShopItemCache", "List<ShopItemSave>"), ("FurnitureFuncCDDict", "Dictionary<int,int>"),
+        ("FurnitureFuncDailyUsageDict", "Dictionary<int,int>"), ("HandMadeState", "int"),
+        ("HandMadeMakingTime", "float"), ("HandMadeMakingDuration", "float"),
+        ("HandMadeCachedItemIds", "List<long>"), ("CookingFuelSlots", "List<CookingFuelSlotSave>"),
+        ("GeneratorFuelSlots", "List<GeneratorFuelSlotSave>"), ("CookingIsCooking", "bool"),
+        ("CookingStartTotalSeconds", "float"), ("CookingDuration", "float"), ("CookingType", "int"),
+        ("CookingMatchedRecipeId", "int"), ("CookingMatchedRecipeIds", "List<int>"),
+        ("CookingState", "int"), ("CookingPauseStartTotalSeconds", "float"),
+        ("CookingHasPendingProduct", "bool"), ("CookingPendingProductName", "string"),
+        ("CookingPendingProductItemId", "int"), ("CookingConsumedFuelCapacity", "float"),
+        ("CookingLevel", "int"), ("CookingExp", "int"), ("UnlockedCookingRecipeIds", "List<int>"),
+        ("HandMadeRecordList", "List<string>"), ("ItemList", "List<ItemSave>"),
+        ("BirthPos", "float[]"), ("Position", "float[]"), ("Rotation", "float[]"), ("Name", "string"),
+        ("Money", "int"), ("MapConfigId", "int"), ("MapConfigIdHome", "int"), ("GuidanceNpcId", "int"),
+        ("IsShow", "bool"), ("ChapterId", "int"), ("FuncOpen", "bool"),
+        ("PoorAppetiteHistory", "List<PoorAppetiteHistorySave>"), ("PoorAppetiteList", "List<PoorAppetiteCacheSave>"),
+        ("SurvivalPlanningActiveIds", "List<int>"), ("ProductionExp", "int"), ("ProductionLevel", "int"),
+        ("BuildShopConfigId", "int"), ("BuildShopStockDict", "Dictionary<int,int>"),
+        ("BuildPurchaseSourceMap", "Dictionary<long,long>"), ("SlotPosType", "int"), ("SlotPosPoint", "string"),
+        ("IsBagFurniture", "bool"), ("BagFurnitureConfigId", "int"), ("IsDoorBox", "bool"),
+        ("BuildPackagePointMap", "Dictionary<long,string>"), ("PlantFurnitureConfigId", "int"),
+        ("PlantState", "int"), ("PlantConfigId", "int"), ("PlantSeedCount", "int"),
+        ("PlantFertItemConfigId", "int"), ("PlantGrowthProgress", "float"), ("PlantStartTotalSeconds", "int"),
+        ("PlantAnomalyFlags", "int"), ("PlantDecayStartTotalSeconds", "int"),
+        ("PlantAnomalyStallStartTotalSeconds", "int"), ("PlantMatureStartTotalSeconds", "int"),
+        ("IsGuidanceFurniture", "bool"), ("DemolishedGuidanceFurnitureIds", "List<int>"),
+        ("PlantNextAnomalyCheckTotalSeconds", "int"), ("DoorBoxIndex", "int"), ("IsBagLocked", "bool"),
+        ("CraftUnlockedCookingRecipeIds", "List<int>"), ("PlantGrowthTotalSeconds", "float"),
+        ("DroneTrip", "DroneTripSave"), ("VaseState", "int"), ("VaseFlowerItemConfigId", "int"),
+        ("VaseInsertTotalSeconds", "int"), ("TowerAttackTimerSeconds", "float"),
+        ("RatCageMice", "List<RatCageMouseSave>"), ("RatCageFoodCp", "float"), ("RatVisitMark", "bool"),
+        ("HotPotTotalSatiety", "float"), ("HotPotRemainSatiety", "float"), ("MusicCurrentTrackId", "int"),
+        ("BrewState", "int"), ("BrewStartHour", "int"), ("BrewTotalHours", "int"),
+        ("BrewResultItemId", "int"), ("BrewResultCount", "int"), ("HotPotTasteScore", "float"),
+        ("BuildPurchasePaidMap", "Dictionary<long,int>"), ("CookingLockedPortions", "int"),
+        ("HasSearched", "bool"), ("PlantYieldBonus", "float"), ("PlantGrowthTimeExtend", "float"),
+        ("GeneratorAutoStart", "bool"), ("GeneratorAutoStartThreshold", "float"), ("FurnitureTagId", "int"),
+        ("ShredderTrayItems", "List<ItemSave>"), ("ShredderState", "int"),
+        ("ShredderStartTotalSeconds", "int"), ("ShredderTotalSeconds", "int"),
+        ("ShredderPauseStartTotalSeconds", "int"), ("ShredderHeadConfigId", "int"),
+        ("ShredderHeadBagPosX", "int"), ("ShredderHeadBagPosY", "int"), ("PlantExpBonus", "float"),
+        ("CookingPendingIsNewUnlock", "bool"), ("CookingPendingQualityTier", "int"),
+        ("FurnitureModelState", "string"), ("CompressorTrayItems", "List<ItemSave>"),
+        ("CompressorState", "int"), ("CompressorStartTotalSeconds", "int"),
+        ("CompressorTotalSeconds", "int"), ("CompressorPauseStartTotalSeconds", "int"),
+        ("CompressorEmittedGroups", "int"), ("CompressorOut", "List<float>"),
+        ("CompressorBlocks", "int"), ("CompressorCrumbs", "int"),
+        ("CompressorFlavorBlocks", "List<int>"), ("CompressorSeasonG", "float"),
+        ("CompressorTotalWeight", "int"), ("CompressorPolluted", "bool"),
+    ),
+    "VitalityChangeRecord": (("Timestamp", "int"), ("ChangeValue", "float"), ("ValueBefore", "float"), ("ValueAfter", "float"), ("SourceType", "int"), ("ConfigId", "int")),
+    "ItemUsageRecord": tuple((f"field{index}", "int") for index in range(6)),
+    "ActionRecord": (("ActionConfigId", "int"), ("GameTime", "int")),
+    "BuffChangeRecord": (("Timestamp", "int"), ("ChangeType", "int"), ("BuffConfigId", "int")),
+    "EventLogRecord": (("ID", "int"), ("IsUnique", "bool"), ("Timestamp", "int")),
+    "WishData": (("Type", "int"), ("TargetValue", "int"), ("TargetValues", "List<int>"), ("TimeStamp", "int"), ("IsCompleted", "bool"), ("IsExpired", "bool")),
+    "DynamicEventSave": (("CDMap", "Dictionary<int,int>"), ("CurrentArgsList", "List<DynamicEventArgsSave>"), ("CacheArgs", "List<DynamicEventArgsSave>"), ("HasTriggeredFirstDayEvent", "bool"), ("SettlementBeliefPoint", "int"), ("RunningEventIds", "List<int>")),
+    "TagSave": (("CacheTagMap", "Dictionary<string,int>"), ("IgnoreTagMap", "Dictionary<string,int>")),
+    "PermissionsSave": (("IsDynamicEventOpen", "bool"), ("IsThinkingOpen", "bool"), ("FuncMapData", "Dictionary<int,bool>")),
+    "PowerSave": (("CurPowerValue", "int"), ("MaxPowerValue", "int"), ("CurrentStoredPower", "float"), ("GeneratorStates", "Dictionary<long,bool>"), ("ConsumerStates", "Dictionary<long,bool>"), ("IsSelfSupplyPowerOff", "bool")),
+    "PromptTriggerSave": (("ActiveStoryIds", "List<int>"), ("CompletedStoryIds", "List<int>")),
+    "PreDisasterStatistics": (("VisitedLocations", "Dictionary<int,int>"), ("ShoppingCount", "int"), ("TotalMoneySpent", "int"), ("TotalItemsWeight", "int")),
+    "CompletedWishRecord": (("Day", "int"), ("Type", "int"), ("TargetValue", "int"), ("CompletedTime", "int")),
+    "ToolTableData": (("FurnitureId", "long"), ("State", "int"), ("CachedItemIds", "List<long>"), ("MakingTime", "float"), ("MakingDuration", "float")),
+    "PaperAirplaneSaveData": (("RelativePosition", "float[]"), ("RelativeRotation", "float[]")),
+    "DropItemSaveData": (("Position", "float[]"), ("ItemList", "List<ItemSave>"), ("ModeList", "List<int>"), ("RotationY", "Nullable<float>"), ("MapConfigId", "Nullable<int>"), ("IsWaveLoot", "Nullable<bool>")),
+    "PlacedTrapSave": (("TrapConfigId", "int"), ("SlotNodeName", "string"), ("ItemInstanceId", "long"), ("CurrentDurability", "int"), ("MaxDurability", "int"), ("BaitItemConfigId", "int"), ("HasPrey", "bool"), ("PreyItemConfigId", "int"), ("CaptureStartTotalSeconds", "int")),
+    "ProficiencyDiscoverySave": (("DiscoveryRecord", "Dictionary<string,bool>"), ("DailyResearchUsed", "Dictionary<int,bool>")),
+    "BasketScheduledReturn": (("FurnitureInstanceId", "long"), ("ReturnAtTotalSeconds", "int"), ("SentItemConfigIds", "List<int>"), ("SentItemCounts", "List<int>")),
+    "PhoneSMSConvSave": (("ContactId", "int"), ("Messages", "List<PhoneSMSMsgSave>"), ("Unread", "int"), ("HasEvent", "bool"), ("LastMsgUtcMs", "long"), ("IsContactDead", "bool"), ("CanReply", "bool"), ("NormalUnread", "int"), ("EventUnread", "int"), ("TradeUnread", "int"), ("ReplySourceSmsId", "int"), ("QueueCursor", "int"), ("QueueWaitingReply", "bool"), ("IsMuted", "bool"), ("LastAffinitySnapshot", "int"), ("AffinitySnapshotInited", "bool")),
+    "NpcCommonState": (("NpcConfigId", "int"), ("Vitality", "int"), ("Morale", "int"), ("Material", "int"), ("Affinity", "int"), ("IsDead", "bool"), ("LastMonologueDay", "int"), ("LastTradeRequestDay", "int")),
+    "PhoneSMSNpcReplyTask": (("ContactId", "int"), ("ReplySmsId", "int"), ("ReplyAtUtcMs", "long"), ("MoraleAdd", "float")),
+    "PhoneSMSQueuePlanEntry": (("ContactId", "int"), ("Hour", "int")),
+    "TowerDefenseSaveData": (("WaveState", "int"), ("LegacyCrisisId", "int"), ("RemainingBudget", "int"), ("FieldCount", "int"), ("TotalBudget", "int"), ("SpawnIntervalSeconds", "float"), ("FinalChargeBudgetRatio", "float"), ("PeakFieldCap", "int"), ("MutedSlotTypes", "List<int>"), ("SpawnTypeList", "List<int>"), ("SpawnRemainCountList", "List<int>"), ("AliveZombies", "List<TowerZombieSaveData>"), ("WaveIndex", "int"), ("WaveKillCount", "int"), ("WaveDeviceDamage", "int"), ("WaveStructureDamage", "int"), ("WaveEventId", "int"), ("MaxTotalHpBudget", "int"), ("FinalChargePortentSeconds", "float"), ("SpawnGroups", "List<TowerWaveGroupSaveData>"), ("AttackMultiplier", "int"), ("AttackSpeedMultiplier", "float"), ("DurationHours", "float"), ("WaveOpenTotalSeconds", "int"), ("HpMultiplier", "int"), ("OwnerCrisisId", "int"), ("AliveCapTypeList", "List<int>"), ("AliveCapValueList", "List<int>"), ("CrisisStageIndex", "int"), ("AliveCapAnchorList", "List<string>"), ("LastRewardedKillCount", "int"), ("HpMultiplierFine", "float")),
+    "TowerZombieSaveData": (("ZombieTypeId", "int"), ("CurrentHP", "int"), ("PosX", "float"), ("PosY", "float"), ("PosZ", "float"), ("TargetSlotTypes", "List<int>"), ("SpawnAnchor", "string")),
+    "TowerWaveGroupSaveData": (("SpawnAnchor", "string"), ("SpawnTypes", "List<int>"), ("SpawnRemainCounts", "List<int>"), ("SpawnBlocked", "bool"), ("TargetSlotTypes", "List<int>"), ("SpawnTotalCount", "int"), ("ChargeTriggered", "bool")),
+    "GroundLootEntrySave": (("ItemConfigId", "int"), ("PosX", "float"), ("PosY", "float"), ("PosZ", "float"), ("RotationY", "float"), ("Floor", "int"), ("StartTime", "int"), ("TimeLeft", "int"), ("Collected", "bool")),
+    "PurchaseSafetyState": (("HasFiredMoney40", "bool"), ("HasFiredMoney20", "bool"), ("HasFiredTime4h", "bool"), ("DisasterInitialMoney", "int"), ("FiredCouplingHintKeys", "List<string>")),
+    "ExploreVisitedEntry": (("SceneName", "string"), ("Cells", "List<int>")),
+    "BuffSave": (("BuffConfigId", "int"), ("BuffCount", "int"), ("During", "int"), ("ReleaserId", "long")),
+    "ShopItemSave": (("ItemConfigId", "int"), ("ItemCount", "int"), ("FreshDecay", "float")),
+    "CookingFuelSlotSave": (("ConfigId", "int"), ("Count", "int"), ("BurnValue", "int"), ("BurnProgress", "float"), ("Item", "ItemSave")),
+    "GeneratorFuelSlotSave": (("ConfigId", "int"), ("Count", "int"), ("BurnValue", "int"), ("BurnProgress", "float"), ("Item", "ItemSave")),
+    "PoorAppetiteHistorySave": (("ItemConfigId", "int"), ("TimeStamp", "int"), ("RemainingTime", "int"), ("Count", "int")),
+    "PoorAppetiteCacheSave": (("ItemConfigId", "int"), ("TimeStamp", "int"), ("RemainingTime", "int")),
+    "DroneTripSave": (("DepartSec", "int"), ("ReturnSec", "int"), ("CargoJson", "string"), ("OwnerId", "long"), ("TripType", "int"), ("IsCharity", "bool"), ("EncounterDone", "bool"), ("LastDealDay", "int"), ("DealCountToday", "int"), ("LastForagingDay", "int"), ("ForagingCountToday", "int")),
+    "RatCageMouseSave": (("ConfigId", "int"), ("RemainLifeSeconds", "float"), ("Item", "ItemSave")),
+    "ItemRewardSave": (("ItemConfigId", "int"), ("ItemCount", "int")),
+    "DynamicEventArgsSave": (("TriggerHour", "int"), ("EventType", "int"), ("EventId", "int"), ("TaskCount", "int"), ("TaskFinishTime", "int"), ("ActionProgress", "Dictionary<int,int>"), ("ItemProgress", "Dictionary<int,int>"), ("CachedNextEventId", "Nullable<int>"), ("IsChose", "bool"), ("WaitingFurnitureId", "int"), ("DayProgress", "Dictionary<int,int>"), ("CurrentFsmStateId", "byte")),
+    "PhoneSMSMsgSave": (("Side", "string"), ("ContentKey", "string"), ("ContentRaw", "string"), ("TimeText", "string"), ("SpeakerTag", "string"), ("IsEvent", "bool"), ("EventState", "string"), ("EventId", "int"), ("ExpireRealMs", "long"), ("TimeScale", "int"), ("TaskDeadlineGameSec", "long"), ("SMSId", "int"), ("IsTrade", "bool"), ("QuotedText", "string"), ("QuotedImagePath", "string"), ("ShelfSnapshotJson", "string"), ("AffinityDelta", "int"), ("FloatPlayed", "bool")),
+}
+
+
+_SAVE_PRIMITIVE_SIZES = {
+    "bool": 1,
+    "byte": 1,
+    "int": 4,
+    "long": 8,
+    "float": 4,
+}
+_SAVE_CAPTURE_FIELDS = {
+    "GameSaveData": frozenset({
+        "Name", "FileName", "HistoryMaxDay", "TurnIndex", "isFinished", "FinishResult",
+        "PlayerSelectId", "DifficultyPresetId", "DifficultyLevels", "EndlessActive",
+        "IsPureEndless", "EndlessStartDay", "EndlessOriginEnding", "CurSave",
+    }),
+    "SaveChildData": frozenset({
+        "LeadingRole", "ChapterAgentMap", "VehicleTrunkItems", "DoorBoxItems",
+        "DoorBoxItems2", "WorkbenchDrawerItems",
+    }),
+    "AgentSave": frozenset({
+        "NewInstanceId", "SaveInstanceId", "AgentConfigId", "ItemList",
+        "IsBagFurniture", "BagFurnitureConfigId", "IsDoorBox", "DoorBoxIndex",
+    }),
+    "ItemSave": frozenset({"ItemConfigId", "ItemCount"}),
+}
+
+
+def _split_generic_arguments(value: str) -> tuple[str, ...]:
+    depth = 0
+    start = 0
+    parts: list[str] = []
+    for index, char in enumerate(value):
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(value[start:index].strip())
+            start = index + 1
+    parts.append(value[start:].strip())
+    return tuple(parts)
+
+
+def _save_type_kind(type_name: str) -> tuple[str, tuple[str, ...]]:
+    if type_name in _SAVE_PRIMITIVE_SIZES or type_name == "string" or type_name.startswith("Nullable<"):
+        return type_name, ()
+    if type_name.endswith("[]"):
+        return "array", (type_name[:-2],)
+    if type_name.startswith("List<") and type_name.endswith(">"):
+        return "list", _split_generic_arguments(type_name[5:-1])
+    if type_name.startswith("Dictionary<") and type_name.endswith(">"):
+        return "dictionary", _split_generic_arguments(type_name[11:-1])
+    return "object", (type_name,)
+
+
+def _save_unmanaged_size(type_name: str) -> int | None:
+    if type_name in _SAVE_PRIMITIVE_SIZES:
+        return _SAVE_PRIMITIVE_SIZES[type_name]
+    if type_name.startswith("Nullable<") and type_name.endswith(">"):
+        inner = type_name[9:-1]
+        if inner not in _SAVE_PRIMITIVE_SIZES:
+            return None
+        return 2 if inner == "bool" else 8
+    return None
+
+
+def _save_dictionary_pair_size(key_type: str, value_type: str) -> int | None:
+    key_size = _save_unmanaged_size(key_type)
+    value_size = _save_unmanaged_size(value_type)
+    if key_size is None or value_size is None:
+        return None
+    alignment = max(1, min(8, key_size), min(8, value_size))
+    value_offset = (key_size + alignment - 1) // alignment * alignment
+    total = value_offset + value_size
+    return (total + alignment - 1) // alignment * alignment
+
+
+class _SaveWireReader:
+    """Schema-driven MemoryPack reader for the current GameSaveData graph."""
+
+    def __init__(self, data: bytes, *, schemas: Mapping[str, tuple[tuple[str, str], ...]] | None = None):
+        self.reader = _Reader(data)
+        self.schemas = schemas or _SAVE_SCHEMAS
+
+    @property
+    def pos(self) -> int:
+        return self.reader.pos
+
+    def _error(self, message: str, *, field: str) -> SaveParseError:
+        return SaveParseError(
+            f"存档字段 {field} 解析失败：{message} at offset={self.pos}",
+            code="game_save_schema_error",
+            stage="game_save_wire",
+            offset=self.pos,
+        )
+
+    def _primitive(self, type_name: str, field: str) -> int | float | bool:
+        if type_name == "bool":
+            return self.reader.boolean(field)
+        if type_name == "byte":
+            return self.reader.u8(field)
+        if type_name == "int":
+            return self.reader.i32(field)
+        if type_name == "long":
+            return self.reader.i64(field)
+        if type_name == "float":
+            return self.reader.f32(field)
+        raise self._error(f"未知基础类型：{type_name}", field=field)
+
+    def _object_header(self, schema_name: str, field: str) -> bool:
+        marker = self.reader.u8(f"{field}.member_count")
+        if marker == 0xFF:
+            return False
+        expected = len(self.schemas.get(schema_name, ()))
+        if schema_name not in self.schemas:
+            raise self._error(f"未知对象 schema：{schema_name}", field=field)
+        if marker != expected:
+            raise SaveParseError(
+                f"存档字段 {field} 的成员数量变化：actual={marker}, expected={expected}, offset={self.pos - 1}",
+                code="game_save_schema_mismatch",
+                stage="game_save_wire",
+                offset=self.pos - 1,
+            )
+        return True
+
+    def _collection_count(self, field: str) -> int | None:
+        return self.reader.collection_count(field)
+
+    def _read_unmanaged_sequence(self, type_name: str, count: int, field: str) -> list[object]:
+        size = _save_unmanaged_size(type_name)
+        if size is None:
+            raise self._error(f"集合元素不是可直接读取的基础类型：{type_name}", field=field)
+        raw = self.reader.raw(count * size, field)
+        if type_name == "bool":
+            if any(value not in (0, 1) for value in raw):
+                raise self._error("布尔集合包含非法值", field=field)
+            return [bool(value) for value in raw]
+        if type_name == "byte":
+            return list(raw)
+        fmt = "<" + {"int": "i", "long": "q", "float": "f"}[type_name] * count
+        return list(struct.unpack(fmt, raw)) if count else []
+
+    def _read_value(self, type_name: str, field: str, *, capture: bool = False) -> object:
+        kind, args = _save_type_kind(type_name)
+        if kind in _SAVE_PRIMITIVE_SIZES:
+            return self._primitive(type_name, field)
+        if kind == "string":
+            return self.reader.memorypack_string(field)
+        if kind == "object":
+            return self.read_object(args[0], field, capture=capture)
+        if kind == "array" or kind == "list":
+            count = self._collection_count(field)
+            if count is None:
+                return None
+            item_type = args[0]
+            if _save_unmanaged_size(item_type) is not None:
+                return self._read_unmanaged_sequence(item_type, count, field)
+            return [self._read_value(item_type, f"{field}[{index}]", capture=capture) for index in range(count)]
+        if kind == "dictionary":
+            count = self._collection_count(field)
+            if count is None:
+                return {}
+            key_type, value_type = args
+            result: dict[object, object] = {}
+            for index in range(count):
+                item_field = f"{field}[{index}]"
+                key = self._read_value(key_type, f"{item_field}.key")
+                value = self._read_value(value_type, f"{item_field}.value", capture=capture)
+                if key in result:
+                    raise SaveParseError(f"存档字段 {field} 出现重复键：{key}")
+                result[key] = value
+            return result
+        if kind.startswith("Nullable<"):
+            size = _save_unmanaged_size(type_name)
+            if size is None:
+                raise self._error(f"Nullable 类型无法按当前 schema 读取：{type_name}", field=field)
+            return self.reader.raw(size, field)
+        raise self._error(f"未知字段类型：{type_name}", field=field)
+
+    def skip_value(self, type_name: str, field: str) -> None:
+        kind, args = _save_type_kind(type_name)
+        if kind in _SAVE_PRIMITIVE_SIZES:
+            self._primitive(type_name, field)
+            return
+        if kind == "string":
+            self.reader.memorypack_string(field)
+            return
+        if kind == "object":
+            self.skip_object(args[0], field)
+            return
+        if kind == "Nullable<int>" or kind == "Nullable<float>" or kind == "Nullable<bool>":
+            size = _save_unmanaged_size(type_name)
+            assert size is not None
+            self.reader.raw(size, field)
+            return
+        if kind == "array" or kind == "list":
+            count = self._collection_count(field)
+            if count is None:
+                return
+            item_type = args[0]
+            item_size = _save_unmanaged_size(item_type)
+            if item_size is not None:
+                raw = self.reader.raw(count * item_size, field)
+                if item_type == "bool" and any(value not in (0, 1) for value in raw):
+                    raise self._error("布尔集合包含非法值", field=field)
+                return
+            for index in range(count):
+                self.skip_value(item_type, f"{field}[{index}]")
+            return
+        if kind == "dictionary":
+            count = self._collection_count(field)
+            if count is None:
+                return
+            key_type, value_type = args
+            pair_size = _save_dictionary_pair_size(key_type, value_type)
+            if pair_size is not None:
+                raw = self.reader.raw(count * pair_size, field)
+                if key_type == "bool" or value_type == "bool":
+                    # Padding bytes are implementation details; the bool byte is
+                    # validated by the object readers where it is semantically used.
+                    del raw
+                return
+            for index in range(count):
+                item_field = f"{field}[{index}]"
+                self.skip_value(key_type, f"{item_field}.key")
+                self.skip_value(value_type, f"{item_field}.value")
+            return
+        raise self._error(f"未知字段类型：{type_name}", field=field)
+
+    def read_object(self, schema_name: str, field: str, *, capture: bool = False) -> dict[str, object] | None:
+        if not self._object_header(schema_name, field):
+            return None
+        selected = _SAVE_CAPTURE_FIELDS.get(schema_name, frozenset()) if capture else frozenset()
+        result: dict[str, object] = {}
+        for name, type_name in self.schemas[schema_name]:
+            member_field = f"{field}.{name}"
+            if name in selected:
+                result[name] = self._read_value(type_name, member_field, capture=True)
+            else:
+                self.skip_value(type_name, member_field)
+        return result
+
+    def skip_object(self, schema_name: str, field: str) -> None:
+        if not self._object_header(schema_name, field):
+            return
+        for name, type_name in self.schemas[schema_name]:
+            self.skip_value(type_name, f"{field}.{name}")
+
+
+def _save_file_info(path: Path, data: bytes, *, used_backup: bool = False) -> SaveFileInfo:
+    try:
+        stat = path.stat()
+    except OSError:
+        stat = None
+    return SaveFileInfo(
+        path=path,
+        sha256=hashlib.sha256(data).hexdigest(),
+        size=len(data),
+        mtime_ns=stat.st_mtime_ns if stat is not None else 0,
+        read_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        used_backup=used_backup,
+    )
+
+
+def _read_game_save_wire(data: bytes) -> dict[str, object]:
+    current_schema = _SAVE_SCHEMAS["GameSaveData"]
+    if not data:
+        raise SaveParseError("GameSaveData 文件为空", code="game_save_empty", stage="game_save_wire")
+    if data[0] == len(current_schema):
+        schemas: Mapping[str, tuple[tuple[str, str], ...]] = _SAVE_SCHEMAS
+    elif data[0] == len(current_schema) - 1:
+        schemas = dict(_SAVE_SCHEMAS)
+        schemas["GameSaveData"] = current_schema[:-1]
+    else:
+        raise SaveParseError(
+            f"GameSaveData 的成员数量变化：actual={data[0]}, expected={len(current_schema)} 或 {len(current_schema) - 1}",
+            code="game_save_schema_mismatch",
+            stage="game_save_wire",
+            offset=0,
+        )
+    wire = _SaveWireReader(data, schemas=schemas)
+    root = wire.read_object("GameSaveData", "GameSaveData", capture=True)
+    if root is None:
+        raise SaveParseError(
+            "GameSaveData 不能为 null",
+            code="game_save_null_root",
+            stage="game_save_wire",
+            offset=0,
+        )
+    if wire.pos != len(data):
+        raise SaveParseError(
+            f"GameSaveData 未读取到文件末尾：offset={wire.pos}, total={len(data)}",
+            code="game_save_trailing_bytes",
+            stage="game_save_eof",
+            offset=wire.pos,
+        )
+    return root
+
+
+def _item_dicts(value: object) -> list[dict[str, object]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise SaveParseError(f"存档库存字段不是列表：{value!r}", code="game_save_inventory_shape", stage="inventory")
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _append_inventory_items(
+    destination: list[InventoryItem],
+    value: object,
+    *,
+    source: str,
+    container: str,
+    diagnostics: list[str],
+) -> int:
+    count = 0
+    for index, item in enumerate(_item_dicts(value)):
+        item_id = item.get("ItemConfigId")
+        item_count = item.get("ItemCount")
+        if not isinstance(item_id, int) or item_id <= 0:
+            diagnostics.append(f"{source}第 {index + 1} 项包含未知物品 ID：{item_id!r}")
+            continue
+        if not isinstance(item_count, int) or item_count <= 0:
+            diagnostics.append(f"{source}中的物品 ID {item_id} 数量非法：{item_count!r}")
+            continue
+        destination.append(InventoryItem(item_id, item_count, source, container))
+        count += 1
+    return count
+
+
+def _inventory_from_game_save(
+    root: dict[str, object],
+    file_info: SaveFileInfo,
+    *,
+    cookable_item_ids: Collection[int] | None = None,
+) -> SaveInventoryState:
+    child = root.get("CurSave")
+    if not isinstance(child, dict):
+        raise SaveParseError(
+            "GameSaveData.CurSave 缺失或为 null",
+            code="game_save_missing_cur_save",
+            stage="inventory",
+        )
+    diagnostics: list[str] = []
+    raw_items: list[InventoryItem] = []
+    container_counts: dict[str, int] = {}
+    leading_role = child.get("LeadingRole")
+    if isinstance(leading_role, dict):
+        container_counts["主控背包"] = _append_inventory_items(
+            raw_items,
+            leading_role.get("ItemList"),
+            source="主控背包",
+            container="leading_role",
+            diagnostics=diagnostics,
+        )
+    else:
+        diagnostics.append("CurSave.LeadingRole 缺失或为 null")
+
+    marked_agents: dict[int, list[dict[str, object]]] = {15000: [], 15001: []}
+    chapter_agents = child.get("ChapterAgentMap")
+    if isinstance(chapter_agents, dict):
+        for agents in chapter_agents.values():
+            for agent in _item_dicts(agents):
+                config_id = agent.get("BagFurnitureConfigId")
+                if config_id in marked_agents:
+                    marked_agents[config_id].append(agent)
+    else:
+        diagnostics.append("CurSave.ChapterAgentMap 缺失或为 null")
+
+    fallback_fields = {15000: "DoorBoxItems", 15001: "DoorBoxItems2"}
+    source_names = {15000: "双开门冰箱", 15001: "冰柜"}
+    container_keys = {15000: "fridge_15000", 15001: "freezer_15001"}
+    for config_id in (15000, 15001):
+        marked_count = 0
+        for agent in sorted(marked_agents[config_id], key=lambda value: (int(value.get("NewInstanceId") or 0), int(value.get("SaveInstanceId") or 0))):
+            marked_count += _append_inventory_items(
+                raw_items,
+                agent.get("ItemList"),
+                source=source_names[config_id],
+                container=container_keys[config_id],
+                diagnostics=diagnostics,
+            )
+        direct_items = child.get(fallback_fields[config_id])
+        direct_count = len(_item_dicts(direct_items))
+        if marked_agents[config_id]:
+            container_counts[container_keys[config_id]] = marked_count
+            if direct_count:
+                diagnostics.append(
+                    f"{source_names[config_id]}同时存在标记家具和兼容字段 {fallback_fields[config_id]}；已保留标记家具结果"
+                )
+        else:
+            container_counts[container_keys[config_id]] = _append_inventory_items(
+                raw_items,
+                direct_items,
+                source=f"{source_names[config_id]}（兼容字段）",
+                container=container_keys[config_id],
+                diagnostics=diagnostics,
+            )
+
+    if cookable_item_ids is not None:
+        allowed = frozenset(int(item_id) for item_id in cookable_item_ids)
+        raw_items = [item for item in raw_items if item.item_config_id in allowed]
+    return SaveInventoryState(
+        file_info=file_info,
+        items=tuple(raw_items),
+        diagnostics=tuple(diagnostics),
+        container_counts=container_counts,
+    )
+
+
+def read_game_save_inventory_bytes(
+    data: bytes,
+    *,
+    source_path: Path | None = None,
+    file_info: SaveFileInfo | None = None,
+    cookable_item_ids: Collection[int] | None = None,
+) -> SaveInventoryState:
+    """Read only the current save's player inventory from GameSaveData bytes."""
+
+    info = file_info or _save_file_info(source_path or Path("<memory>"), data)
+    root = _read_game_save_wire(data)
+    return _inventory_from_game_save(root, info, cookable_item_ids=cookable_item_ids)
+
+
+def _read_stable_game_save_file(path: Path, *, used_backup: bool, cookable_item_ids: Collection[int] | None) -> SaveInventoryState:
+    try:
+        before = path.stat()
+        if not path.is_file():
+            raise OSError("路径不是文件")
+        data = path.read_bytes()
+        after = path.stat()
+    except OSError as exc:
+        raise SaveParseError(f"读取子存档失败 {path}：{exc}", code="game_save_file_error", stage="file_open") from exc
+    if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+        raise SaveParseError(f"子存档正在写入，读取期间文件发生变化：{path}", code="game_save_changed", stage="file_open")
+    info = _save_file_info(path, data, used_backup=used_backup)
+    return read_game_save_inventory_bytes(data, file_info=info, cookable_item_ids=cookable_item_ids)
+
+
+def read_game_save_inventory(
+    save_file: Path,
+    *,
+    allow_backup: bool = True,
+    cookable_item_ids: Collection[int] | None = None,
+) -> SaveInventoryState:
+    """Read a child save, preferring its active bytes and then its .bak copy."""
+
+    requested = Path(save_file).expanduser()
+    candidates = [(requested, False)]
+    backup = Path(f"{requested}.bak")
+    if allow_backup and backup != requested:
+        candidates.append((backup, True))
+    errors: list[str] = []
+    last_error: SaveParseError | None = None
+    for candidate, used_backup in candidates:
+        if not candidate.exists():
+            errors.append(f"{candidate}：文件不存在")
+            continue
+        try:
+            return _read_stable_game_save_file(
+                candidate,
+                used_backup=used_backup,
+                cookable_item_ids=cookable_item_ids,
+            )
+        except SaveParseError as exc:
+            errors.append(str(exc))
+            last_error = exc
+    raise SaveParseError(
+        "无法读取有效的子存档：" + "；".join(errors),
+        code=last_error.code if last_error else "game_save_file_unavailable",
+        stage=last_error.stage if last_error else "file_open",
+        offset=last_error.offset if last_error else None,
+        details={"attempts": errors},
+    )
 
 
 def _read_codex_map(
@@ -486,7 +1434,18 @@ def parse_codex_save_bytes(
 ) -> CodexSaveState:
     """Parse the HistoryData prefix and discover the codex map by structure."""
 
-    prefix_error: SaveParseError | None = None
+    try:
+        return _parse_history_data_strict(
+            data,
+            source_path=source_path,
+            file_info=file_info,
+        )
+    except SaveParseError as strict_error:
+        # Older fixtures used by the codex scanner predate the full HistoryData
+        # schema. Keep their structural scanner available, but never use it for
+        # the recipe inventory path.
+        prefix_error: SaveParseError | None = strict_error
+
     reader = _Reader(data)
     try:
         search_start = _read_common_prefix(reader)
@@ -542,6 +1501,7 @@ def parse_codex_save_bytes(
         candidate_score=selected.score,
         candidate_offsets=tuple(candidate.offset for candidate in candidates),
         unknown_ids=selected.unknown_ids,
+        history_records=(),
     )
 
 
@@ -620,6 +1580,49 @@ def read_codex_save(
             "attempts": errors,
             **(last_error.details if last_error is not None else {}),
         },
+    )
+
+
+def _read_stable_history_file(path: Path, *, used_backup: bool) -> CodexSaveState:
+    try:
+        before = path.stat()
+        if not path.is_file():
+            raise OSError("路径不是文件")
+        data = path.read_bytes()
+        after = path.stat()
+    except OSError as exc:
+        raise SaveParseError(f"读取 HistorySave 失败 {path}：{exc}", code="history_file_error", stage="file_open") from exc
+    if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+        raise SaveParseError(f"HistorySave 正在写入，读取期间文件发生变化：{path}", code="history_changed", stage="file_open")
+    info = _save_file_info(path, data, used_backup=used_backup)
+    return _parse_history_data_strict(data, file_info=info)
+
+
+def read_history_save(save_file: Path, *, allow_backup: bool = True) -> CodexSaveState:
+    """Read the current HistoryData schema without structural map scanning."""
+
+    requested = Path(save_file).expanduser()
+    candidates = [(requested, False)]
+    backup = Path(f"{requested}.bak")
+    if allow_backup and backup != requested:
+        candidates.append((backup, True))
+    errors: list[str] = []
+    last_error: SaveParseError | None = None
+    for candidate, used_backup in candidates:
+        if not candidate.exists():
+            errors.append(f"{candidate}：文件不存在")
+            continue
+        try:
+            return _read_stable_history_file(candidate, used_backup=used_backup)
+        except SaveParseError as exc:
+            errors.append(str(exc))
+            last_error = exc
+    raise SaveParseError(
+        "无法读取严格 HistorySave：" + "；".join(errors),
+        code=last_error.code if last_error else "history_file_unavailable",
+        stage=last_error.stage if last_error else "file_open",
+        offset=last_error.offset if last_error else None,
+        details={"attempts": errors},
     )
 
 
@@ -797,12 +1800,18 @@ __all__ = [
     "CODEX_CATEGORY_SOURCE_TABLES",
     "CodexMapCandidate",
     "CodexSaveState",
+    "InventoryItem",
     "SaveFileInfo",
+    "SaveHistoryRecord",
+    "SaveInventoryState",
     "SaveParseError",
     "build_save_diagnostic",
     "default_save_file",
     "parse_codex_save_bytes",
     "read_codex_save",
+    "read_game_save_inventory",
+    "read_game_save_inventory_bytes",
+    "read_history_save",
     "write_save_diagnostic",
 ]
 

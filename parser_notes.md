@@ -42,6 +42,14 @@
 
 完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
+### 存档可烹饪菜谱
+
+`codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜谱候选过滤。
+
+子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；`ChapterAgentMap` 中标记 `BagFurnitureConfigId` 为 `15000`（双开门冰箱）或 `15001`（冰柜）的家具库存优先使用。没有标记家具时，才回退到 `DoorBoxItems`/`DoorBoxItems2`；标记家具与兼容字段同时存在时保留标记结果并记录诊断。车辆后备箱、工作台抽屉不进入菜谱库存，`Config_Item.CanCook == false` 的物品也会被排除；输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格。
+
+数据库 schema v4 额外保存全部 `Config_Item` 的烹饪相关字段和七类烹饪档位阈值及其 `Config_GlobalSetting` 键。`SpecificItems` 按实际物品 ID 多重集合精确匹配；`TagCombo` 只按 `Config_ItemSubCategory` 将配方放入候选组，不单独决定最终菜肴。工具枚举库存中的实际组合，按原生 `CookingTierResolver` 对 Meat、Custard、Fish、Vegetable、Fruit、Seasoning、Mushroom 分别计算 High/Mid/Low，整组取最差档位，再选择同一候选组的 `Tier=1/2/3` 配方。当前静态候选固定为全部 496 道菜谱；同时设置 `SpecificItems` 和 `TagCombo` 的配置会直接报错。
+
 ## 3. 主图鉴分类和关联
 
 食品和猎物使用当前游戏 Codex 字段，两个分类允许重叠：
@@ -122,17 +130,29 @@ python "codex_database.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行和资源元数据。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v4 的菜谱物品和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜谱库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
-源码默认数据库为 `data/survival_log_codex.sqlite3`。首次发现旧的根目录数据库时，工具会复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。数据库文件不会写入游戏目录或存档目录。
+源码默认数据库为 `data/survival_log_codex.sqlite3`，诊断日志写在同一目录。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
 
-`codex_server.py` 使用 Python 标准库启动仅监听 `127.0.0.1` 的本地 HTTP 服务，网页资源位于 `web/`，不依赖 Streamlit。浏览器每 5 秒请求一次状态接口；服务端先比较 `HistorySave.bytes` 和同名 `.bak` 的路径、大小、修改时间，只有签名变化时才解析存档并同步数据库。明确关闭页面后，服务约 30 秒退出；后台标签页或切回游戏造成的轮询暂停不会触发退出。
+没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
+
+### 轻量本地网页
+
+[codex_server.py](./codex_server.py) 使用 Python 标准库启动仅监听 `127.0.0.1` 的本地 HTTP 服务，网页资源位于 `web/`，不依赖 Streamlit。浏览器每 5 秒请求一次状态接口；服务端先比较 `HistorySave.bytes` 和同名 `.bak` 的路径、大小、修改时间，只有签名变化时才解析存档并同步数据库。
+
+```powershell
+python "codex_server.py" `
+  --database "data\survival_log_codex.sqlite3" `
+  --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
+```
+
+前端提供六类主图鉴分类和“可烹饪菜谱”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜谱栏目按 `HistorySave` 的全局未完成菜肴状态展示所有子存档的实时库存、实际食材组合、候选组、解析档位和最终 Tier 配方；前端不会写回存档。
 
 ## 6. 独立版运行和打包
 
-独立版启动器会读取 Steam 的 `steamapps/libraryfolders.vdf`，检查每个库中的 `steamapps/common/Survival Log`，再使用 `SurvivalLog_Data/StreamingAssets/PackageManifest` 和 catalog 校验游戏目录。Steam 库未找到有效目录时，会在本机各磁盘的常见 Steam/Games 路径做有限备用搜索。只有游戏资源版本与数据库 metadata 中的 `game_version` 不同，才重新解析配置并导入 SQLite；更新失败时保留原数据库。
+独立版启动器会先读取 Steam 的 `steamapps/libraryfolders.vdf`，检查每个库中的 `steamapps/common/Survival Log`，再使用 `SurvivalLog_Data/StreamingAssets/PackageManifest` 和 catalog 校验游戏目录。Steam 库未找到有效目录时，会在本机各磁盘的常见 Steam/Games 路径做有限备用搜索。只有游戏资源版本与数据库 metadata 中的 `game_version` 不同，才会重新解析配置并导入 SQLite；更新失败时保留原数据库。
 
-使用本地 [package_frontend.ps1](./package_frontend.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版：
+使用 [package_frontend.ps1](./package_frontend.ps1) 可以生成不需要用户安装 Python 的 Windows 文件夹版应用。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 核心导入图和预生成 SQLite 数据库，不再携带 UnityPy 的导出/CLI 工具、缓存和调试符号，也不携带 Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib：
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
@@ -145,6 +165,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 ## 7. 已知限制
 
 - 静态解析器不推断完成状态；数据库和前端只读读取 `HistorySave.bytes` 的持久化图鉴列表。
+- 可烹饪菜谱视图只读取当前版本已知的严格 `HistoryData`、`GameSaveData` schema；版本变化会显示 schema 诊断，不会用旧字段偏移猜测库存。
 - `Config_CodexMilestone` 用于游戏图鉴里程碑，不参与六类主条目数量和完成勾选。
 - 条件组、奖励组、动作、房间和掉落组等没有独立解析表的引用保留原始 ID，并以 `ID:xxxx` 标明。
 - 参考仓库只用于字段命名和交叉校验，最终数据源始终是当前本地游戏资源。

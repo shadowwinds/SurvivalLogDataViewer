@@ -45,7 +45,7 @@
       </aside>
 
       <main class="main-content">
-        <section class="toolbar" aria-label="条目筛选">
+        <section class="toolbar" id="entryToolbar" aria-label="条目筛选">
           <div class="search-fields">
             <div class="search-field-group">
               <label class="search-label" for="nameSearchInput">成品名称</label>
@@ -70,7 +70,15 @@
           </div>
         </section>
 
-        <div class="workspace-grid">
+        <section class="recipe-toolbar" id="recipeToolbar" hidden aria-labelledby="recipeTitle">
+          <div>
+            <div class="panel-kicker">RECIPE PLANS</div>
+            <h2 id="recipeTitle">可烹饪菜谱</h2>
+          </div>
+          <div class="recipe-toolbar-status" id="recipeToolbarStatus">正在读取</div>
+        </section>
+
+        <div class="workspace-grid" id="codexWorkspace">
           <section class="entries-panel" aria-labelledby="entriesTitle">
             <div class="panel-heading">
               <div>
@@ -96,6 +104,33 @@
             </div>
           </aside>
         </div>
+
+        <section class="recipe-view" id="recipeView" hidden aria-labelledby="recipeTitle">
+          <div class="recipe-view-heading">
+            <div>
+              <div class="panel-kicker">PENDING COOKING CODEX</div>
+              <h3>未完成菜肴</h3>
+            </div>
+            <div class="recipe-stat" id="recipePendingCount">-- 道</div>
+          </div>
+          <div class="recipe-plan-status" id="recipePlanStatus" data-status="loading">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>正在读取菜谱计划</span>
+          </div>
+          <div class="recipe-pending-list" id="recipePendingList" aria-live="polite">
+            <div class="loading-state">正在读取未完成菜肴</div>
+          </div>
+
+          <div class="recipe-saves-heading">
+            <div>
+              <div class="panel-kicker">SAVE INVENTORIES</div>
+              <h3>存档结果</h3>
+            </div>
+            <div class="recipe-stat" id="recipeSaveCount">-- 个存档</div>
+          </div>
+          <div class="recipe-save-tabs" id="recipeSaveTabs" role="tablist" aria-label="存档切换"></div>
+          <div class="recipe-save-panels" id="recipeSavePanels"></div>
+        </section>
       </main>
     </div>
 

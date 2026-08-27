@@ -24,6 +24,11 @@ from codex_parser import (
     build_extraction_context,
     select_category_rows,
 )
+from codex_recipe import (
+    RecipeConfigError,
+    load_recipe_static_data,
+    populate_recipe_tables,
+)
 from codex_save import (
     CODEX_CATEGORY_SOURCE_TABLES,
     SaveParseError,
@@ -40,7 +45,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 3
+DATABASE_SCHEMA_VERSION = 4
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_DIR / "data"
 DEFAULT_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
@@ -235,6 +240,26 @@ CREATE TABLE IF NOT EXISTS auxiliary_rows (
     PRIMARY KEY (table_name, row_id)
 );
 
+CREATE TABLE IF NOT EXISTS recipe_items (
+    item_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    can_cook INTEGER NOT NULL CHECK (can_cook IN (0, 1)),
+    category INTEGER NOT NULL,
+    sub_category INTEGER NOT NULL,
+    sub_category_name TEXT NOT NULL,
+    price REAL NOT NULL,
+    raw_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recipe_tier_rules (
+    sub_category INTEGER PRIMARY KEY,
+    label TEXT NOT NULL,
+    high_threshold REAL NOT NULL,
+    mid_low_threshold REAL NOT NULL,
+    high_source TEXT NOT NULL,
+    mid_low_source TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_codex_entry_categories_category
     ON codex_entry_categories(category, sort_order);
 CREATE INDEX IF NOT EXISTS idx_codex_entries_name
@@ -243,6 +268,8 @@ CREATE INDEX IF NOT EXISTS idx_entry_relations_source
     ON entry_relations(source_entry_key);
 CREATE INDEX IF NOT EXISTS idx_category_completion_category
     ON category_completion(category, completed);
+CREATE INDEX IF NOT EXISTS idx_recipe_items_cookable_category
+    ON recipe_items(can_cook, sub_category, price);
 """
 
 
@@ -751,6 +778,11 @@ def build_database(
 ) -> dict[str, Any]:
     ensure_database_outside_game_root(game_root, database_path)
     context = build_extraction_context(game_root)
+    recipe_items, recipe_specs, tier_rules = load_recipe_static_data(game_root, context)
+    if len(recipe_specs) != 496:
+        raise RecipeConfigError(
+            f"Config_CookingRecipe 图鉴配方数量不完整：actual={len(recipe_specs)}, expected=496"
+        )
     entries, memberships = collect_entries(context)
     relations = build_relations(context, entries)
     database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -766,6 +798,8 @@ def build_database(
             connection.execute("DELETE FROM codex_entry_categories")
             connection.execute("DELETE FROM entry_relations")
             connection.execute("DELETE FROM auxiliary_rows")
+            connection.execute("DELETE FROM recipe_items")
+            connection.execute("DELETE FROM recipe_tier_rules")
 
             for sort_order, (category, label) in enumerate(CATEGORY_LABELS.items()):
                 connection.execute(
@@ -842,6 +876,11 @@ def build_database(
                 "INSERT INTO auxiliary_rows(table_name, row_id, name, raw_json) VALUES (?, ?, ?, ?)",
                 auxiliary_rows,
             )
+            recipe_table_counts = populate_recipe_tables(
+                connection,
+                items=recipe_items,
+                rules=tier_rules,
+            )
 
             metadata = {
                 "database_schema_version": str(DATABASE_SCHEMA_VERSION),
@@ -851,6 +890,9 @@ def build_database(
                 "imported_at": imported_at,
                 "main_entry_count": str(len(entries)),
                 "category_mapping_count": str(len(memberships)),
+                "recipe_item_count": str(recipe_table_counts["recipe_items"]),
+                "recipe_count": str(len(recipe_specs)),
+                "recipe_tier_rule_count": str(recipe_table_counts["recipe_tier_rules"]),
             }
             _upsert_metadata(connection, metadata)
 
@@ -870,6 +912,9 @@ def build_database(
             "category_mappings": len(memberships),
             "relations": len(relations),
             "auxiliary_rows": sum(len(context.tables[name]) for name, _title in AUXILIARY_TABLES),
+            "recipe_items": len(recipe_items),
+            "recipe_count": len(recipe_specs),
+            "recipe_tier_rules": len(tier_rules),
             **{
                 category: len(rows)
                 for category, rows in select_category_rows(context).items()
