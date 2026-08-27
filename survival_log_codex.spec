@@ -7,9 +7,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 PROJECT_DIR = Path(SPECPATH).resolve()
-VENDOR_DIR = PROJECT_DIR.parent / "000" / "_vendor_unitypy"
-if not VENDOR_DIR.is_dir():
-    VENDOR_DIR = PROJECT_DIR / "_vendor_unitypy"
+VENDOR_DIR = PROJECT_DIR / "_vendor_unitypy"
 if VENDOR_DIR.is_dir() and str(VENDOR_DIR) not in sys.path:
     sys.path.insert(0, str(VENDOR_DIR))
 

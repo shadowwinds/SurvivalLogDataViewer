@@ -29,14 +29,7 @@ if hasattr(sys.stderr, "reconfigure"):
 SALT = b"SL_BundleCrypto_v1_9f3d7a1c"
 _PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_SNAPSHOT_DIR = _PROJECT_DIR / "snapshots"
-_VENDOR_CANDIDATES = (
-    _PROJECT_DIR / "_vendor_unitypy",
-    _PROJECT_DIR.parent / "_vendor_unitypy",
-    _PROJECT_DIR.parent / "000" / "_vendor_unitypy",
-)
-_bundle_root = getattr(sys, "_MEIPASS", None)
-if _bundle_root:
-    _VENDOR_CANDIDATES = (Path(_bundle_root) / "_vendor_unitypy", *_VENDOR_CANDIDATES)
+_VENDOR_CANDIDATES = (_PROJECT_DIR / "_vendor_unitypy",)
 _configured_vendor = os.environ.get("SURVIVALLOG_UNITYPY_DIR")
 VENDOR_DIR = (
     Path(_configured_vendor)
