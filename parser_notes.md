@@ -38,7 +38,7 @@
 
 解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。未识别的存档条目 ID 会保留在诊断结果中，不会静默转换为其他条目。
 
-独立版的网页服务和数据库同步会将诊断写入分发目录中的 UTF-8 JSON Lines 日志 `SurvivalLogDataViewer.log`；源码版不生成存档同步诊断日志。分发目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
+独立版首次实际使用、首次 API 同步或启动错误时才建立分发目录中的 UTF-8 JSON Lines 日志 `SurvivalLogDataViewer.log`；新打包目录不预置日志，源码版不生成存档同步诊断日志。分发目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
 
 完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
@@ -48,7 +48,7 @@
 
 子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；数据库只收录本地化名称严格等于 `双门冰箱`、`豪华版双门冰箱`、`双开门冰箱` 或 `冰柜` 的 `Config_Furniture`，并读取 `ChapterAgentMap` 中这些家具的库存。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具配置均保留。`冷冻柜`、大型或巨型冷冻柜、医用冷藏柜、食堂冰箱、普通冰箱、其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目不进入菜谱库存。旧版 `DoorBoxItems`/`DoorBoxItems2` 只对 15000/15001 保留兼容回退，且仅在没有对应实际家具时使用；实际家具与兼容字段同时存在时保留实际家具结果并记录诊断。`Config_Item.CanCook == false` 的物品也会被排除；后端输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格供匹配和诊断。
 
-数据库 schema v6 额外保存全部 `Config_Item` 的烹饪相关字段、严格四类冰箱/冰柜家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建。`SpecificItems` 按实际物品 ID 多重集合精确匹配；只有缺口总数量严格为 1 的配方才进入 `near_matches`。`TagCombo` 逐个尝试移除一个分类槽位，再用实际库存数量枚举剩余组合；只有剩余槽位和数量全部满足、补入一个候选食材后能解析出有效烹饪档位的菜肴才返回。分类配方的多个候选食材共用一个 `missing_sub_category` 缺口，候选列表放在 `missing_item_candidates`，不计为多个缺口。近匹配排除已解锁及已经完全可烹饪的菜肴；网页只展示选中存档的名称、数量、菜肴档位和食材名称，不展示诊断字段、ID、来源、容器或存档文件名。
+数据库 schema v7 额外保存全部 `Config_Item` 的烹饪相关字段、严格四类冰箱/冰柜家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建，旧 v6 源码库会拆分为静态库和 runtime 库。`SpecificItems` 按实际物品 ID 多重集合精确匹配；只有缺口总数量严格为 1 的配方才进入 `near_matches`。`TagCombo` 逐个尝试移除一个分类槽位，再用实际库存数量枚举剩余组合；只有剩余槽位和数量全部满足、补入一个候选食材后能解析出有效烹饪档位的菜肴才返回。分类配方的多个候选食材共用一个 `missing_sub_category` 缺口，候选列表放在 `missing_item_candidates`，不计为多个缺口。近匹配排除已解锁及已经完全可烹饪的菜肴；网页将 `SpecificItems` 标为“特色菜肴”、`TagCombo` 标为“通用菜肴”，不再显示 Tier 文本，每张结果卡片只显示菜肴和紧凑的食材/缺失项两行。拥有食材按原始物品 ID 合并数量，并将来源去重合并。
 
 ## 3. 主图鉴分类和关联
 
@@ -126,13 +126,14 @@ python "codex_parser.py" `
 ```powershell
 python "codex_database.py" `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database "data\survival_log_codex.sqlite3" `
+  --database "survival_log_codex.sqlite3" `
+  --runtime-database "survival_log_codex_runtime.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v6 的菜肴物品、严格四类冰箱/冰柜映射和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v7 的菜肴物品、严格四类冰箱/冰柜映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
-源码默认数据库为 `data/survival_log_codex.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
+源码默认数据库为根目录的 `survival_log_codex.sqlite3`，runtime 文件固定为根目录的 `survival_log_codex_runtime.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的 `data/survival_log_codex.sqlite3` 时，工具会先执行 `PRAGMA integrity_check`，校验通过后在临时文件中原子拆分静态和 runtime 数据库，并保留完成状态、存档哈希和已有缓存；存在 WAL/SHM 旁车文件、锁定或目标冲突时会保留旧文件。显式 `--database` 路径不会触发默认迁移。
 
 没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
 
@@ -142,11 +143,12 @@ python "codex_database.py" `
 
 ```powershell
 python "codex_server.py" `
-  --database "data\survival_log_codex.sqlite3" `
+  --database "survival_log_codex.sqlite3" `
+  --runtime-database "survival_log_codex_runtime.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端提供六类主图鉴分类和“可烹饪菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，下拉切换后只展示该存档；页面采用固定视口高度，左侧拥有食材、右侧可烹饪菜肴和仅差一个食材结果分别滚动。页面只显示存档名称、食材名称及数量、菜肴名称和档位，前端不会写回存档。
+前端提供六类主图鉴分类和“可烹饪菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，下拉切换后只展示该存档；页面采用固定视口高度，左侧拥有食材、右侧可烹饪菜肴和仅差一个食材结果分别滚动。菜肴轮询比较 payload revision，内容未变化时不重建列表，变化时恢复两个滚动列的位置，切换存档则回到顶部。结果卡片只显示两行，限定食材和大类食材分别显示“特色菜肴”和“通用菜肴”，前端不会写回存档。
 
 ## 6. 独立版运行和打包
 
@@ -160,7 +162,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 
 分发目录为 `dist\SurvivalLogDataViewer\`，其中的 `生存日志图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 核心导入图和预生成 SQLite 数据库，不包含 UnityPy 导出/CLI 工具、缓存、调试符号、Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib，也不包含游戏安装目录、bundle、catalog 或原始存档。
 
-独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本。普通启动不显示终端；图鉴页面明确关闭后服务约 30 秒自动退出，启动后没有网页成功建立 API 心跳也会在约 30 秒后退出，浏览器异常结束且关闭通知丢失时会在约 90 秒没有心跳后回收。后台标签页或切回游戏时，只要网页仍能按轮询发送心跳就不会触发退出，页面恢复可见时会立即刷新。`--headless` 模式保持常驻。默认端口 `8501` 被其他图鉴实例占用时会自动选择空闲端口；显式指定的其他端口冲突则返回错误。打包脚本会强制关闭已有独立版进程，检查旧分发数据库与新静态数据的 schema、游戏版本和关键表行数，仅在兼容时保留完成状态，并在替换发布目录前启动本地服务执行首页、状态和配方接口自检；启动错误会记录到分发目录日志或 `%LOCALAPPDATA%\SurvivalLogDataViewer\SurvivalLogDataViewer.log`。打包脚本从 README 的用户区标记生成独立包 README，因此发布包只保留面向用户的说明。
+独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，在同一文件中保存静态配置和使用后的运行时状态，不创建第二个 runtime 文件。普通启动不显示终端；图鉴页面明确关闭后服务约 30 秒自动退出，启动后没有网页成功建立 API 心跳也会在约 30 秒后退出，浏览器异常结束且关闭通知丢失时会在约 90 秒没有心跳后回收。后台标签页或切回游戏时，只要网页仍能按轮询发送心跳就不会触发退出，页面恢复可见时会立即刷新。`--headless` 模式保持常驻。默认端口 `8501` 被其他图鉴实例占用时会自动选择空闲端口；显式指定的其他端口冲突则返回错误。打包脚本每次从静态库生成空运行时表的独立数据库，不读取旧发布数据库或保留旧完成状态；自检日志结束时删除，并断言发布目录没有日志。打包脚本从 README 的用户区标记生成独立包 README，因此发布包只保留面向用户的说明。
 
 ## 7. 已知限制
 

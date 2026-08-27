@@ -9,7 +9,7 @@
 - 本项目是 Survival Log 的离线图鉴数据解析工具，不是游戏本体，也不是运行时 mod。
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
 - 主要模块为 `codex_parser.py`、`codex_database.py`、`codex_save.py`、`codex_server.py`、`codex_launcher.py` 和 `codex_update.py`；静态网页资源位于 `web/`。
-- 源码数据库默认是 `data/survival_log_codex.sqlite3`，源码版不生成存档同步诊断日志；独立版数据库位于 exe 同目录，日志为 `SurvivalLogDataViewer.log`。
+- 源码根目录的 `survival_log_codex.sqlite3` 是跟踪的静态配置库，`survival_log_codex_runtime.sqlite3` 是未跟踪的完成状态、存档元数据和 runtime 缓存库；源码版不生成存档同步诊断日志。源码静态库随 Git 管理，个人状态需要单独备份 runtime 库；独立版使用 exe 同目录的单文件数据库，备份该单一文件即可，日志为 `SurvivalLogDataViewer.log`。
 - 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他路径时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录下的 `snapshots/`。输出文件只能写入用户指定的输出目录。
 - UnityPy 默认安装在 `D:\Codex\SurvivalLogDataViewer\_vendor_unitypy`；`SURVIVALLOG_UNITYPY_DIR` 可以覆盖默认路径。
@@ -65,7 +65,7 @@
 - 不指定 `--category` 或指定 `all` 时生成六类主图鉴和辅助配置；单分类支持 `food`、`dish`、`plant`、`prey`、`craft`、`furniture`、`auxiliary`。
 - `all` 使用 `--output-dir`，显式单分类可以使用 `--output`；输出路径不得位于游戏安装目录。
 - 参数错误、资源缺失、catalog 版本变化、bundle 解密失败、TextAsset 缺失和 schema 不匹配必须返回非零退出码，并给出可操作的中文错误信息。
-- 独立包使用 exe 同目录数据库；README 由打包脚本从用户区生成，不能把开发者说明带入发布包。
+- 源码模式以只读方式打开静态库并附加 runtime 库；独立包使用 exe 同目录单文件数据库。README 由打包脚本从用户区生成，不能把开发者说明带入发布包；每次打包从静态库生成空运行时表，不读取旧发布数据库或旧完成状态，且发布目录不预置日志。
 
 ## 6. 修改前调查和编辑
 

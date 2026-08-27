@@ -18,6 +18,9 @@ class LauncherErrorTests(unittest.TestCase):
                 stack.enter_context(
                     patch.object(codex_launcher, "_startup_log_paths", return_value=(log_path,))
                 )
+                stack.enter_context(
+                    patch.object(codex_launcher.sys, "frozen", True, create=True)
+                )
                 stack.enter_context(patch.object(codex_launcher.sys, "platform", "linux"))
                 stack.enter_context(patch.object(codex_launcher.sys, "stderr", None))
                 codex_launcher.show_error("database startup failed")
@@ -25,6 +28,19 @@ class LauncherErrorTests(unittest.TestCase):
             payload = json.loads(log_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["event"], "startup_error")
             self.assertEqual(payload["message"], "database startup failed")
+
+    def test_show_error_does_not_create_source_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "startup.log"
+            with ExitStack() as stack:
+                stack.enter_context(
+                    patch.object(codex_launcher, "_startup_log_paths", return_value=(log_path,))
+                )
+                stack.enter_context(patch.object(codex_launcher.sys, "platform", "linux"))
+                stack.enter_context(patch.object(codex_launcher.sys, "stderr", None))
+                codex_launcher.show_error("source startup failed")
+
+            self.assertFalse(log_path.exists())
 
 
 if __name__ == "__main__":

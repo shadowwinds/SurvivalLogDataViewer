@@ -127,7 +127,8 @@ def resolve_save_file(requested_path: Path | None) -> Path:
 
 def show_error(message: str) -> None:
     safe_message = _redact_user_path(message)
-    _write_startup_error(safe_message)
+    if getattr(sys, "frozen", False):
+        _write_startup_error(safe_message)
     if sys.stderr is not None:
         try:
             print(safe_message, file=sys.stderr)
@@ -195,7 +196,7 @@ def run_frontend(args: argparse.Namespace) -> None:
     save_file = resolve_save_file(args.save_file)
     try:
         game = validate_game_root(args.game_root) if args.game_root else None
-        result = update_database_if_needed(database_path, game)
+        result = update_database_if_needed(database_path, game, single_file=True)
         print(result.message)
     except Exception as exc:
         show_error(f"自动更新图鉴失败，将继续使用现有数据库：{exc}")
@@ -205,6 +206,7 @@ def run_frontend(args: argparse.Namespace) -> None:
         save_file,
         args.port,
         args.headless,
+        runtime_database_path=None,
         log_path=log_path,
     )
 

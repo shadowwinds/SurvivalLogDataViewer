@@ -28,6 +28,7 @@ def item(
     sub_category: int,
     price: float,
     can_cook: bool = True,
+    in_codex: bool = True,
 ) -> RecipeItemSpec:
     return RecipeItemSpec(
         item_id=item_id,
@@ -38,6 +39,7 @@ def item(
         sub_category_name=f"Subcategory {sub_category}",
         price=price,
         raw_json="{}",
+        in_codex=in_codex,
     )
 
 
@@ -99,6 +101,7 @@ class CookingTierTests(unittest.TestCase):
             self.assertEqual(diagnostics, [])
             self.assertEqual([match["recipe_id"] for match in matches], [expected_recipe_id])
             self.assertEqual(matches[0]["tier"], expected_tier)
+            self.assertEqual(matches[0]["recipe_kind_label_zh"], "通用菜肴")
             self.assertEqual(matches[0]["candidate_recipe_ids"], [1001, 1002, 1003])
 
     def test_tag_combo_combination_count_is_for_selected_recipe(self) -> None:
@@ -147,6 +150,7 @@ class CookingTierTests(unittest.TestCase):
         )
         self.assertEqual(diagnostics, [])
         self.assertEqual([match["recipe_id"] for match in matches], [2002])
+        self.assertEqual(matches[0]["recipe_kind_label_zh"], "特色菜肴")
         self.assertNotIn(70105, [item["item_id"] for item in matches[0]["representative_combination"]])
 
     def test_completed_recipe_is_not_returned(self) -> None:
@@ -307,6 +311,50 @@ class CookingTierTests(unittest.TestCase):
         )
         self.assertEqual(inventory_payload, [])
         self.assertEqual(diagnostics, [])
+
+    def test_recipe_inventory_display_merges_same_item_across_sources(self) -> None:
+        inventory_state = SaveInventoryState(
+            SaveFileInfo(Path("<memory>"), "0" * 64, 0, 0, "test"),
+            (
+                InventoryItem(2527, 2, "主控背包", "backpack"),
+                InventoryItem(2527, 3, "冰柜", "freezer"),
+                InventoryItem(2528, 1, "冰柜", "freezer"),
+            ),
+        )
+
+        inventory_payload, diagnostics = _inventory_payload(
+            inventory_state,
+            items=self.items,
+        )
+
+        self.assertEqual(diagnostics, [])
+        self.assertEqual(
+            inventory_payload[:2],
+            [
+                {
+                    "item_id": 2527,
+                    "name": "Item 2527",
+                    "count": 5,
+                    "source": "主控背包、冰柜",
+                    "container": "backpack、freezer",
+                    "category": 1,
+                    "sub_category": 5,
+                    "sub_category_name": "Subcategory 5",
+                    "price": 7,
+                },
+                {
+                    "item_id": 2528,
+                    "name": "Item 2528",
+                    "count": 1,
+                    "source": "冰柜",
+                    "container": "freezer",
+                    "category": 1,
+                    "sub_category": 5,
+                    "sub_category_name": "Subcategory 5",
+                    "price": 20,
+                },
+            ],
+        )
 
 
 class RecipeConfigTests(unittest.TestCase):

@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
 import json
 import os
-import shutil
 import sqlite3
 import sys
 import tempfile
@@ -46,11 +44,13 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 6
+DATABASE_SCHEMA_VERSION = 7
+RUNTIME_SCHEMA_VERSION = 1
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_DIR / "data"
-DEFAULT_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
-LEGACY_DATABASE_PATH = PROJECT_DIR / "survival_log_codex.sqlite3"
+DEFAULT_DATABASE_PATH = PROJECT_DIR / "survival_log_codex.sqlite3"
+DEFAULT_RUNTIME_DATABASE_PATH = PROJECT_DIR / "survival_log_codex_runtime.sqlite3"
+LEGACY_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
 CATEGORY_LABELS = {
     "food": "食品",
     "dish": "菜肴",
@@ -60,6 +60,23 @@ CATEGORY_LABELS = {
     "furniture": "家具",
 }
 CATEGORY_ORDER = tuple(CATEGORY_LABELS)
+STATIC_TABLES = (
+    "metadata",
+    "codex_categories",
+    "codex_entries",
+    "codex_entry_categories",
+    "entry_relations",
+    "auxiliary_rows",
+    "recipe_items",
+    "recipe_tier_rules",
+    "storage_furniture",
+)
+RUNTIME_TABLES = (
+    "metadata",
+    "completion",
+    "category_completion",
+    "runtime_cache",
+)
 
 
 def _sqlite_integrity_ok(database_path: Path) -> bool:
@@ -78,77 +95,230 @@ def _sqlite_integrity_ok(database_path: Path) -> bool:
         connection.close()
 
 
-def _migrate_legacy_log(legacy_database: Path, database_path: Path) -> None:
-    legacy_log = legacy_database.with_suffix(".log")
-    target_log = database_path.with_suffix(".log")
-    if not legacy_log.is_file() or target_log.exists():
-        return
-    try:
-        shutil.copy2(legacy_log, target_log)
-        legacy_log.unlink()
-    except OSError as exc:
-        print(f"旧诊断日志未能迁移到 data 目录：{exc}", file=sys.stderr)
+def _schema_table(schema: str, table: str) -> str:
+    return table if schema == "main" else f"{schema}.{table}"
 
 
-def _migrate_legacy_database(legacy_database: Path, database_path: Path) -> Path:
-    """Copy and validate the legacy database before replacing it atomically."""
+def _database_schemas(connection: sqlite3.Connection) -> set[str]:
+    return {str(row[1]) for row in connection.execute("PRAGMA database_list")}
 
-    if database_path.exists():
-        raise FileExistsError(f"目标数据库已存在，拒绝覆盖：{database_path}")
+
+def _runtime_schema(connection: sqlite3.Connection) -> str:
+    return "runtime" if "runtime" in _database_schemas(connection) else "main"
+
+
+def _sqlite_table_names(connection: sqlite3.Connection) -> set[str]:
+    return {
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+
+
+def _runtime_schema_sql(schema: str = "main") -> str:
+    prefix = "" if schema == "main" else f"{schema}."
+    return f"""
+CREATE TABLE IF NOT EXISTS {prefix}metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS {prefix}completion (
+    entry_key TEXT PRIMARY KEY,
+    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS {prefix}category_completion (
+    entry_key TEXT NOT NULL,
+    category TEXT NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (entry_key, category)
+);
+
+CREATE TABLE IF NOT EXISTS {prefix}runtime_cache (
+    cache_key TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS {prefix}idx_category_completion_category
+    ON category_completion(category, completed);
+"""
+
+
+def _copy_legacy_runtime_rows(
+    legacy: sqlite3.Connection,
+    runtime: sqlite3.Connection,
+    legacy_tables: set[str],
+) -> None:
+    if "completion" in legacy_tables:
+        runtime.executemany(
+            "INSERT OR REPLACE INTO completion(entry_key, completed, updated_at) VALUES (?, ?, ?)",
+            legacy.execute(
+                "SELECT entry_key, completed, updated_at FROM completion"
+            ).fetchall(),
+        )
+    if "category_completion" in legacy_tables:
+        runtime.executemany(
+            """
+            INSERT OR REPLACE INTO category_completion(
+                entry_key, category, completed, updated_at
+            ) VALUES (?, ?, ?, ?)
+            """,
+            legacy.execute(
+                "SELECT entry_key, category, completed, updated_at FROM category_completion"
+            ).fetchall(),
+        )
+    if "runtime_cache" in legacy_tables:
+        try:
+            runtime.executemany(
+                """
+                INSERT OR REPLACE INTO runtime_cache(
+                    cache_key, signature, value_json, updated_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                legacy.execute(
+                    "SELECT cache_key, signature, value_json, updated_at FROM runtime_cache"
+                ).fetchall(),
+            )
+        except sqlite3.OperationalError:
+            pass
+    if "metadata" in legacy_tables:
+        runtime.executemany(
+            """
+            INSERT INTO metadata(key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            legacy.execute(
+                "SELECT key, value FROM metadata WHERE key LIKE 'save_%'"
+            ).fetchall(),
+        )
+
+
+def _split_legacy_database(
+    legacy_database: Path,
+    static_database: Path,
+    runtime_database: Path,
+) -> None:
+    """Split a validated v6 combined database into static and runtime files."""
+
+    legacy_database = legacy_database.expanduser().resolve()
+    static_database = static_database.expanduser().resolve()
+    runtime_database = runtime_database.expanduser().resolve()
+    if len({legacy_database, static_database, runtime_database}) != 3:
+        raise ValueError("旧数据库、静态库和 runtime 库必须是三个不同的文件")
+    if static_database.exists() or runtime_database.exists():
+        raise FileExistsError("静态库或 runtime 库已存在，拒绝覆盖")
     sidecars = (
         Path(f"{legacy_database}-wal"),
         Path(f"{legacy_database}-shm"),
     )
     if any(path.exists() for path in sidecars):
         raise RuntimeError("旧数据库存在 SQLite WAL/SHM 旁车文件，请先关闭正在使用它的程序")
+    if not _sqlite_integrity_ok(legacy_database):
+        raise sqlite3.DatabaseError("旧数据库完整性检查失败")
 
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary_name = tempfile.mkstemp(
-        prefix=f".{database_path.name}.",
-        suffix=".migrating",
-        dir=database_path.parent,
-    )
-    os.close(fd)
-    temporary_path = Path(temporary_name)
+    static_database.parent.mkdir(parents=True, exist_ok=True)
+    runtime_database.parent.mkdir(parents=True, exist_ok=True)
+    temp_paths: list[Path] = []
+    static_installed = False
+    runtime_installed = False
+    legacy = sqlite3.connect(str(legacy_database), timeout=30)
     try:
-        shutil.copy2(legacy_database, temporary_path)
-        if not _sqlite_integrity_ok(temporary_path):
-            raise sqlite3.DatabaseError("旧数据库完整性检查失败")
-        os.replace(temporary_path, database_path)
-        if not _sqlite_integrity_ok(database_path):
-            database_path.unlink(missing_ok=True)
-            raise sqlite3.DatabaseError("迁移后的数据库完整性检查失败")
+        legacy_tables = _sqlite_table_names(legacy)
+        static_fd, static_name = tempfile.mkstemp(
+            prefix=f".{static_database.name}.", suffix=".migrating", dir=static_database.parent
+        )
+        runtime_fd, runtime_name = tempfile.mkstemp(
+            prefix=f".{runtime_database.name}.", suffix=".migrating", dir=runtime_database.parent
+        )
+        os.close(static_fd)
+        os.close(runtime_fd)
+        static_temp = Path(static_name)
+        runtime_temp = Path(runtime_name)
+        temp_paths.extend((static_temp, runtime_temp))
+
+        static = sqlite3.connect(str(static_temp), timeout=30)
+        runtime = sqlite3.connect(str(runtime_temp), timeout=30)
         try:
+            legacy.backup(static)
+            static.execute("PRAGMA foreign_keys = ON")
+            for table in ("completion", "category_completion", "runtime_cache"):
+                if table in _sqlite_table_names(static):
+                    static.execute(f"DROP TABLE {table}")
+            static.execute("DELETE FROM metadata WHERE key LIKE 'save_%'")
+            static.execute("DELETE FROM metadata WHERE key = 'runtime_schema_version'")
+            static.executescript(STATIC_SCHEMA_SQL)
+            static.execute(
+                """
+                INSERT INTO metadata(key, value) VALUES ('database_schema_version', ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """,
+                (str(DATABASE_SCHEMA_VERSION),),
+            )
+            static.execute(
+                """
+                INSERT INTO metadata(key, value) VALUES ('database_profile', 'static')
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """
+            )
+
+            initialize_runtime_database(runtime)
+            _copy_legacy_runtime_rows(legacy, runtime, legacy_tables)
+            runtime.commit()
+            static.commit()
+        finally:
+            runtime.close()
+            static.close()
+
+        if not _sqlite_integrity_ok(static_temp) or not _sqlite_integrity_ok(runtime_temp):
+            raise sqlite3.DatabaseError("拆分后的数据库完整性检查失败")
+        legacy.close()
+        try:
+            os.replace(static_temp, static_database)
+            static_installed = True
+            os.replace(runtime_temp, runtime_database)
+            runtime_installed = True
             legacy_database.unlink()
-        except OSError as exc:
-            print(f"数据库已复制到 data，但旧文件未能删除：{exc}", file=sys.stderr)
-        _migrate_legacy_log(legacy_database, database_path)
-        return database_path
+        except Exception:
+            if runtime_installed:
+                runtime_database.unlink(missing_ok=True)
+            if static_installed:
+                static_database.unlink(missing_ok=True)
+            raise
+        temp_paths.clear()
     finally:
-        temporary_path.unlink(missing_ok=True)
+        legacy.close()
+        for path in temp_paths:
+            path.unlink(missing_ok=True)
 
 
 def resolve_default_database_path() -> Path:
-    """Resolve the source database and migrate the legacy root file once."""
+    """Resolve the source static database and migrate the old data file once."""
 
     if DEFAULT_DATABASE_PATH.is_file():
-        if LEGACY_DATABASE_PATH.is_file() and not filecmp.cmp(
-            DEFAULT_DATABASE_PATH,
-            LEGACY_DATABASE_PATH,
-            shallow=False,
-        ):
-            print(
-                "data 与根目录存在内容不同的同名数据库，继续使用 data 中的数据库；旧文件未删除",
-                file=sys.stderr,
-            )
         return DEFAULT_DATABASE_PATH
     if not LEGACY_DATABASE_PATH.is_file():
         return DEFAULT_DATABASE_PATH
     try:
-        return _migrate_legacy_database(LEGACY_DATABASE_PATH, DEFAULT_DATABASE_PATH)
+        _split_legacy_database(
+            LEGACY_DATABASE_PATH,
+            DEFAULT_DATABASE_PATH,
+            DEFAULT_RUNTIME_DATABASE_PATH,
+        )
+        return DEFAULT_DATABASE_PATH
     except (OSError, sqlite3.Error, RuntimeError) as exc:
-        print(f"数据库迁移失败，将继续使用根目录旧数据库：{exc}", file=sys.stderr)
-        return LEGACY_DATABASE_PATH
+        raise RuntimeError(
+            f"旧 data 数据库迁移失败，已保留原文件：{exc}"
+        ) from exc
+
+
+def resolve_default_runtime_database_path() -> Path:
+    return DEFAULT_RUNTIME_DATABASE_PATH
 
 
 @dataclass(frozen=True)
@@ -168,7 +338,7 @@ class CompletionSyncResult:
     candidate_score: tuple[int, ...] = ()
 
 
-SCHEMA_SQL = """
+STATIC_SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS metadata (
@@ -199,23 +369,6 @@ CREATE TABLE IF NOT EXISTS codex_entry_categories (
     entry_key TEXT NOT NULL,
     category TEXT NOT NULL,
     sort_order INTEGER NOT NULL,
-    PRIMARY KEY (entry_key, category),
-    FOREIGN KEY (entry_key) REFERENCES codex_entries(entry_key),
-    FOREIGN KEY (category) REFERENCES codex_categories(category)
-);
-
-CREATE TABLE IF NOT EXISTS completion (
-    entry_key TEXT PRIMARY KEY,
-    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (entry_key) REFERENCES codex_entries(entry_key)
-);
-
-CREATE TABLE IF NOT EXISTS category_completion (
-    entry_key TEXT NOT NULL,
-    category TEXT NOT NULL,
-    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
-    updated_at TEXT NOT NULL,
     PRIMARY KEY (entry_key, category),
     FOREIGN KEY (entry_key) REFERENCES codex_entries(entry_key),
     FOREIGN KEY (category) REFERENCES codex_categories(category)
@@ -272,13 +425,14 @@ CREATE INDEX IF NOT EXISTS idx_codex_entries_name
     ON codex_entries(name);
 CREATE INDEX IF NOT EXISTS idx_entry_relations_source
     ON entry_relations(source_entry_key);
-CREATE INDEX IF NOT EXISTS idx_category_completion_category
-    ON category_completion(category, completed);
 CREATE INDEX IF NOT EXISTS idx_recipe_items_cookable_category
     ON recipe_items(can_cook, sub_category, price);
 CREATE INDEX IF NOT EXISTS idx_storage_furniture_name
     ON storage_furniture(name);
 """
+
+RUNTIME_SCHEMA_SQL = _runtime_schema_sql()
+SCHEMA_SQL = STATIC_SCHEMA_SQL + RUNTIME_SCHEMA_SQL
 
 
 def utc_now() -> str:
@@ -489,24 +643,165 @@ def ensure_database_outside_game_root(game_root: Path, database_path: Path) -> N
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    connection.executescript(SCHEMA_SQL)
+    """Initialize a standalone database containing static and runtime tables."""
+
+    connection.executescript(STATIC_SCHEMA_SQL)
+    initialize_runtime_database(connection)
+    row = connection.execute(
+        "SELECT value FROM metadata WHERE key = 'database_schema_version'"
+    ).fetchone()
+    if row is not None:
+        version = int(row[0])
+        if version > DATABASE_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"数据库 schema 版本过高：{row[0]}，当前工具只支持 {DATABASE_SCHEMA_VERSION}"
+            )
+        if version < DATABASE_SCHEMA_VERSION:
+            connection.execute(
+                "UPDATE metadata SET value = ? WHERE key = 'database_schema_version'",
+                (str(DATABASE_SCHEMA_VERSION),),
+            )
+    connection.execute(
+        """
+        INSERT INTO metadata(key, value) VALUES ('database_profile', 'standalone')
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """
+    )
+
+
+def initialize_static_database(connection: sqlite3.Connection) -> None:
+    connection.executescript(STATIC_SCHEMA_SQL)
+    unexpected = sorted(_sqlite_table_names(connection) & set(RUNTIME_TABLES[1:]))
+    if unexpected:
+        raise RuntimeError(
+            f"静态数据库包含运行时表：{', '.join(unexpected)}；请先执行 v6 数据库拆分"
+        )
     row = connection.execute(
         "SELECT value FROM metadata WHERE key = 'database_schema_version'"
     ).fetchone()
     if row is not None and int(row[0]) > DATABASE_SCHEMA_VERSION:
         raise RuntimeError(
-            f"数据库 schema 版本过高：{row[0]}，当前工具只支持 {DATABASE_SCHEMA_VERSION}"
+            f"静态数据库 schema 版本过高：{row[0]}，当前工具只支持 {DATABASE_SCHEMA_VERSION}"
+        )
+    connection.execute(
+        """
+        INSERT INTO metadata(key, value) VALUES ('database_schema_version', ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """,
+        (str(DATABASE_SCHEMA_VERSION),),
+    )
+    connection.execute(
+        """
+        INSERT INTO metadata(key, value) VALUES ('database_profile', 'static')
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """
+    )
+
+
+def initialize_runtime_database(
+    connection: sqlite3.Connection,
+    schema: str = "main",
+) -> None:
+    connection.executescript(_runtime_schema_sql(schema))
+    metadata_table = _schema_table(schema, "metadata")
+    row = connection.execute(
+        f"SELECT value FROM {metadata_table} WHERE key = 'runtime_schema_version'"
+    ).fetchone()
+    if row is not None and int(row[0]) > RUNTIME_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"runtime 数据库 schema 版本过高：{row[0]}，当前工具只支持 {RUNTIME_SCHEMA_VERSION}"
+        )
+    connection.execute(
+        f"""
+        INSERT INTO {metadata_table}(key, value)
+        VALUES ('runtime_schema_version', ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """,
+        (str(RUNTIME_SCHEMA_VERSION),),
+    )
+
+
+def _validate_static_database(connection: sqlite3.Connection) -> None:
+    table_names = _sqlite_table_names(connection)
+    unexpected = sorted(table_names & set(RUNTIME_TABLES[1:]))
+    if unexpected:
+        raise RuntimeError(
+            f"静态数据库包含运行时表：{', '.join(unexpected)}；请使用独立版单文件模式或先拆分旧库"
+        )
+    missing = [table for table in STATIC_TABLES if table != "metadata" and table not in table_names]
+    if "metadata" not in table_names:
+        missing.append("metadata")
+    if missing:
+        raise RuntimeError(f"静态数据库缺少表：{', '.join(missing)}")
+    row = connection.execute(
+        "SELECT value FROM metadata WHERE key = 'database_schema_version'"
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("静态数据库缺少 database_schema_version 元数据")
+    version = int(row[0])
+    if version > DATABASE_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"静态数据库 schema 版本过高：{version}，当前工具只支持 {DATABASE_SCHEMA_VERSION}"
         )
 
 
-def _upsert_metadata(connection: sqlite3.Connection, values: dict[str, str]) -> None:
+def _upsert_metadata(
+    connection: sqlite3.Connection,
+    values: dict[str, str],
+    schema: str = "main",
+) -> None:
+    metadata_table = _schema_table(schema, "metadata")
     connection.executemany(
-        """
-        INSERT INTO metadata(key, value) VALUES (?, ?)
+        f"""
+        INSERT INTO {metadata_table}(key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value=excluded.value
         """,
         values.items(),
     )
+
+
+def get_runtime_cache(
+    connection: sqlite3.Connection,
+    cache_key: str,
+    signature: str,
+) -> dict[str, Any] | None:
+    """Read a JSON cache entry only when its source signature still matches."""
+
+    runtime_schema = _runtime_schema(connection)
+    table = _schema_table(runtime_schema, "runtime_cache")
+    row = connection.execute(
+        f"SELECT signature, value_json FROM {table} WHERE cache_key = ?",
+        (cache_key,),
+    ).fetchone()
+    if row is None or str(row[0]) != signature:
+        return None
+    try:
+        value = json.loads(str(row[1]))
+    except (TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def set_runtime_cache(
+    connection: sqlite3.Connection,
+    cache_key: str,
+    signature: str,
+    value: dict[str, Any],
+) -> None:
+    runtime_schema = _runtime_schema(connection)
+    table = _schema_table(runtime_schema, "runtime_cache")
+    with connection:
+        connection.execute(
+            f"""
+            INSERT INTO {table}(cache_key, signature, value_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                signature=excluded.signature,
+                value_json=excluded.value_json,
+                updated_at=excluded.updated_at
+            """,
+            (cache_key, signature, json_text(value), utc_now()),
+        )
 
 
 def _current_category_entries(
@@ -549,6 +844,9 @@ def sync_game_completion(
     """Synchronize completion.completed from the read-only HistorySave file."""
 
     requested_path = Path(save_file or default_save_file()).expanduser()
+    runtime_schema = _runtime_schema(connection)
+    completion_table = _schema_table(runtime_schema, "completion")
+    category_completion_table = _schema_table(runtime_schema, "category_completion")
     category_entries, current_entry_keys = _current_category_entries(connection)
     known_category_ids = {
         category: set(source_ids)
@@ -579,6 +877,7 @@ def sync_game_completion(
                         "save_sync_error": message,
                         "save_last_attempt_at": utc_now(),
                     },
+                    runtime_schema,
                 )
         return CompletionSyncResult(
             status="error",
@@ -593,7 +892,7 @@ def sync_game_completion(
 
     metadata = get_metadata(connection)
     category_completion_rows = int(
-        connection.execute("SELECT COUNT(*) FROM category_completion").fetchone()[0]
+        connection.execute(f"SELECT COUNT(*) FROM {category_completion_table}").fetchone()[0]
     )
     expected_category_completion_rows = int(
         connection.execute(
@@ -665,8 +964,15 @@ def sync_game_completion(
     updated_entries = 0
     with connection:
         connection.executemany(
-            """
-            INSERT OR IGNORE INTO category_completion(
+            f"""
+            INSERT OR IGNORE INTO {completion_table}(entry_key, completed, updated_at)
+            VALUES (?, 0, ?)
+            """,
+            ((entry_key, now) for entry_key in sorted(current_entry_keys)),
+        )
+        connection.executemany(
+            f"""
+            INSERT OR IGNORE INTO {category_completion_table}(
                 entry_key, category, completed, updated_at
             ) VALUES (?, ?, 0, ?)
             """,
@@ -674,8 +980,8 @@ def sync_game_completion(
         )
         for category in CATEGORY_ORDER:
             cursor = connection.execute(
-                """
-                UPDATE category_completion
+                f"""
+                UPDATE {category_completion_table}
                 SET completed = 0, updated_at = ?
                 WHERE category = ? AND entry_key IN (
                     SELECT ec.entry_key
@@ -692,7 +998,7 @@ def sync_game_completion(
                 placeholders = ",".join("?" for _ in category_keys)
                 cursor = connection.execute(
                     f"""
-                    UPDATE category_completion
+                    UPDATE {category_completion_table}
                     SET completed = 1, updated_at = ?
                     WHERE category = ? AND entry_key IN ({placeholders}) AND completed <> 1
                     """,
@@ -701,8 +1007,8 @@ def sync_game_completion(
                 updated_entries += max(0, cursor.rowcount)
         if current_entry_keys:
             cursor = connection.execute(
-                """
-                UPDATE completion
+                f"""
+                UPDATE {completion_table}
                 SET completed = 0, updated_at = ?
                 WHERE entry_key IN (
                     SELECT entry_key FROM codex_entries WHERE is_current = 1
@@ -715,7 +1021,7 @@ def sync_game_completion(
             placeholders = ",".join("?" for _ in desired_entry_keys)
             cursor = connection.execute(
                 f"""
-                UPDATE completion
+                UPDATE {completion_table}
                 SET completed = 1, updated_at = ?
                 WHERE entry_key IN ({placeholders}) AND completed <> 1
                 """,
@@ -744,6 +1050,7 @@ def sync_game_completion(
                 "save_candidate_count": str(state.candidate_count),
                 "save_candidate_score": json_text(list(state.candidate_score)),
             },
+            runtime_schema,
         )
 
     write_save_diagnostic(
@@ -783,8 +1090,18 @@ def build_database(
     save_file: Path | None = None,
     *,
     sync_save: bool = True,
+    runtime_database_path: Path | None = None,
+    single_file: bool = False,
 ) -> dict[str, Any]:
+    game_root = game_root.expanduser().resolve()
+    database_path = database_path.expanduser().resolve()
+    if runtime_database_path is not None:
+        runtime_database_path = runtime_database_path.expanduser().resolve()
+    if single_file and runtime_database_path is not None:
+        raise ValueError("独立版单文件模式不能同时指定 runtime 数据库")
     ensure_database_outside_game_root(game_root, database_path)
+    if runtime_database_path is not None:
+        ensure_database_outside_game_root(game_root, runtime_database_path)
     context = build_extraction_context(game_root)
     recipe_items, recipe_specs, tier_rules = load_recipe_static_data(game_root, context)
     storage_furniture = storage_furniture_specs_from_rows(
@@ -797,12 +1114,18 @@ def build_database(
     entries, memberships = collect_entries(context)
     relations = build_relations(context, entries)
     database_path.parent.mkdir(parents=True, exist_ok=True)
+    if runtime_database_path is not None:
+        runtime_database_path.parent.mkdir(parents=True, exist_ok=True)
 
     connection = sqlite3.connect(str(database_path), timeout=30)
+    save_sync: CompletionSyncResult | None = None
     try:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        initialize_database(connection)
+        if single_file:
+            initialize_database(connection)
+        else:
+            initialize_static_database(connection)
         imported_at = utc_now()
         with connection:
             connection.execute("UPDATE codex_entries SET is_current = 0")
@@ -851,23 +1174,25 @@ def build_database(
                         json_text(row.values),
                     ),
                 )
-                connection.execute(
-                    "INSERT OR IGNORE INTO completion(entry_key, completed, updated_at) VALUES (?, 0, ?)",
-                    (key, imported_at),
-                )
+                if single_file:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO completion(entry_key, completed, updated_at) VALUES (?, 0, ?)",
+                        (key, imported_at),
+                    )
 
             connection.executemany(
                 "INSERT INTO codex_entry_categories(entry_key, category, sort_order) VALUES (?, ?, ?)",
                 memberships,
             )
-            connection.executemany(
-                """
-                INSERT OR IGNORE INTO category_completion(
-                    entry_key, category, completed, updated_at
-                ) VALUES (?, ?, 0, ?)
-                """,
-                ((entry_key, category, imported_at) for entry_key, category, _ in memberships),
-            )
+            if single_file:
+                connection.executemany(
+                    """
+                    INSERT OR IGNORE INTO category_completion(
+                        entry_key, category, completed, updated_at
+                    ) VALUES (?, ?, 0, ?)
+                    """,
+                    ((entry_key, category, imported_at) for entry_key, category, _ in memberships),
+                )
             connection.executemany(
                 """
                 INSERT INTO entry_relations(
@@ -907,11 +1232,11 @@ def build_database(
                 "recipe_count": str(len(recipe_specs)),
                 "recipe_tier_rule_count": str(recipe_table_counts["recipe_tier_rules"]),
                 "storage_furniture_count": str(recipe_table_counts["storage_furniture"]),
+                "database_profile": "standalone" if single_file else "static",
             }
             _upsert_metadata(connection, metadata)
 
-        save_sync: CompletionSyncResult | None = None
-        if sync_save:
+        if sync_save and single_file:
             save_sync = sync_game_completion(
                 connection,
                 save_file or default_save_file(),
@@ -921,26 +1246,45 @@ def build_database(
             if save_sync.status == "error":
                 raise RuntimeError(save_sync.message)
 
-        return {
-            "entries": len(entries),
-            "category_mappings": len(memberships),
-            "relations": len(relations),
-            "auxiliary_rows": sum(len(context.tables[name]) for name, _title in AUXILIARY_TABLES),
-            "recipe_items": len(recipe_items),
-            "recipe_count": len(recipe_specs),
-            "recipe_tier_rules": len(tier_rules),
-            **{
-                category: len(rows)
-                for category, rows in select_category_rows(context).items()
-            },
-            "save_sync": save_sync,
-        }
     finally:
         connection.close()
 
+    if sync_save and not single_file:
+        runtime_path = runtime_database_path or DEFAULT_RUNTIME_DATABASE_PATH
+        ensure_database_outside_game_root(game_root, runtime_path)
+        runtime_connection = open_database(
+            database_path,
+            runtime_path,
+            check_same_thread=False,
+        )
+        try:
+            save_sync = sync_game_completion(
+                runtime_connection,
+                save_file or default_save_file(),
+                force=True,
+                log_path=None,
+            )
+            if save_sync.status == "error":
+                raise RuntimeError(save_sync.message)
+        finally:
+            runtime_connection.close()
+
+    selected_rows = select_category_rows(context)
+    return {
+        "entries": len(entries),
+        "category_mappings": len(memberships),
+        "relations": len(relations),
+        "auxiliary_rows": sum(len(context.tables[name]) for name, _title in AUXILIARY_TABLES),
+        "recipe_items": len(recipe_items),
+        "recipe_count": len(recipe_specs),
+        "recipe_tier_rules": len(tier_rules),
+        **{category: len(rows) for category, rows in selected_rows.items()},
+        "save_sync": save_sync,
+    }
+
 
 def prepare_packaged_database(source_path: Path, destination_path: Path) -> Path:
-    """Copy a database for distribution with no player completion or save metadata."""
+    """Create a standalone package database with empty runtime state."""
 
     source = source_path.expanduser().resolve()
     destination = destination_path.expanduser().resolve()
@@ -949,39 +1293,90 @@ def prepare_packaged_database(source_path: Path, destination_path: Path) -> Path
     if source == destination:
         raise ValueError("打包数据库的源文件和目标文件不能相同")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    connection = sqlite3.connect(str(destination), timeout=30)
+    if not _sqlite_integrity_ok(source):
+        raise sqlite3.DatabaseError(f"待打包数据库完整性检查失败：{source}")
+
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".packaging", dir=destination.parent
+    )
+    os.close(temp_fd)
+    temp_path = Path(temp_name)
+    source_connection = sqlite3.connect(
+        source.as_uri() + "?mode=ro",
+        uri=True,
+        timeout=30,
+    )
+    connection = sqlite3.connect(str(temp_path), timeout=30)
     try:
+        source_connection.backup(connection)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         initialize_database(connection)
-        now = utc_now()
         with connection:
-            connection.execute("UPDATE completion SET completed = 0, updated_at = ?", (now,))
-            connection.execute(
-                "UPDATE category_completion SET completed = 0, updated_at = ?",
-                (now,),
-            )
+            for table in ("completion", "category_completion", "runtime_cache"):
+                connection.execute(f"DELETE FROM {table}")
             connection.execute("DELETE FROM metadata WHERE key GLOB 'save_*'")
+            connection.execute(
+                """
+                INSERT INTO metadata(key, value) VALUES ('database_profile', 'standalone')
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """
+            )
+        if not _sqlite_integrity_ok(temp_path):
+            raise sqlite3.DatabaseError("生成的独立版数据库完整性检查失败")
     finally:
+        source_connection.close()
         connection.close()
+    try:
+        os.replace(temp_path, destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
     return destination
 
 
 def open_database(
     database_path: Path,
+    runtime_database_path: Path | None = None,
     *,
     check_same_thread: bool = True,
 ) -> sqlite3.Connection:
+    database_path = database_path.expanduser().resolve()
     if not database_path.exists():
         raise FileNotFoundError(f"找不到图鉴数据库：{database_path}")
+
+    if runtime_database_path is None:
+        connection = sqlite3.connect(
+            str(database_path),
+            timeout=30,
+            check_same_thread=check_same_thread,
+        )
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            initialize_database(connection)
+            connection.commit()
+        except Exception:
+            connection.close()
+            raise
+        return connection
+
+    runtime_database_path = runtime_database_path.expanduser().resolve()
+    if database_path == runtime_database_path:
+        raise ValueError("静态数据库和 runtime 数据库不能是同一个文件")
+    runtime_database_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(
-        str(database_path),
+        database_path.as_uri() + "?mode=ro",
+        uri=True,
         timeout=30,
         check_same_thread=check_same_thread,
     )
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     try:
-        initialize_database(connection)
+        _validate_static_database(connection)
+        connection.execute("ATTACH DATABASE ? AS runtime", (str(runtime_database_path),))
+        initialize_runtime_database(connection, "runtime")
+        connection.commit()
     except Exception:
         connection.close()
         raise
@@ -989,22 +1384,31 @@ def open_database(
 
 
 def get_metadata(connection: sqlite3.Connection) -> dict[str, str]:
-    return {
+    metadata = {
         row["key"]: row["value"]
         for row in connection.execute("SELECT key, value FROM metadata")
     }
+    if "runtime" in _database_schemas(connection):
+        metadata.update(
+            {
+                row["key"]: row["value"]
+                for row in connection.execute("SELECT key, value FROM runtime.metadata")
+            }
+        )
+    return metadata
 
 
 def get_category_summaries(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    category_completion_table = _schema_table(_runtime_schema(connection), "category_completion")
     rows = connection.execute(
-        """
+        f"""
         SELECT c.category, c.label,
                COUNT(DISTINCT e.entry_key) AS total,
                COUNT(DISTINCT CASE WHEN cc.completed = 1 THEN e.entry_key END) AS completed
         FROM codex_categories c
         LEFT JOIN codex_entry_categories ec ON ec.category = c.category
         LEFT JOIN codex_entries e ON e.entry_key = ec.entry_key AND e.is_current = 1
-        LEFT JOIN category_completion cc
+        LEFT JOIN {category_completion_table} cc
             ON cc.entry_key = e.entry_key AND cc.category = c.category
         GROUP BY c.category, c.label, c.sort_order
         ORDER BY c.sort_order
@@ -1030,6 +1434,7 @@ def query_entries(
     offset: int = 0,
     material_search: str = "",
 ) -> list[dict[str, Any]]:
+    category_completion_table = _schema_table(_runtime_schema(connection), "category_completion")
     clauses = ["ec.category = ?", "e.is_current = 1"]
     params: list[Any] = [category]
     if name_search.strip():
@@ -1073,7 +1478,7 @@ def query_entries(
                COALESCE(cc.completed, 0) AS completed
         FROM codex_entry_categories ec
         JOIN codex_entries e ON e.entry_key = ec.entry_key
-        LEFT JOIN category_completion cc
+        LEFT JOIN {category_completion_table} cc
             ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
         ORDER BY e.source_id, e.name COLLATE NOCASE
@@ -1096,6 +1501,7 @@ def count_entries(
     completion_filter: str = "all",
     material_search: str = "",
 ) -> int:
+    category_completion_table = _schema_table(_runtime_schema(connection), "category_completion")
     rows = query_entries(
         connection,
         category,
@@ -1149,7 +1555,7 @@ def count_entries(
         SELECT COUNT(*)
         FROM codex_entry_categories ec
         JOIN codex_entries e ON e.entry_key = ec.entry_key
-        LEFT JOIN category_completion cc
+        LEFT JOIN {category_completion_table} cc
             ON cc.entry_key = e.entry_key AND cc.category = ec.category
         WHERE {' AND '.join(clauses)}
         """,
@@ -1163,25 +1569,29 @@ def get_entry(
     entry_key: str,
     category: str | None = None,
 ) -> dict[str, Any] | None:
+    runtime_schema = _runtime_schema(connection)
+    completion_table = _schema_table(runtime_schema, "completion")
+    category_completion_table = _schema_table(runtime_schema, "category_completion")
     if category is None:
         row = connection.execute(
-            """
+            f"""
             SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
-                   e.description, e.icon_path, e.raw_json, e.is_current, co.completed
+                   e.description, e.icon_path, e.raw_json, e.is_current,
+                   COALESCE(co.completed, 0) AS completed
             FROM codex_entries e
-            JOIN completion co ON co.entry_key = e.entry_key
+            LEFT JOIN {completion_table} co ON co.entry_key = e.entry_key
             WHERE e.entry_key = ?
             """,
             (entry_key,),
         ).fetchone()
     else:
         row = connection.execute(
-            """
+            f"""
             SELECT e.entry_key, e.source_table, e.source_id, e.name, e.name_key,
                    e.description, e.icon_path, e.raw_json, e.is_current,
                    COALESCE(cc.completed, 0) AS completed
             FROM codex_entries e
-            LEFT JOIN category_completion cc
+            LEFT JOIN {category_completion_table} cc
                 ON cc.entry_key = e.entry_key AND cc.category = ?
             WHERE e.entry_key = ?
             """,
@@ -1219,7 +1629,13 @@ def main() -> int:
         "--database",
         type=Path,
         default=None,
-        help="SQLite 数据库路径",
+        help="静态（源码）或单文件（独立版）SQLite 数据库路径",
+    )
+    parser.add_argument(
+        "--runtime-database",
+        type=Path,
+        default=None,
+        help="源码模式 runtime SQLite 数据库路径",
     )
     parser.add_argument(
         "--save-file",
@@ -1246,13 +1662,18 @@ def main() -> int:
             print(f"打包数据库：{destination}")
             print("完成状态：已清空；save_* 元数据：已清除")
             return 0
+        runtime_database_path = (
+            args.runtime_database or resolve_default_runtime_database_path()
+        )
         counts = build_database(
             args.game_root,
             database_path,
             args.save_file,
             sync_save=not args.no_save_sync,
+            runtime_database_path=runtime_database_path,
         )
         print(f"数据库：{database_path}")
+        print(f"runtime 数据库：{runtime_database_path}")
         for category in CATEGORY_ORDER:
             print(f"{CATEGORY_LABELS[category]}：{counts[category]} 条")
         print(

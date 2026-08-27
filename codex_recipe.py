@@ -561,6 +561,8 @@ def _match_payload(
         "candidate_recipe_ids": sorted(int(recipe_id) for recipe_id in candidate_recipe_ids),
         "specific_items": list(recipe.specific_items),
         "tag_combo": list(recipe.tag_combo),
+        "recipe_kind": "generic" if recipe.tag_combo else "specific",
+        "recipe_kind_label_zh": "通用菜肴" if recipe.tag_combo else "特色菜肴",
         "tier": tier,
         "tier_label": TIER_LABELS.get(tier, "指定食材"),
         "tier_label_zh": TIER_LABELS_ZH.get(tier, "指定食材"),
@@ -895,7 +897,9 @@ def _inventory_payload(
     *,
     items: Mapping[int, RecipeItemSpec],
 ) -> tuple[list[dict[str, object]], list[str]]:
-    result: list[dict[str, object]] = []
+    merged: dict[int, dict[str, object]] = {}
+    source_values: dict[int, list[str]] = {}
+    container_values: dict[int, list[str]] = {}
     diagnostics = list(inventory.diagnostics)
     for item in inventory.items:
         spec = items.get(item.item_config_id)
@@ -904,11 +908,13 @@ def _inventory_payload(
             continue
         if not spec.can_cook or not spec.in_codex:
             continue
-        result.append(
-            {
-                "item_id": item.item_config_id,
+        item_id = int(item.item_config_id)
+        current = merged.get(item_id)
+        if current is None:
+            merged[item_id] = {
+                "item_id": item_id,
                 "name": spec.name,
-                "count": item.item_count,
+                "count": int(item.item_count),
                 "source": item.source,
                 "container": item.container,
                 "category": spec.category,
@@ -916,7 +922,24 @@ def _inventory_payload(
                 "sub_category_name": spec.sub_category_name or f"ID:{spec.sub_category}",
                 "price": spec.price,
             }
-        )
+            source_values[item_id] = []
+            container_values[item_id] = []
+        else:
+            current["count"] = int(current["count"]) + int(item.item_count)
+        for value, values in (
+            (str(item.source).strip(), source_values[item_id]),
+            (str(item.container).strip(), container_values[item_id]),
+        ):
+            if value and value not in values:
+                values.append(value)
+
+    result = []
+    for item_id, payload in merged.items():
+        sources = source_values[item_id]
+        containers = container_values[item_id]
+        payload["source"] = "、".join(sources) or "未知来源"
+        payload["container"] = "、".join(containers) or "unknown"
+        result.append(payload)
     return result, sorted(set(diagnostics))
 
 

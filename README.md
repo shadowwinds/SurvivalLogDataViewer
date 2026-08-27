@@ -31,7 +31,7 @@
 
 完成状态同步只读取游戏保存的图鉴完成列表；菜肴页面另行只读各子存档的主控背包，以及名称严格为“双门冰箱”“豪华版双门冰箱”“双开门冰箱”或“冰柜”的家具库存，不读取其他储物容器或联网数据，也不会写回存档。主存档和备份都无法解析时，页面会保留上一次有效完成状态并显示同步错误。
 
-当前数据库 schema 为 v6。菜肴近匹配只有在精确配方缺一个物品数量，或分类配方只缺一个分类槽位且其余实际库存组合完整时才显示；多个可替代食材仍属于同一个分类槽位。
+当前数据库 schema 为 v7。菜肴近匹配只有在精确配方缺一个物品数量，或分类配方只缺一个分类槽位且其余实际库存组合完整时才显示；多个可替代食材仍属于同一个分类槽位。
 
 ### 使用图鉴页面
 
@@ -52,7 +52,7 @@
 
 ### 日志、文件和退出
 
-独立版会将存档同步诊断写入 `SurvivalLogDataViewer.log`。源码版不生成存档同步诊断日志。日志只记录解析阶段、文件摘要、图鉴映射位置、候选评分和错误原因，不记录原始存档字节；分发目录不可写时会回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。
+独立版首次实际使用、首次 API 同步或启动错误时才建立 `SurvivalLogDataViewer.log`，打包初始目录不包含日志。源码版不生成存档同步诊断日志。日志只记录解析阶段、文件摘要、图鉴映射位置、候选评分和错误原因，不记录原始存档字节；分发目录不可写时会回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。
 
 必须整体保留 `SurvivalLogDataViewer/` 文件夹，其中的 exe、网页资源和 SQLite 数据库缺一不可。需要备份个人完成状态时，关闭图鉴页面后复制 `SurvivalLogDataViewer.sqlite3` 即可。
 
@@ -74,13 +74,13 @@
 
 程序只在存档签名发生变化时重新读取存档。游戏正在保存时，主文件可能暂时无法读取，程序会尝试同名 `.bak` 文件；如果备份也不可用，不会把页面上的旧完成状态清空。关闭游戏并等待存档写入完成后，页面会在下一次轮询时自动刷新。
 
-独立版的 `SurvivalLogDataViewer.sqlite3` 同时保存图鉴配置和同步后的完成状态。备份前先关闭图鉴页面，再复制整个数据库文件；恢复备份时也应先退出程序，避免 SQLite 文件仍被服务占用。源码运行使用 `data\survival_log_codex.sqlite3`，不要把两种运行方式的数据库混用。
+独立版的 `SurvivalLogDataViewer.sqlite3` 同时保存图鉴配置和同步后的完成状态。备份前先关闭图鉴页面，再复制整个数据库文件；恢复备份时也应先退出程序，避免 SQLite 文件仍被服务占用。源码运行使用根目录下跟踪的 `survival_log_codex.sqlite3` 静态库，以及未跟踪的 `survival_log_codex_runtime.sqlite3` runtime 库；不要把两种运行方式的数据库混用。
 
 ### 游戏更新和文件管理
 
 程序会把数据库记录的游戏资源版本与本机安装目录的 catalog 版本进行比较。版本一致时直接打开已有数据库，版本变化时才重新解析配置。更新过程只读取游戏文件，并通过数据库事务写入新结果；资源缺失、版本格式异常或 schema 不匹配时会显示错误并保留旧数据库。
 
-发布包必须作为完整文件夹移动或备份。除了 `生存日志图鉴.exe`，网页资源目录和 `SurvivalLogDataViewer.sqlite3` 也是运行所需文件；只复制 exe 会导致页面或数据库缺失。日志可以一起保留，用于排查存档同步问题，但其中不包含原始存档内容。
+发布包必须作为完整文件夹移动或备份。除了 `生存日志图鉴.exe`，网页资源目录和 `SurvivalLogDataViewer.sqlite3` 也是运行所需文件；只复制 exe 会导致页面或数据库缺失。新生成的发布目录不包含日志；程序使用后产生的日志可以一起保留，用于排查存档同步问题，但其中不包含原始存档内容。
 
 ### 页面使用建议
 
@@ -118,7 +118,8 @@
 | `survival_log_codex.spec` | PyInstaller 依赖配置 |
 | `web/` | 静态网页资源 |
 | `snapshots/` | 七份版本化 Markdown 快照 |
-| `data/` | 源码运行数据库，可重建；存档同步诊断日志不在源码版生成 |
+| `survival_log_codex.sqlite3` | 跟踪的源码静态配置库 |
+| `survival_log_codex_runtime.sqlite3` | 未跟踪的源码完成状态、存档元数据和 runtime 缓存 |
 | `parser_notes.md` | 资源格式、schema、分类和运行限制 |
 
 ### 开发环境和依赖
@@ -137,7 +138,9 @@ python -m pip install --target ".\_vendor_unitypy" UnityPy
 启动本地网页服务：
 
 ```powershell
-python .\codex_server.py --database .\data\survival_log_codex.sqlite3
+python .\codex_server.py `
+  --database .\survival_log_codex.sqlite3 `
+  --runtime-database .\survival_log_codex_runtime.sqlite3
 ```
 
 构建数据库：
@@ -145,7 +148,8 @@ python .\codex_server.py --database .\data\survival_log_codex.sqlite3
 ```powershell
 python .\codex_database.py `
   --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
-  --database .\data\survival_log_codex.sqlite3
+  --database .\survival_log_codex.sqlite3 `
+  --runtime-database .\survival_log_codex_runtime.sqlite3
 ```
 
 默认导出全部七份 Markdown 到 `snapshots/`：
@@ -168,7 +172,7 @@ PowerShell -ExecutionPolicy Bypass -File .\package_frontend.ps1
 
 产物位于 `dist\SurvivalLogDataViewer\`，包含网页资源、预生成 SQLite 数据库和精简的 UnityPy 运行依赖，不包含游戏目录、catalog、bundle 或原始存档。脚本从 README 的用户区标记生成发布包中的 README，因此独立包不会携带开发者说明。
 
-打包脚本会先强制关闭后台的 `生存日志图鉴.exe` 进程，构建完成后再执行首页、状态和配方接口自检；只有自检通过才替换现有发布目录。兼容的旧数据库会保留完成状态，存在 WAL 旁车文件时也会通过 SQLite backup 一并保留。
+打包脚本会先强制关闭后台的 `生存日志图鉴.exe` 进程，每次从跟踪的静态库生成一个全新的 `SurvivalLogDataViewer.sqlite3`，其中运行时表为空，不读取或合并旧发布数据库。构建完成后再执行首页、状态和配方接口自检；只有自检通过才替换现有发布目录。自检期间产生的日志会删除，并断言最终发布目录没有日志文件。
 
 `package_frontend.ps1` 是当前工作区的本地打包脚本，按项目约定继续被 Git 忽略；从干净克隆构建时需要另行提供该脚本。详细资源格式、数据库结构、完成状态同步和限制见 [`parser_notes.md`](./parser_notes.md)，长期工作规范见 [`AGENTS.md`](./AGENTS.md)。
 <!-- END DEVELOPER GUIDE -->

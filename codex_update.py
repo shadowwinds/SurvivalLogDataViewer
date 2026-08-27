@@ -294,6 +294,9 @@ def _database_schema_version(database_path: Path) -> str:
 def update_database_if_needed(
     database_path: Path,
     game: GameInstallation | None = None,
+    *,
+    runtime_database_path: Path | None = None,
+    single_file: bool = False,
 ) -> UpdateResult:
     database_path = database_path.expanduser().resolve()
     game = game or discover_game_root()
@@ -309,7 +312,22 @@ def update_database_if_needed(
     ):
         return UpdateResult("unchanged", game.root, old_version, game.package_version, f"图鉴已是游戏版本 {game.package_version}")
 
-    build_database(game.root, database_path, sync_save=False)
+    if single_file:
+        build_database(
+            game.root,
+            database_path,
+            sync_save=False,
+            single_file=True,
+        )
+    elif runtime_database_path is None:
+        build_database(game.root, database_path, sync_save=False)
+    else:
+        build_database(
+            game.root,
+            database_path,
+            sync_save=False,
+            runtime_database_path=runtime_database_path,
+        )
     return UpdateResult(
         "updated",
         game.root,

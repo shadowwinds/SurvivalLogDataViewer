@@ -27,9 +27,12 @@ from codex_database import (
     get_entry_relations,
     get_metadata,
     get_overall_summary,
+    get_runtime_cache,
     open_database,
     query_entries,
     resolve_default_database_path,
+    resolve_default_runtime_database_path,
+    set_runtime_cache,
     sync_game_completion,
 )
 from codex_save import SaveParseError, default_save_file
@@ -73,6 +76,12 @@ def default_database_path() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent / "SurvivalLogDataViewer.sqlite3"
     return resolve_default_database_path()
+
+
+def default_runtime_database_path() -> Path | None:
+    if getattr(sys, "frozen", False):
+        return None
+    return resolve_default_runtime_database_path()
 
 
 def static_root() -> Path:
@@ -304,12 +313,22 @@ class CodexService:
         database_path: Path,
         save_file: Path,
         *,
+        runtime_database_path: Path | None = None,
         log_path: Path | None = None,
     ):
         self.database_path = database_path.expanduser().resolve()
+        self.runtime_database_path = (
+            runtime_database_path.expanduser().resolve()
+            if runtime_database_path is not None
+            else None
+        )
         self.save_file = save_file.expanduser().resolve()
         self.log_path = log_path.expanduser().resolve() if log_path is not None else None
-        self.connection = open_database(self.database_path, check_same_thread=False)
+        self.connection = open_database(
+            self.database_path,
+            self.runtime_database_path,
+            check_same_thread=False,
+        )
         self._lock = threading.RLock()
         self._last_success_signature: tuple[Any, ...] | None = None
         self._last_sync: CompletionSyncResult | None = None
@@ -449,13 +468,35 @@ class CodexService:
             signature = self._recipe_signature()
             if self._last_recipe_plan is not None and self._last_recipe_signature == signature:
                 return self._last_recipe_plan
+            metadata = get_metadata(self.connection)
+            cache_signature = json.dumps(
+                {
+                    "save_signature": signature,
+                    "game_version": metadata.get("game_version", ""),
+                    "database_schema_version": metadata.get("database_schema_version", ""),
+                    "imported_at": metadata.get("imported_at", ""),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            cached = get_runtime_cache(
+                self.connection,
+                "recipe_plans",
+                cache_signature,
+            )
+            if cached is not None and isinstance(cached.get("revision"), str):
+                self._last_recipe_signature = signature
+                self._last_recipe_plan = cached
+                return cached
             try:
                 payload = build_recipe_plan(self.connection, self.save_file)
             except (OSError, RecipeConfigError, SaveParseError, sqlite3.Error) as exc:
                 payload = build_recipe_error(str(exc))
             payload["revision"] = json.dumps(
                 {
-                    "save_signature": signature,
+                    "cache_signature": cache_signature,
                     "history_source": payload.get("history_source"),
                     "status": payload.get("status"),
                 },
@@ -466,6 +507,13 @@ class CodexService:
             )
             self._last_recipe_signature = signature
             self._last_recipe_plan = payload
+            if payload.get("status") != "error":
+                set_runtime_cache(
+                    self.connection,
+                    "recipe_plans",
+                    cache_signature,
+                    payload,
+                )
             return payload
 
     def entries(
@@ -734,7 +782,13 @@ def parse_args() -> argparse.Namespace:
         "--database",
         type=Path,
         default=None,
-        help="SQLite 数据库路径",
+        help="静态（源码）或单文件（独立版）SQLite 数据库路径",
+    )
+    parser.add_argument(
+        "--runtime-database",
+        type=Path,
+        default=None,
+        help="源码模式 runtime SQLite 数据库路径",
     )
     parser.add_argument(
         "--save-file",
@@ -756,9 +810,15 @@ def run_local_server(
     port: int = DEFAULT_PORT,
     headless: bool = False,
     *,
+    runtime_database_path: Path | None = None,
     log_path: Path | None = None,
 ) -> None:
-    service = CodexService(database_path, save_file, log_path=log_path)
+    service = CodexService(
+        database_path,
+        save_file,
+        runtime_database_path=runtime_database_path,
+        log_path=log_path,
+    )
     try:
         assets = static_root()
         try:
@@ -804,7 +864,18 @@ def main() -> int:
         if not 1 <= args.port <= 65535:
             raise ValueError(f"端口必须在 1 到 65535 之间：{args.port}")
         args.database = args.database or default_database_path()
-        run_local_server(args.database, args.save_file, args.port, args.headless)
+        runtime_database_path = (
+            args.runtime_database
+            if args.runtime_database is not None
+            else default_runtime_database_path()
+        )
+        run_local_server(
+            args.database,
+            args.save_file,
+            args.port,
+            args.headless,
+            runtime_database_path=runtime_database_path,
+        )
     except KeyboardInterrupt:
         return 0
     except Exception as exc:

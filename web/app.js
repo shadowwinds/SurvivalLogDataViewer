@@ -265,62 +265,75 @@
     select.disabled = !selected;
   }
 
-  function renderRecipeCombination(parent, items, emptyText) {
-    const combination = makeElement("div", "recipe-combination");
-    if (!Array.isArray(items) || !items.length) {
-      combination.append(makeElement("span", "recipe-combination-empty", emptyText));
-    } else {
-      items.forEach((item) => {
-        const ingredient = makeElement(
-          "span",
-          "recipe-ingredient",
-          recipeItemName(item),
-        );
-        combination.append(ingredient);
+  function compactRecipeItems(items, emptyText = "无") {
+    if (!Array.isArray(items) || !items.length) return emptyText;
+    const merged = new Map();
+    items.forEach((item) => {
+      const key = item && item.item_id !== undefined
+        ? String(item.item_id)
+        : recipeItemName(item);
+      const current = merged.get(key);
+      if (current) {
+        current.count += Number(item && item.count) > 0 ? Number(item.count) : 1;
+        return;
+      }
+      merged.set(key, {
+        name: recipeItemName(item),
+        count: Number(item && item.count) > 0 ? Number(item.count) : 1,
       });
+    });
+    return Array.from(merged.values())
+      .map((item) => item.count > 1 ? `${item.name} ×${item.count}` : item.name)
+      .join("、");
+  }
+
+  function recipeKindLabel(result) {
+    if (result && result.recipe_kind_label_zh) {
+      return String(result.recipe_kind_label_zh);
     }
-    parent.append(combination);
+    return Array.isArray(result && result.candidate_group) ? "通用菜肴" : "特色菜肴";
+  }
+
+  function recipeNearSummary(result) {
+    const missingItems = Array.isArray(result && result.missing_items)
+      ? result.missing_items
+      : [];
+    const missingCategory = result && result.missing_sub_category;
+    const missing = missingItems.length
+      ? compactRecipeItems(missingItems)
+      : recipeDisplayName(missingCategory && missingCategory.name, "食材");
+    const available = compactRecipeItems(
+      result && result.available_combination,
+      "尚无可用组合",
+    );
+    return `缺少：${missing}；当前：${available}`;
   }
 
   function renderRecipeResult(result, { near = false } = {}) {
     const card = makeElement("article", `recipe-match${near ? " recipe-near-match" : ""}`);
-    const heading = makeElement("div", "recipe-match-heading");
-    const title = makeElement("div", "recipe-match-title");
-    title.append(
-      makeElement("strong", "recipe-match-name", recipeDisplayName(result.name, "未命名菜肴")),
+    const primary = makeElement("div", "recipe-match-line recipe-match-line-primary");
+    const name = makeElement(
+      "strong",
+      "recipe-match-name",
+      recipeDisplayName(result.name, "未命名菜肴"),
     );
-    heading.append(
-      title,
-      makeElement("span", `recipe-tier tier-${result.tier || 0}`, `${result.tier_label_zh || result.tier_label || "指定食材"} / Tier ${Number(result.tier || 0)}`),
+    const badge = makeElement(
+      "span",
+      `recipe-kind recipe-kind-${result.recipe_kind || (Array.isArray(result.candidate_group) ? "generic" : "specific")}`,
+      recipeKindLabel(result),
     );
-    card.append(heading);
-
-    if (near) {
-      const missingItems = Array.isArray(result.missing_items) ? result.missing_items : [];
-      const missingCategory = result.missing_sub_category;
-      const missingText = missingItems.length
-        ? `还需：${recipeItemName(missingItems[0])}`
-        : `还需 1 个${recipeDisplayName(missingCategory && missingCategory.name, "食材")}`;
-      card.append(makeElement("div", "recipe-near-missing", missingText));
-      if (missingItems.length) renderRecipeCombination(card, missingItems.slice(0, 1), "");
-      const candidates = Array.isArray(result.missing_item_candidates)
-        ? result.missing_item_candidates
-            .map(recipeItemName)
-            .filter((name, index, names) => names.indexOf(name) === index)
-        : [];
-      if (candidates.length) {
-        card.append(makeElement("div", "recipe-near-candidates", `可选食材：${candidates.join("、")}`));
-      }
-      card.append(makeElement("div", "recipe-near-available-label", "当前组合"));
-      renderRecipeCombination(card, result.available_combination, "尚无可用组合");
-    } else {
-      const candidate = Array.isArray(result.candidate_group)
-        ? "分类配方"
-        : "指定食材精确匹配";
-      card.append(makeElement("div", "recipe-match-candidate", candidate));
-      renderRecipeCombination(card, result.representative_combination, "尚无可用组合");
-      card.append(makeElement("div", "recipe-combination-count", `其他可行组合 ${Number(result.other_combination_count || 0)} 个`));
-    }
+    primary.append(name, badge);
+    const secondaryText = near
+      ? recipeNearSummary(result)
+      : `食材：${compactRecipeItems(result.representative_combination, "尚无可用组合")}`;
+    const secondary = makeElement(
+      "div",
+      "recipe-match-line recipe-match-line-secondary",
+      secondaryText,
+    );
+    secondary.title = secondaryText;
+    name.title = recipeDisplayName(result.name, "未命名菜肴");
+    card.append(primary, secondary);
     return card;
   }
 
@@ -416,13 +429,47 @@
     renderRecipeSaves(payload);
   }
 
+  function captureRecipeScrollPositions() {
+    return Array.from(document.querySelectorAll("#recipeSavePanels .recipe-column"))
+      .map((column) => column.scrollTop);
+  }
+
+  function restoreRecipeScrollPositions(positions) {
+    if (!Array.isArray(positions)) return;
+    window.requestAnimationFrame(() => {
+      document.querySelectorAll("#recipeSavePanels .recipe-column").forEach((column, index) => {
+        if (positions[index] !== undefined) column.scrollTop = positions[index];
+      });
+    });
+  }
+
+  function resetRecipeScrollPositions() {
+    document.querySelectorAll("#recipeSavePanels .recipe-column").forEach((column) => {
+      column.scrollTop = 0;
+    });
+  }
+
   async function loadRecipePlans() {
     const requestId = ++state.recipeRequest;
     byId("recipeView").classList.add("is-loading");
     try {
       const payload = await requestJson("/api/recipe-plans");
       if (requestId !== state.recipeRequest) return;
+      if (
+        state.recipePlan
+        && payload
+        && payload.status !== "error"
+        && state.recipePlan.revision
+        && payload.revision === state.recipePlan.revision
+      ) {
+        return;
+      }
+      const selectedSaveBeforeRender = state.recipeSaveSelection;
+      const scrollPositions = captureRecipeScrollPositions();
       renderRecipePlan(payload);
+      if (state.recipeSaveSelection === selectedSaveBeforeRender) {
+        restoreRecipeScrollPositions(scrollPositions);
+      }
     } catch (error) {
       if (requestId !== state.recipeRequest) return;
       renderRecipePlan({ status: "error", saves: [], diagnostics: [error.message] });
@@ -682,6 +729,7 @@
     byId("recipeSaveSelect").addEventListener("change", (event) => {
       if (!state.recipePlan) return;
       state.recipeSaveSelection = event.target.value || "";
+      resetRecipeScrollPositions();
       renderRecipeSaves(state.recipePlan);
     });
 

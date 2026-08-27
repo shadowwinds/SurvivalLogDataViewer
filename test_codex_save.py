@@ -11,7 +11,15 @@ from pathlib import Path
 
 import codex_database
 from codex_server import CodexService
-from codex_database import get_category_summaries, open_database, sync_game_completion
+from codex_database import (
+    get_category_summaries,
+    get_metadata,
+    get_runtime_cache,
+    open_database,
+    query_entries,
+    set_runtime_cache,
+    sync_game_completion,
+)
 from codex_save import (
     MAX_DIAGNOSTIC_LOG_BYTES,
     CodexMapCandidate,
@@ -27,7 +35,7 @@ from codex_save import (
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE_DIR = ROOT / "test"
-DATABASE = ROOT / "data" / "survival_log_codex.sqlite3"
+DATABASE = ROOT / "survival_log_codex.sqlite3"
 
 
 EXPECTED_COUNTS = {
@@ -93,8 +101,10 @@ class PublicSaveTests(unittest.TestCase):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 temp_dir = Path(directory)
                 database = temp_dir / "survival_log_codex.sqlite3"
+                runtime = temp_dir / "survival_log_codex_runtime.sqlite3"
                 shutil.copy2(DATABASE, database)
-                connection = open_database(database)
+                static_before = database.read_bytes()
+                connection = open_database(database, runtime)
                 try:
                     result = sync_game_completion(
                         connection,
@@ -111,6 +121,20 @@ class PublicSaveTests(unittest.TestCase):
                     }
                     self.assertEqual(summaries, expected)
                     self.assertTrue(database.with_suffix(".log").is_file())
+                    self.assertEqual(database.read_bytes(), static_before)
+                    runtime_connection = sqlite3.connect(runtime)
+                    try:
+                        self.assertGreater(
+                            runtime_connection.execute("SELECT COUNT(*) FROM completion").fetchone()[0],
+                            0,
+                        )
+                        self.assertIsNotNone(
+                            runtime_connection.execute(
+                                "SELECT value FROM metadata WHERE key = 'save_sha256'"
+                            ).fetchone()
+                        )
+                    finally:
+                        runtime_connection.close()
                 finally:
                     connection.close()
 
@@ -120,11 +144,17 @@ class ServiceDiagnosticLogTests(unittest.TestCase):
         if not DATABASE.is_file():
             self.skipTest(f"缺少本地测试数据库：{DATABASE}")
 
-        database = root / "survival_log_codex.sqlite3"
-        shutil.copy2(DATABASE, database)
         save_file = root / "HistorySave_test2.bytes"
         shutil.copy2(FIXTURE_DIR / "HistorySave_test2.bytes", save_file)
-        service = CodexService(database, save_file, log_path=log_path)
+        database = root / "survival_log_codex.sqlite3"
+        runtime = root / "survival_log_codex_runtime.sqlite3"
+        shutil.copy2(DATABASE, database)
+        service = CodexService(
+            database,
+            save_file,
+            runtime_database_path=runtime,
+            log_path=log_path,
+        )
         try:
             result = service._ensure_sync()
         finally:
@@ -141,88 +171,308 @@ class ServiceDiagnosticLogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log_path = root / "SurvivalLogDataViewer.log"
-            database = self._run_service(root, log_path)
+            database = root / "SurvivalLogDataViewer.sqlite3"
+            save_file = root / "HistorySave_test2.bytes"
+            shutil.copy2(FIXTURE_DIR / "HistorySave_test2.bytes", save_file)
+            codex_database.prepare_packaged_database(DATABASE, database)
+            service = CodexService(database, save_file, log_path=log_path)
+            try:
+                result = service._ensure_sync()
+            finally:
+                service.close()
+            self.assertEqual(result.status, "ok")
             self.assertTrue(log_path.is_file())
-            self.assertFalse(database.with_suffix(".log").exists())
+            self.assertFalse(Path(f"{database}.log").exists())
             event = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
             self.assertEqual(event["event"], "save_sync")
 
 
-class DatabasePathTests(unittest.TestCase):
-    def test_legacy_database_is_migrated_after_integrity_check(self) -> None:
+class DatabaseModeTests(unittest.TestCase):
+    def _copy_static_database(self, root: Path) -> Path:
+        if not DATABASE.is_file():
+            self.skipTest(f"缺少本地测试数据库：{DATABASE}")
+        database = root / "survival_log_codex.sqlite3"
+        shutil.copy2(DATABASE, database)
+        return database
+
+    def test_source_runtime_writes_are_isolated_and_joined(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            legacy = root / "survival_log_codex.sqlite3"
-            target = root / "data" / "survival_log_codex.sqlite3"
-            connection = sqlite3.connect(legacy)
+            database = self._copy_static_database(root)
+            runtime = root / "survival_log_codex_runtime.sqlite3"
+            static_before = database.read_bytes()
+            static_connection = sqlite3.connect(database)
             try:
-                connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
-                connection.execute("INSERT INTO marker VALUES ('legacy')")
-                connection.commit()
+                entry_key, category = static_connection.execute(
+                    """
+                    SELECT ec.entry_key, ec.category
+                    FROM codex_entry_categories ec
+                    ORDER BY ec.category, ec.entry_key
+                    LIMIT 1
+                    """
+                ).fetchone()
+            finally:
+                static_connection.close()
+
+            connection = open_database(database, runtime)
+            try:
+                with connection:
+                    connection.execute(
+                        "INSERT INTO runtime.completion(entry_key, completed, updated_at) VALUES (?, 1, 'test')",
+                        (entry_key,),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO runtime.category_completion(entry_key, category, completed, updated_at)
+                        VALUES (?, ?, 1, 'test')
+                        """,
+                        (entry_key, category),
+                    )
+                    connection.execute(
+                        "INSERT INTO runtime.metadata(key, value) VALUES ('save_sha256', 'runtime-hash')"
+                    )
+                set_runtime_cache(
+                    connection,
+                    "test-cache",
+                    "signature",
+                    {"cached": True},
+                )
+                rows = query_entries(
+                    connection,
+                    category,
+                    completion_filter="completed",
+                    limit=None,
+                )
+                self.assertIn(entry_key, [row["entry_key"] for row in rows])
+                self.assertEqual(get_metadata(connection)["save_sha256"], "runtime-hash")
+                self.assertEqual(
+                    get_runtime_cache(connection, "test-cache", "signature"),
+                    {"cached": True},
+                )
             finally:
                 connection.close()
 
+            self.assertEqual(database.read_bytes(), static_before)
+            static_connection = sqlite3.connect(database)
+            try:
+                tables = {
+                    row[0]
+                    for row in static_connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                self.assertFalse({"completion", "category_completion", "runtime_cache"} & tables)
+                self.assertIsNone(
+                    static_connection.execute(
+                        "SELECT value FROM metadata WHERE key = 'save_sha256'"
+                    ).fetchone()
+                )
+            finally:
+                static_connection.close()
+            runtime_connection = sqlite3.connect(runtime)
+            try:
+                self.assertEqual(
+                    runtime_connection.execute(
+                        "SELECT value FROM metadata WHERE key = 'save_sha256'"
+                    ).fetchone()[0],
+                    "runtime-hash",
+                )
+                self.assertEqual(
+                    runtime_connection.execute(
+                        "SELECT COUNT(*) FROM runtime_cache"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                runtime_connection.close()
+
+    def test_sync_error_preserves_previous_runtime_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = self._copy_static_database(root)
+            runtime = root / "survival_log_codex_runtime.sqlite3"
+            static_before = database.read_bytes()
+            connection = open_database(database, runtime)
+            try:
+                initial = sync_game_completion(
+                    connection,
+                    FIXTURE_DIR / "HistorySave_test2.bytes",
+                    force=True,
+                )
+                before = get_category_summaries(connection)
+                failed = sync_game_completion(
+                    connection,
+                    root / "missing-HistorySave.bytes",
+                    force=True,
+                )
+                after = get_category_summaries(connection)
+            finally:
+                connection.close()
+
+            self.assertEqual(initial.status, "ok")
+            self.assertEqual(failed.status, "error")
+            self.assertEqual(after, before)
+            self.assertEqual(database.read_bytes(), static_before)
+
+    def test_packaged_database_is_single_file_with_empty_runtime_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = self._copy_static_database(root)
+            packaged = root / "SurvivalLogDataViewer.sqlite3"
+            codex_database.prepare_packaged_database(database, packaged)
+
+            raw_connection = sqlite3.connect(packaged)
+            try:
+                tables = {
+                    row[0]
+                    for row in raw_connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                self.assertTrue({"completion", "category_completion", "runtime_cache"} <= tables)
+                for table in ("completion", "category_completion", "runtime_cache"):
+                    self.assertEqual(
+                        raw_connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                        0,
+                    )
+                self.assertEqual(
+                    raw_connection.execute(
+                        "SELECT COUNT(*) FROM metadata WHERE key LIKE 'save_%'"
+                    ).fetchone()[0],
+                    0,
+                )
+            finally:
+                raw_connection.close()
+
+            connection = open_database(packaged)
+            try:
+                self.assertEqual(get_metadata(connection)["database_profile"], "standalone")
+                result = sync_game_completion(
+                    connection,
+                    FIXTURE_DIR / "HistorySave_test2.bytes",
+                    force=True,
+                )
+                self.assertEqual(result.status, "ok")
+                self.assertGreater(get_category_summaries(connection)[0]["completed"], 0)
+            finally:
+                connection.close()
+
+
+class DatabasePathTests(unittest.TestCase):
+    def _make_legacy_database(self, root: Path) -> tuple[Path, Path, Path]:
+        legacy = root / "data" / "survival_log_codex.sqlite3"
+        static = root / "survival_log_codex.sqlite3"
+        runtime = root / "survival_log_codex_runtime.sqlite3"
+        legacy.parent.mkdir(parents=True)
+        codex_database.prepare_packaged_database(DATABASE, legacy)
+        connection = sqlite3.connect(legacy)
+        try:
+            entry_key = connection.execute(
+                "SELECT entry_key FROM codex_entries ORDER BY entry_key LIMIT 1"
+            ).fetchone()[0]
+            category = connection.execute(
+                "SELECT category FROM codex_entry_categories WHERE entry_key = ? LIMIT 1",
+                (entry_key,),
+            ).fetchone()[0]
+            connection.execute(
+                "UPDATE metadata SET value = '6' WHERE key = 'database_schema_version'"
+            )
+            connection.execute(
+                "INSERT INTO completion(entry_key, completed, updated_at) VALUES (?, 1, 'legacy')",
+                (entry_key,),
+            )
+            connection.execute(
+                "INSERT INTO category_completion(entry_key, category, completed, updated_at) VALUES (?, ?, 1, 'legacy')",
+                (entry_key, category),
+            )
+            connection.execute(
+                "INSERT INTO metadata(key, value) VALUES ('save_sha256', 'legacy-hash')"
+            )
+            connection.execute(
+                "INSERT INTO runtime_cache(cache_key, signature, value_json, updated_at) VALUES ('test', 'legacy-signature', '{\"cached\":true}', 'legacy')"
+            )
+            connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
+            connection.execute("INSERT INTO marker VALUES ('legacy')")
+            connection.commit()
+        finally:
+            connection.close()
+        return legacy, static, runtime
+
+    def test_legacy_database_is_migrated_after_integrity_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy, target, runtime = self._make_legacy_database(root)
+
             with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
                 codex_database, "DEFAULT_DATABASE_PATH", target
+            ), patch.object(
+                codex_database, "DEFAULT_RUNTIME_DATABASE_PATH", runtime
             ):
                 resolved = codex_database.resolve_default_database_path()
 
             self.assertEqual(resolved, target)
             self.assertTrue(target.is_file())
+            self.assertTrue(runtime.is_file())
             self.assertFalse(legacy.exists())
             migrated = sqlite3.connect(target)
             try:
                 self.assertEqual(migrated.execute("SELECT value FROM marker").fetchone()[0], "legacy")
                 self.assertEqual(migrated.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                tables = {
+                    row[0]
+                    for row in migrated.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                self.assertNotIn("completion", tables)
             finally:
                 migrated.close()
+            migrated_runtime = sqlite3.connect(runtime)
+            try:
+                self.assertEqual(
+                    migrated_runtime.execute(
+                        "SELECT value FROM metadata WHERE key = 'save_sha256'"
+                    ).fetchone()[0],
+                    "legacy-hash",
+                )
+                self.assertEqual(
+                    migrated_runtime.execute(
+                        "SELECT value_json FROM runtime_cache WHERE cache_key = 'test'"
+                    ).fetchone()[0],
+                    '{"cached":true}',
+                )
+                self.assertEqual(
+                    migrated_runtime.execute(
+                        "SELECT completed FROM completion"
+                    ).fetchone()[0],
+                    1,
+                )
+            finally:
+                migrated_runtime.close()
 
     def test_legacy_database_with_wal_sidecar_is_left_untouched(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            legacy = root / "survival_log_codex.sqlite3"
-            target = root / "data" / "survival_log_codex.sqlite3"
-            legacy.write_bytes(b"legacy")
+            legacy, target, runtime = self._make_legacy_database(root)
             Path(f"{legacy}-wal").write_bytes(b"wal")
 
             with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
                 codex_database, "DEFAULT_DATABASE_PATH", target
+            ), patch.object(
+                codex_database, "DEFAULT_RUNTIME_DATABASE_PATH", runtime
             ):
-                resolved = codex_database.resolve_default_database_path()
+                with self.assertRaises(RuntimeError):
+                    codex_database.resolve_default_database_path()
 
-            self.assertEqual(resolved, legacy)
             self.assertTrue(legacy.is_file())
             self.assertFalse(target.exists())
-
-    def test_legacy_log_moves_with_the_database(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            legacy = root / "survival_log_codex.sqlite3"
-            target = root / "data" / "survival_log_codex.sqlite3"
-            connection = sqlite3.connect(legacy)
-            try:
-                connection.execute("CREATE TABLE marker (value TEXT NOT NULL)")
-                connection.commit()
-            finally:
-                connection.close()
-            legacy_log = legacy.with_suffix(".log")
-            legacy_log.write_text("legacy log\n", encoding="utf-8")
-
-            with patch.object(codex_database, "LEGACY_DATABASE_PATH", legacy), patch.object(
-                codex_database, "DEFAULT_DATABASE_PATH", target
-            ):
-                resolved = codex_database.resolve_default_database_path()
-
-            self.assertEqual(resolved, target)
-            self.assertEqual(target.with_suffix(".log").read_text(encoding="utf-8"), "legacy log\n")
-            self.assertFalse(legacy_log.exists())
 
     def test_existing_target_wins_without_overwriting_legacy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            legacy = root / "survival_log_codex.sqlite3"
-            target = root / "data" / "survival_log_codex.sqlite3"
-            target.parent.mkdir()
+            legacy = root / "data" / "survival_log_codex.sqlite3"
+            target = root / "survival_log_codex.sqlite3"
+            legacy.parent.mkdir()
             legacy.write_bytes(b"legacy")
             target.write_bytes(b"target")
 
@@ -238,14 +488,15 @@ class DatabasePathTests(unittest.TestCase):
     def test_migration_function_refuses_target_race(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            legacy = root / "survival_log_codex.sqlite3"
-            target = root / "data" / "survival_log_codex.sqlite3"
+            legacy = root / "data" / "survival_log_codex.sqlite3"
+            target = root / "survival_log_codex.sqlite3"
+            runtime = root / "survival_log_codex_runtime.sqlite3"
+            legacy.parent.mkdir()
             legacy.write_bytes(b"legacy")
-            target.parent.mkdir()
             target.write_bytes(b"target")
 
-            with self.assertRaisesRegex(FileExistsError, "目标数据库已存在"):
-                codex_database._migrate_legacy_database(legacy, target)
+            with self.assertRaisesRegex(FileExistsError, "静态库或 runtime 库已存在"):
+                codex_database._split_legacy_database(legacy, target, runtime)
 
             self.assertEqual(legacy.read_bytes(), b"legacy")
             self.assertEqual(target.read_bytes(), b"target")
