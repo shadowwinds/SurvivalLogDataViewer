@@ -20,9 +20,9 @@ from codex_parser import (
     AUXILIARY_TABLES,
     ConfigRow,
     ExtractionContext,
-    classify_codex_items,
     config_row_name,
     build_extraction_context,
+    select_category_rows,
 )
 from codex_save import (
     CODEX_CATEGORY_SOURCE_TABLES,
@@ -40,7 +40,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 2
+DATABASE_SCHEMA_VERSION = 3
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_DIR / "data"
 DEFAULT_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
@@ -287,29 +287,14 @@ def row_icon_path(row: ConfigRow) -> str:
     return ""
 
 
-def category_rows(context: ExtractionContext) -> dict[str, list[ConfigRow]]:
-    food, prey = classify_codex_items(context)
-    return {
-        "food": food,
-        "dish": list(context.tables["Config_CookingRecipe"]),
-        "plant": [row for row in context.tables["Config_Plant"] if row.values.get("InCodex")],
-        "prey": prey,
-        "craft": [
-            row for row in context.tables["Config_ProductionList"] if row.values.get("InCodex")
-        ],
-        "furniture": [
-            row for row in context.tables["Config_Furniture"] if row.values.get("InCodex")
-        ],
-    }
-
-
 def collect_entries(
     context: ExtractionContext,
 ) -> tuple[dict[str, ConfigRow], list[tuple[str, str, int]]]:
     entries: dict[str, ConfigRow] = {}
     memberships: list[tuple[str, str, int]] = []
+    rows_by_category = select_category_rows(context)
     for category in CATEGORY_ORDER:
-        rows = sorted(category_rows(context)[category], key=lambda row: row.row_id)
+        rows = sorted(rows_by_category[category], key=lambda row: row.row_id)
         for sort_order, row in enumerate(rows):
             key = source_key(row.table, row.row_id)
             entries.setdefault(key, row)
@@ -887,7 +872,7 @@ def build_database(
             "auxiliary_rows": sum(len(context.tables[name]) for name, _title in AUXILIARY_TABLES),
             **{
                 category: len(rows)
-                for category, rows in category_rows(context).items()
+                for category, rows in select_category_rows(context).items()
             },
             "save_sync": save_sync,
         }

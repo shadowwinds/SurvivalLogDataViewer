@@ -1,10 +1,10 @@
 # Survival Log 图鉴辅助配置（离线解析）
 
-- 生成时间：2026-08-26T20:25:38+08:00
-- 游戏资源版本：1.0.15029 / catalog 2.3.1
+- 生成时间：2026-08-27T13:43:09+08:00
+- 游戏资源版本：1.0.15130 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`
-- 条目数量：458
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\cb76a992d5c10ae51435bb7f62f6abe5.bundle`
+- 条目数量：461
 - 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：保存主图鉴条目引用的分类、等级和家具辅助配置；这些行不参与六类图鉴完成进度。
@@ -8795,6 +8795,81 @@
 - 预览属性变化：
 - 功能组键：
 - 功能组顺序：0
+
+### 扔出腐肉条（ID 80032）
+
+- ID：80032
+- 功能名称键：FurnitureFunc_BtnName_80032
+- 功能名称：扔出腐肉条
+- 功能提示键：FurnitureFunc_BtnTips_80032
+- 功能提示：把腐肉条扔到屋外，气味会招来一小群丧尸。消耗一个腐肉条
+- 确认信息键：FurnitureFunc_ConfirmInfo_80032
+- 确认信息：扔出腐肉条？会有一小群丧尸循着气味过来。
+- 显示条件组：ID:48147
+- Demo 模式：0
+- 条件组：无
+- 功能图标：../../Res/icon/furoutiao.png
+- 章节：2
+- 冷却时间：0
+- 每日上限：0
+- 奖励组：ID:9016
+- 功能类型：2
+- 动作 ID 列表：`[100026008]`；解析：ID:100026008
+- 跳转地图：无
+- 推荐权重：0
+- 预览属性变化：
+- 功能组键：引诱
+- 功能组顺序：1
+
+### 扔出腐肉块（ID 80033）
+
+- ID：80033
+- 功能名称键：FurnitureFunc_BtnName_80033
+- 功能名称：扔出腐肉块
+- 功能提示键：FurnitureFunc_BtnTips_80033
+- 功能提示：把腐肉块扔到屋外，招来的规模相当可观。消耗一个腐肉块
+- 确认信息键：FurnitureFunc_ConfirmInfo_80033
+- 确认信息：扔出腐肉块？招来的数量远多于腐肉条，先确认门窗和装置都到位。
+- 显示条件组：ID:48148
+- Demo 模式：0
+- 条件组：无
+- 功能图标：../../Res/icon/furoukuai.png
+- 章节：2
+- 冷却时间：0
+- 每日上限：0
+- 奖励组：ID:9017
+- 功能类型：2
+- 动作 ID 列表：`[100026009]`；解析：ID:100026009
+- 跳转地图：无
+- 推荐权重：0
+- 预览属性变化：
+- 功能组键：引诱
+- 功能组顺序：2
+
+### 扔出腐肉排（ID 80034）
+
+- ID：80034
+- 功能名称键：FurnitureFunc_BtnName_80034
+- 功能名称：扔出腐肉排
+- 功能提示键：FurnitureFunc_BtnTips_80034
+- 功能提示：把腐肉排扔到屋外，会招来一整批丧尸。消耗一个腐肉排
+- 确认信息键：FurnitureFunc_ConfirmInfo_80034
+- 确认信息：扔出腐肉排？这是最大的一档，扔出去便无法收回。
+- 显示条件组：ID:48149
+- Demo 模式：0
+- 条件组：无
+- 功能图标：../../Res/icon/furoupai.png
+- 章节：2
+- 冷却时间：0
+- 每日上限：0
+- 奖励组：ID:9018
+- 功能类型：2
+- 动作 ID 列表：`[100026010]`；解析：ID:100026010
+- 跳转地图：无
+- 推荐权重：0
+- 预览属性变化：
+- 功能组键：引诱
+- 功能组顺序：3
 
 ## 家具烹饪配置
 

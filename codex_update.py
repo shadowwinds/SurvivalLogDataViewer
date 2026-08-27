@@ -274,6 +274,23 @@ def _database_version(database_path: Path) -> str:
         connection.close()
 
 
+def _database_schema_version(database_path: Path) -> str:
+    if not database_path.is_file():
+        return ""
+    import sqlite3
+
+    connection = sqlite3.connect(str(database_path))
+    try:
+        row = connection.execute(
+            "SELECT value FROM metadata WHERE key = 'database_schema_version'"
+        ).fetchone()
+        return str(row[0]) if row else ""
+    except sqlite3.DatabaseError:
+        return ""
+    finally:
+        connection.close()
+
+
 def update_database_if_needed(
     database_path: Path,
     game: GameInstallation | None = None,
@@ -284,10 +301,13 @@ def update_database_if_needed(
         return UpdateResult("not-found", None, _database_version(database_path), "", "未找到有效的 Survival Log 游戏目录，保留现有图鉴数据库")
 
     old_version = _database_version(database_path)
-    if old_version == game.package_version:
-        return UpdateResult("unchanged", game.root, old_version, game.package_version, f"图鉴已是游戏版本 {game.package_version}")
+    from codex_database import DATABASE_SCHEMA_VERSION, build_database
 
-    from codex_database import build_database
+    if (
+        old_version == game.package_version
+        and _database_schema_version(database_path) == str(DATABASE_SCHEMA_VERSION)
+    ):
+        return UpdateResult("unchanged", game.root, old_version, game.package_version, f"图鉴已是游戏版本 {game.package_version}")
 
     build_database(game.root, database_path, sync_save=False)
     return UpdateResult(

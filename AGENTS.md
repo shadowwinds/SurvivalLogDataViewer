@@ -50,12 +50,12 @@
 - 食品：`Config_Item`，关联 `Config_ItemSubCategory`、`Config_FoodType`。
 - 菜肴：`Config_CookingRecipe`，关联 `Config_Item`、`Config_ItemSubCategory`。
 - 植物：`Config_Plant`、`Config_PlantLv`，收获物、种子和枯萎产物关联 `Config_Item`。
-- 猎物：没有独立 `Config_Prey` 时使用 `Config_Item` 中的 `InCodex`、`Prey_Rarity`、`CaptureExp` 和图鉴字段。
+- 猎物：没有独立 `Config_Prey` 时使用 `Config_Item` 中的 `Prey_Rarity`、`CaptureExp` 和图鉴字段，同时保留 `InCodex` 原始值。
 - 制造：`Config_ProductionList`、`Config_ProductionLv`，材料、产物、失败产物和完美产物关联 `Config_Item`。
 - 家具：`Config_Furniture` 及 `Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`。
 
-食品和猎物按游戏 Codex 字段分类：先要求 `Config_Item.InCodex == true`；`Prey_Rarity > 0` 的物品归入猎物；`Category == 1` 的物品归入食品。食品和猎物允许重叠，不得直接照搬参考网页中的物品分类。
-当前版本主图鉴数量基准为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87。参考进度为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，总计 366/935，约 39%；参考进度只用于验收，不推断具体完成 ID。
+食品和猎物按游戏 Codex 字段分类：食品要求 `Config_Item.InCodex == true && Category == 1`；`Prey_Rarity > 0` 的物品归入猎物，不以 `InCodex` 过滤；食品和猎物允许重叠，不得直接照搬参考网页中的物品分类。植物、制造和家具分别收录各自主配置表的全部行，`InCodex` 只作为原始字段记录。
+当前版本主图鉴数量基准为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249，六类分类映射合计 2124。当前本地存档参考进度为食品 64、菜肴 146、植物 17、猎物 15、制造 110、家具 73，总计 425/2124；完成数量只用于验收，不推断具体完成 ID。
 
 家具关联字段必须按语义解析：功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力配置 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`。没有独立配置表的条件组、奖励组、动作、房间和掉落组等引用保留原始 ID。
 
@@ -103,8 +103,8 @@
 - 运行 `python -m py_compile "codex_parser.py" "codex_save.py" "codex_database.py" "codex_server.py" "codex_launcher.py" "codex_update.py"`。
 - 使用当前完整游戏目录运行一次默认全量导出，确认生成七个 UTF-8 Markdown。
 - 分别运行七个 `--category` 入口，确认输出路径、退出码、数量和内容正常。
-- 校验当前主图鉴数量：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87；原始配置表数量不能直接当作图鉴数量。
-- 构建 SQLite 数据库，确认六类分类映射合计 935，读取 `HistorySave.bytes` 得到 `366/935` 和 `61/93/14/15/110/73`；食品/猎物重叠条目共享主完成状态，启动本地网页服务验证存档同步和只读状态展示。独立版直接使用 exe 同目录数据库，不创建 AppData 副本；普通启动无终端，图鉴页面明确关闭后约 30 秒退出，后台标签页或切回游戏暂停轮询时不得退出；`--headless` 保持常驻。
+- 校验当前主图鉴数量：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249；食品/猎物按字段筛选，植物/制造/家具按主配置表全量收录。
+- 构建 SQLite 数据库，确认六类分类映射合计 2124，读取 `HistorySave.bytes` 得到 `425/2124` 和 `64/146/17/15/110/73`；食品/猎物重叠条目共享主完成状态，启动本地网页服务验证存档同步和只读状态展示。独立版直接使用 exe 同目录数据库，不创建 AppData 副本；普通启动无终端，图鉴页面明确关闭后约 30 秒退出，后台标签页或切回游戏暂停轮询时不得退出；`--headless` 保持常驻。
 - 确认所有解析表读取到 EOF，无未捕获 schema 错误；检查未知关联 ID 是否明确显示为 `ID:xxxx`。
 - 抽查参考仓库和本地数据中的佛跳墙、清炒菌菇、蛋炒饭、松茸、硬纸、箱子和小家鼠等条目。
 - 对资源缺失、catalog 版本变化、空列表、空本地化名称和未知 ID 做隔离测试；测试不得改动游戏目录。

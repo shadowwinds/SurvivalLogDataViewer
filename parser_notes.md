@@ -4,7 +4,7 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机的 `HistorySave.bytes` 图鉴完成状态；不启动游戏，不修改存档、mod DLL 或游戏资源。
 
-当前本地游戏资源版本为 `1.0.15029`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
+当前本地游戏资源版本为 `1.0.15130`，catalog 版本为 `2.3.1`。一次完整解析会生成六份主图鉴 Markdown 和一份辅助配置 Markdown：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -14,7 +14,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前版本主图鉴数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87。参考图片中的完成进度为食品 61、菜肴 93、植物 14、猎物 15、制造 110、家具 73，合计 `366/935`，约为 39%。这些完成数量只用于验收和前端参考，离线解析器不会据此伪造具体完成 ID。
+当前版本主图鉴数量为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249；六类分类映射合计 `2124`。当前本地存档最近读取到的完成数量为食品 64、菜肴 146、植物 17、猎物 15、制造 110、家具 73，合计 `425/2124`；这些完成数量随存档变化，离线解析器不会据此伪造具体完成 ID。
 
 ## 游戏图鉴运行时
 
@@ -40,18 +40,18 @@
 
 网页服务和数据库同步可以将诊断写入数据库同目录的 UTF-8 JSON Lines 日志：源码数据库对应 `survival_log_codex.log`，独立版数据库对应 `SurvivalLogDataViewer.log`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；数据库目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
 
-当前存档的分类完成数量由 `HistorySave.bytes` 实时读取，六类分类映射合计 `935`；具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
+当前存档的分类完成数量由 `HistorySave.bytes` 实时读取，六类分类映射合计 `2124`；具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`，数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
 ## 主图鉴分类规则
 
 食品和猎物使用当前游戏 Codex 字段，两个分类允许重叠：
 
 - 食品：`Config_Item.InCodex == true && Category == 1`。
-- 猎物：`Config_Item.InCodex == true && Prey_Rarity > 0`。
+- 猎物：`Config_Item.Prey_Rarity > 0`，不以 `InCodex` 过滤，但保留该原始字段。
 - 菜肴：当前 `Config_CookingRecipe` 的全部 496 条配置。
-- 植物：`Config_Plant.InCodex == true`。
-- 制造：`Config_ProductionList.InCodex == true`。
-- 家具：`Config_Furniture.InCodex == true`。
+- 植物：当前 `Config_Plant` 的全部 38 条配置。
+- 制造：当前 `Config_ProductionList` 的全部 148 条配置。
+- 家具：当前 `Config_Furniture` 的全部 1249 条配置。
 
 因此，猎物物品可以同时出现在食品和猎物 Markdown 中；数据库只保存一份完成状态，并通过分类映射分别计数。
 

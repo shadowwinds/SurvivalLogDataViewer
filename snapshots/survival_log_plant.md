@@ -1,15 +1,139 @@
 # Survival Log 植物（离线解析）
 
-- 生成时间：2026-08-26T20:25:38+08:00
-- 游戏资源版本：1.0.15029 / catalog 2.3.1
+- 生成时间：2026-08-27T13:43:09+08:00
+- 游戏资源版本：1.0.15130 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`
-- 条目数量：34
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\cb76a992d5c10ae51435bb7f62f6abe5.bundle`
+- 条目数量：38
 - 配置表：`Config_Plant`、`Config_PlantLv`、`Config_Item`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
-- 说明：包含完整植物配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。
+- 说明：记录 Config_Plant 全部配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。
 
 ## 植物
+
+### 豆芽（测试种子）（ID 1）
+
+- ID：1
+- 名称键：Plant_Name_1
+- 名称：豆芽（测试种子）
+- 描述键：Plant_Des_1
+- 描述：豆芽说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00323
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00323
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00342
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00343
+- 尺寸：1
+- 生长时间：64800
+- 光照需求：1
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2504]`；解析：番茄（ID 2504）
+- 收获经验：30
+- 完美收获产物：`[2504]`；解析：番茄（ID 2504）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 小番茄（测试种子）（ID 2）
+
+- ID：2
+- 名称键：Plant_Name_2
+- 名称：小番茄（测试种子）
+- 描述键：Plant_Des_2
+- 描述：小番茄说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00341
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00341
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00324
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00325
+- 尺寸：1
+- 生长时间：285000
+- 光照需求：2
+- 耐寒：0
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2504]`；解析：番茄（ID 2504）
+- 收获经验：70
+- 完美收获产物：`[2504]`；解析：番茄（ID 2504）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 生菜（测试种子）（ID 3）
+
+- ID：3
+- 名称键：Plant_Name_3
+- 名称：生菜（测试种子）
+- 描述键：Plant_Des_3
+- 描述：生菜说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00174
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00174
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00148
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00168
+- 尺寸：2
+- 生长时间：226800
+- 光照需求：1
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2528]`；解析：卷心菜（ID 2528）
+- 收获经验：100
+- 完美收获产物：`[2528]`；解析：卷心菜（ID 2528）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
+
+### 蘑菇（测试种子）（ID 4）
+
+- ID：4
+- 名称键：Plant_Name_4
+- 名称：蘑菇（测试种子）
+- 描述键：Plant_Des_4
+- 描述：蘑菇说明
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00335
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00335
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00336
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00337
+- 尺寸：1
+- 生长时间：307500
+- 光照需求：0
+- 耐寒：2
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2905]`；解析：无名蘑菇（ID 2905）
+- 收获经验：75
+- 完美收获产物：`[2905]`；解析：无名蘑菇（ID 2905）
+- 完美率：0.2
+- 种子产物：`[]`；解析：无
+- 种子率：0.5
+- 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：259200
+- 发现经验：200
+- 进入图鉴：否
 
 ### 白玉菇（ID 5）
 

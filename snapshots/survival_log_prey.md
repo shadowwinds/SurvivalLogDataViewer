@@ -1,13 +1,13 @@
 # Survival Log 猎物（离线解析）
 
-- 生成时间：2026-08-26T20:25:39+08:00
-- 游戏资源版本：1.0.15029 / catalog 2.3.1
+- 生成时间：2026-08-27T13:43:09+08:00
+- 游戏资源版本：1.0.15130 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\cb76a992d5c10ae51435bb7f62f6abe5.bundle`
 - 条目数量：19
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
-- 说明：按游戏 Codex 的猎物规则导出：进入图鉴且物品配置中的猎物稀有度大于 0。
+- 说明：按物品配置中的猎物稀有度导出：Prey_Rarity 大于 0；保留原始 InCodex 值，不以该值过滤猎物。
 
 ## 条目
 

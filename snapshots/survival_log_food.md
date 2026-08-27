@@ -1,9 +1,9 @@
 # Survival Log 食品（离线解析）
 
-- 生成时间：2026-08-26T20:25:38+08:00
-- 游戏资源版本：1.0.15029 / catalog 2.3.1
+- 生成时间：2026-08-27T13:43:09+08:00
+- 游戏资源版本：1.0.15130 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\f86b88625869125f317b35ef957426ef.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\cb76a992d5c10ae51435bb7f62f6abe5.bundle`
 - 条目数量：174
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -8711,7 +8711,7 @@
 - 名称键：Item_ItemName_2539
 - 名称：西瓜
 - 描述键1：Item_ItemDes1_2539
-- 描述1：沉手的翠皮大瓜，敲上去是空空的闷响。
+- 描述1：大棚里赶出来的反季瓜，沉手翠皮，敲上去是空空的闷响。
 - 描述键2：Item_ItemDes2_2539
 - 描述2：切开即食；甘甜解渴
 - 属性1：60
@@ -10817,7 +10817,7 @@
 - 过期负面效果：`[1101, 1102, 1103, 1104, 1105]`；解析：ID:1101、ID:1102、ID:1103、ID:1104、ID:1105
 - 负面效果强度：[5, 4, 3, 2, 1]
 - 口味：3
-- 愿望力量：3
+- 愿望力量：0
 - 故事 ID：无
 - 每日上限：0
 - 植物 ID：无

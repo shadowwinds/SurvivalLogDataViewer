@@ -589,11 +589,12 @@ def build_extraction_context(game_root: Path) -> ExtractionContext:
 
 
 def classify_codex_items(context: ExtractionContext) -> tuple[list[ConfigRow], list[ConfigRow]]:
-    """Reproduce the overlapping food and prey tabs used by the codex.
+    """Select the food and prey rows used by the current export policy.
 
     The game has no standalone Config_Prey table. Prey are Config_Item rows
-    with a prey rarity; food is the codex-visible Category == 1 tab.
-    An item can therefore occur in both tabs.
+    with a prey rarity; food requires both the codex marker and Category == 1.
+    An item can therefore occur in both tabs.  The prey selector intentionally
+    keeps every positive-rarity row, while the raw InCodex value is preserved.
     """
 
     items = context.tables["Config_Item"]
@@ -601,13 +602,25 @@ def classify_codex_items(context: ExtractionContext) -> tuple[list[ConfigRow], l
     prey: list[ConfigRow] = []
     for row in items:
         values = row.values
-        if not values.get("InCodex"):
-            continue
         if int(values.get("Prey_Rarity") or 0) > 0:
             prey.append(row)
-        if int(values.get("Category") or 0) == 1:
+        if values.get("InCodex") and int(values.get("Category") or 0) == 1:
             food.append(row)
     return food, prey
+
+
+def select_category_rows(context: ExtractionContext) -> dict[str, list[ConfigRow]]:
+    """Return one shared row selection for all primary codex categories."""
+
+    food, prey = classify_codex_items(context)
+    return {
+        "food": food,
+        "dish": list(context.tables["Config_CookingRecipe"]),
+        "plant": list(context.tables["Config_Plant"]),
+        "prey": prey,
+        "craft": list(context.tables["Config_ProductionList"]),
+        "furniture": list(context.tables["Config_Furniture"]),
+    }
 
 
 def scan_item_names(raw: bytes) -> dict[int, str]:
@@ -872,6 +885,14 @@ def render_config_value(
     furniture_names: dict[int, str],
     plant_names: dict[int, str],
 ) -> str:
+    if field == "SpecificItems" and isinstance(value, list):
+        return f"`{format_scalar(value)}`；解析：{md_escape(resolve_ids(value, context.item_names))}"
+    if field == "TagCombo" and isinstance(value, list):
+        return f"`{format_scalar(value)}`；解析：{md_escape(resolve_ids(value, context.subcategory_names))}"
+    if field in {"PerfectItemID", "GoodItemID", "NormalItemID", "FailItemID"} and isinstance(value, int):
+        return md_escape(resolve_id(value, context.item_names))
+    if field == "CookTime" and isinstance(value, int):
+        return f"{value} 秒（{value / 60:.1f} 分钟）"
     if field in ITEM_ID_LIST_FIELDS and isinstance(value, list):
         return f"`{format_scalar(value)}`；解析：{md_escape(resolve_ids(value, context.item_names))}"
     if field in DISH_ID_LIST_FIELDS and isinstance(value, list):
@@ -971,97 +992,68 @@ def render_item_category_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_plant_markdown(context: ExtractionContext) -> str:
+def render_plant_markdown(context: ExtractionContext, rows: list[ConfigRow]) -> str:
     furniture_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Furniture"]}
     plant_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Plant"]}
-    rows = [row for row in context.tables["Config_Plant"] if row.values.get("InCodex")]
-    lines = markdown_header("植物", len(rows), context, ("Config_Plant", "Config_PlantLv", "Config_Item"), "包含完整植物配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。")
+    lines = markdown_header("植物", len(rows), context, ("Config_Plant", "Config_PlantLv", "Config_Item"), "记录 Config_Plant 全部配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。")
     lines.extend(["## 植物", ""])
     render_config_rows(lines, rows, "Config_Plant", context, furniture_names, plant_names)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_production_markdown(context: ExtractionContext) -> str:
+def render_production_markdown(context: ExtractionContext, rows: list[ConfigRow]) -> str:
     furniture_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Furniture"]}
     plant_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Plant"]}
-    rows = [row for row in context.tables["Config_ProductionList"] if row.values.get("InCodex")]
-    lines = markdown_header("制造", len(rows), context, ("Config_ProductionList", "Config_ProductionLv", "Config_Item"), "包含制造材料、产物、失败产物、完美产物、等级、概率和经验等字段；解锁状态不读取存档。")
+    lines = markdown_header("制造", len(rows), context, ("Config_ProductionList", "Config_ProductionLv", "Config_Item"), "记录 Config_ProductionList 全部配置，包含制造材料、产物、失败产物、完美产物、等级、概率和经验等字段；解锁状态不读取存档。")
     lines.extend(["## 制造配方", ""])
     render_config_rows(lines, rows, "Config_ProductionList", context, furniture_names, plant_names)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_furniture_markdown(context: ExtractionContext) -> str:
+def render_furniture_markdown(context: ExtractionContext, rows: list[ConfigRow]) -> str:
     furniture_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Furniture"]}
     plant_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Plant"]}
-    rows = [row for row in context.tables["Config_Furniture"] if row.values.get("InCodex")]
     source_tables = ("Config_Furniture", "Config_FurnitureFunc", "Config_FurnitureCook", "Config_FurniturePlant", "Config_FurnitureElectrical", "Config_FurnitureState", "Config_FurnitureTag", "Config_FurniturePartner")
-    lines = markdown_header("家具", len(rows), context, source_tables, "仅包含 Config_Furniture.InCodex 为真的家具；辅助配置单独导出，解锁状态不读取存档。")
+    lines = markdown_header("家具", len(rows), context, source_tables, "记录 Config_Furniture 全部配置，并按语义解析家具功能、种植、烹饪和电力关联；解锁状态不读取存档。")
     lines.extend(["## 家具", ""])
     render_config_rows(lines, rows, "Config_Furniture", context, furniture_names, plant_names)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_dish_markdown(context: ExtractionContext) -> str:
-    rows = sorted(context.tables["Config_CookingRecipe"], key=lambda row: row.row_id)
+def render_dish_markdown(context: ExtractionContext, rows: list[ConfigRow]) -> str:
+    rows = sorted(rows, key=lambda row: row.row_id)
     groups: dict[int, list[ConfigRow]] = defaultdict(list)
     for dish in rows:
         groups[(dish.row_id // 1000) * 1000].append(dish)
 
-    lines = [
-        "# Survival Log 菜肴（离线解析）",
-        "",
-        f"- 生成时间：{datetime.now().astimezone().isoformat(timespec='seconds')}",
-        f"- 游戏资源版本：{md_escape(context.package_version)}",
-        f"- 菜肴配置包：`{context.bundle_name}`",
-        f"- 实际读取文件：`{context.bundle_path}`",
-        f"- 菜肴数量：{len(rows)}",
-        "- 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。",
-        "- 说明：这里包含当前配置表中的全部菜肴；游戏存档中的解锁状态不从静态资源推断。",
-        "",
-        "## 字段说明",
-        "",
-        "菜肴名称、食材名和食材分类使用游戏配置中的本地化字段。具体物品配方来自 `SpecificItems`；没有具体物品时，使用 `TagCombo` 分类组合。",
-        "",
-    ]
+    lines = markdown_header(
+        "菜肴",
+        len(rows),
+        context,
+        ("Config_CookingRecipe", "Config_Item", "Config_ItemSubCategory"),
+        "记录 Config_CookingRecipe 全部字段；食材、产物和烹饪时间同时保留原始值并提供可读解析。",
+    )
+    lines.extend(
+        [
+            "## 字段说明",
+            "",
+            "菜肴条目按 ID 分段，正文通过统一 schema 输出全部原始字段。具体食材使用 `SpecificItems`，无具体食材时仍保留 `TagCombo`；产物 ID 和食材 ID 尽量解析为配置名称。",
+            "",
+        ]
+    )
+    furniture_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Furniture"]}
+    plant_names = {row.row_id: config_row_name(row) for row in context.tables["Config_Plant"]}
 
     for group_id, group_rows in sorted(groups.items()):
         lines.extend([f"## ID {group_id} 段", ""])
-        for dish in group_rows:
-            values = dish.values
-            name_key = str(values.get("RecipeName") or "")
-            name = str(values.get("RecipeName_Local") or name_key or f"ID:{dish.row_id}")
-            ingredients, raw_ingredients = display_ingredients(
-                dish, context.item_names, context.subcategory_names
-            )
-            outputs = [
-                f"完美：{output_name(values.get('PerfectItemID'), context.item_names)}",
-                f"良好：{output_name(values.get('GoodItemID'), context.item_names)}",
-                f"普通：{output_name(values.get('NormalItemID'), context.item_names)}",
-                f"失败：{output_name(values.get('FailItemID'), context.item_names)}",
-            ]
-            lines.extend(
-                [
-                    f"### {md_escape(name)}（ID {dish.row_id}）",
-                    "",
-                    f"- 做法：{md_escape(ingredients)}",
-                    f"- 烹饪经验：{values.get('CookExp')}",
-                    f"- 烹饪时间：{(values.get('CookTime') or 0) / 60:.1f} 分钟",
-                    f"- 最低等级：{values.get('MinLevel')}级",
-                    f"- 产物：{md_escape('；'.join(outputs))}",
-                    f"- 烹饪层级：{values.get('Tier')}",
-                    f"- 饱腹标准：{values.get('SatietyStandard')}",
-                    f"- 显示等级：{values.get('ShowLevel')}",
-                    f"- 制作等级：{values.get('CraftLevel')}",
-                    f"- 发现经验：{values.get('DiscoveryExp')}",
-                ]
-            )
-            if raw_ingredients:
-                field = "具体食材 ID" if values.get("SpecificItems") else "食材分类 ID"
-                lines.append(f"- {field}：`{raw_ingredients}`")
-            if name_key and name_key != name:
-                lines.append(f"- 名称键：`{name_key}`")
-            lines.append("")
+        render_config_rows(
+            lines,
+            group_rows,
+            "Config_CookingRecipe",
+            context,
+            furniture_names,
+            plant_names,
+        )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -1133,43 +1125,43 @@ def ensure_output_outside_game_root(game_root: Path, output_path: Path) -> None:
 
 
 def export_food(context: ExtractionContext) -> tuple[int, str]:
-    food, prey = classify_codex_items(context)
-    return len(food), render_item_category_markdown(
+    rows = select_category_rows(context)["food"]
+    return len(rows), render_item_category_markdown(
         context,
-        food,
+        rows,
         "食品",
         "按游戏 Codex 的食品规则导出：进入图鉴且物品大类为食品；猎物物品可以同时出现在食品分类。",
     )
 
 
 def export_dish(context: ExtractionContext) -> tuple[int, str]:
-    rows = context.tables["Config_CookingRecipe"]
-    return len(rows), render_dish_markdown(context)
+    rows = select_category_rows(context)["dish"]
+    return len(rows), render_dish_markdown(context, rows)
 
 
 def export_plant(context: ExtractionContext) -> tuple[int, str]:
-    rows = [row for row in context.tables["Config_Plant"] if row.values.get("InCodex")]
-    return len(rows), render_plant_markdown(context)
+    rows = select_category_rows(context)["plant"]
+    return len(rows), render_plant_markdown(context, rows)
 
 
 def export_prey(context: ExtractionContext) -> tuple[int, str]:
-    _food, prey = classify_codex_items(context)
-    return len(prey), render_item_category_markdown(
+    rows = select_category_rows(context)["prey"]
+    return len(rows), render_item_category_markdown(
         context,
-        prey,
+        rows,
         "猎物",
-        "按游戏 Codex 的猎物规则导出：进入图鉴且物品配置中的猎物稀有度大于 0。",
+        "按物品配置中的猎物稀有度导出：Prey_Rarity 大于 0；保留原始 InCodex 值，不以该值过滤猎物。",
     )
 
 
 def export_craft(context: ExtractionContext) -> tuple[int, str]:
-    rows = [row for row in context.tables["Config_ProductionList"] if row.values.get("InCodex")]
-    return len(rows), render_production_markdown(context)
+    rows = select_category_rows(context)["craft"]
+    return len(rows), render_production_markdown(context, rows)
 
 
 def export_furniture(context: ExtractionContext) -> tuple[int, str]:
-    rows = [row for row in context.tables["Config_Furniture"] if row.values.get("InCodex")]
-    return len(rows), render_furniture_markdown(context)
+    rows = select_category_rows(context)["furniture"]
+    return len(rows), render_furniture_markdown(context, rows)
 
 
 def export_auxiliary(context: ExtractionContext) -> tuple[int, str]:
