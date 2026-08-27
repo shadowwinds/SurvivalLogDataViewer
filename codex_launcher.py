@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from ctypes import wintypes
-
-from codex_server import run_local_server
-from codex_save import default_save_file
-from codex_update import update_database_if_needed, validate_game_root
-
 
 DATABASE_NAME = "SurvivalLogDataViewer.sqlite3"
 LOG_NAME = "SurvivalLogDataViewer.log"
@@ -26,7 +24,12 @@ def application_directory() -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="启动 Survival Log 生存图鉴本地网页")
-    parser.add_argument("--port", type=int, default=8501, help="本地服务端口")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8501,
+        help="本地服务端口；默认端口被占用时自动选择空闲端口",
+    )
     parser.add_argument(
         "--database",
         type=Path,
@@ -111,6 +114,8 @@ def _select_save_file(initial_dir: Path) -> Path | None:
 
 
 def resolve_save_file(requested_path: Path | None) -> Path:
+    from codex_save import default_save_file
+
     if requested_path is not None:
         return requested_path.expanduser().resolve()
     default_path = default_save_file().expanduser().resolve()
@@ -121,15 +126,71 @@ def resolve_save_file(requested_path: Path | None) -> Path:
 
 
 def show_error(message: str) -> None:
-    print(message, file=sys.stderr)
+    safe_message = _redact_user_path(message)
+    _write_startup_error(safe_message)
+    if sys.stderr is not None:
+        try:
+            print(safe_message, file=sys.stderr)
+        except (AttributeError, OSError):
+            pass
     if sys.platform == "win32":
         try:
-            ctypes.windll.user32.MessageBoxW(0, message, "Survival Log 生存图鉴", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, safe_message, "Survival Log 生存图鉴", 0x10)
         except Exception:
             pass
 
 
+def _redact_user_path(message: str) -> str:
+    home = str(Path.home().expanduser().resolve())
+    if message.casefold().startswith(home.casefold()):
+        return "%USERPROFILE%" + message[len(home) :]
+    return message.replace(home, "%USERPROFILE%")
+
+
+def _startup_log_paths() -> tuple[Path, ...]:
+    paths = [application_directory() / LOG_NAME]
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    fallback_root = (
+        Path(local_app_data)
+        if local_app_data
+        else Path.home() / "AppData" / "Local"
+    )
+    paths.append(fallback_root / "SurvivalLogDataViewer" / LOG_NAME)
+    result: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = os.path.normcase(str(path))
+        if key not in seen:
+            seen.add(key)
+            result.append(path)
+    return tuple(result)
+
+
+def _write_startup_error(message: str) -> None:
+    payload = json.dumps(
+        {
+            "event": "startup_error",
+            "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "message": message,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    for path in _startup_log_paths():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(payload)
+                handle.write("\n")
+            return
+        except OSError:
+            continue
+
+
 def run_frontend(args: argparse.Namespace) -> None:
+    from codex_server import run_local_server
+    from codex_update import update_database_if_needed, validate_game_root
+
     database_path = resolve_database(args.database)
     save_file = resolve_save_file(args.save_file)
     try:

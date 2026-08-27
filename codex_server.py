@@ -39,6 +39,7 @@ from codex_recipe import RecipeConfigError, build_recipe_error, build_recipe_pla
 
 POLL_INTERVAL_SECONDS = 5
 PAGE_CLOSE_GRACE_SECONDS = 30
+DEFAULT_PORT = 8501
 CATEGORY_EMOJI = {
     "food": "🍞",
     "dish": "🍳",
@@ -529,7 +530,9 @@ class CodexService:
 
 
 class CodexHTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = True
+    # Reusing a listening port on Windows can leave multiple app instances
+    # serving different databases behind the same URL.
+    allow_reuse_address = False
 
     def __init__(
         self,
@@ -539,6 +542,7 @@ class CodexHTTPServer(ThreadingHTTPServer):
         *,
         auto_exit: bool,
     ):
+        self._stopping = threading.Event()
         super().__init__(address, CodexRequestHandler)
         self.service = service
         self.assets = assets
@@ -547,7 +551,6 @@ class CodexHTTPServer(ThreadingHTTPServer):
         self._active_client_ids: set[str] = set()
         self._closed_client_ids: set[str] = set()
         self._page_close_requested_at: float | None = None
-        self._stopping = threading.Event()
         if self.auto_exit:
             monitor = threading.Thread(
                 target=self._monitor_client,
@@ -689,7 +692,12 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="启动 Survival Log 生存图鉴本地网页")
-    parser.add_argument("--port", type=int, default=8501, help="本地服务端口")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help="本地服务端口；默认端口被占用时自动选择空闲端口",
+    )
     parser.add_argument(
         "--database",
         type=Path,
@@ -713,24 +721,37 @@ def parse_args() -> argparse.Namespace:
 def run_local_server(
     database_path: Path,
     save_file: Path,
-    port: int = 8501,
+    port: int = DEFAULT_PORT,
     headless: bool = False,
     *,
     log_path: Path | None = None,
 ) -> None:
     service = CodexService(database_path, save_file, log_path=log_path)
     try:
-        server = CodexHTTPServer(
-            ("127.0.0.1", port),
-            service,
-            static_root(),
-            auto_exit=not headless,
-        )
+        assets = static_root()
+        try:
+            server = CodexHTTPServer(
+                ("127.0.0.1", port),
+                service,
+                assets,
+                auto_exit=not headless,
+            )
+        except OSError:
+            if port != DEFAULT_PORT:
+                raise
+            server = CodexHTTPServer(
+                ("127.0.0.1", 0),
+                service,
+                assets,
+                auto_exit=not headless,
+            )
+            print(f"默认端口 {DEFAULT_PORT} 已被占用，已改用端口 {server.server_address[1]}")
     except Exception:
         service.close()
         raise
 
-    url = f"http://127.0.0.1:{port}/"
+    actual_port = server.server_address[1]
+    url = f"http://127.0.0.1:{actual_port}/"
     print(f"图鉴本地网页：{url}")
     print(f"数据库：{service.database_path}")
     print(f"存档：{service.save_file}")

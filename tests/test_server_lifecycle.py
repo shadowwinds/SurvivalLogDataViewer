@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 import threading
 import time
 import unittest
@@ -29,6 +30,22 @@ class TestService:
 
 
 class ServerLifecycleTests(unittest.TestCase):
+    def test_bind_failure_keeps_original_socket_error(self) -> None:
+        blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        try:
+            with self.assertRaises(OSError):
+                codex_server.CodexHTTPServer(
+                    ("127.0.0.1", blocker.getsockname()[1]),
+                    TestService(),
+                    Path(__file__).resolve().parents[1] / "web",
+                    auto_exit=False,
+                )
+        finally:
+            blocker.close()
+
     def setUp(self) -> None:
         self._original_poll_interval = codex_server.POLL_INTERVAL_SECONDS
         self._original_close_grace = codex_server.PAGE_CLOSE_GRACE_SECONDS
