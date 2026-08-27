@@ -49,6 +49,7 @@ class ServerLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
         self._original_poll_interval = codex_server.POLL_INTERVAL_SECONDS
         self._original_close_grace = codex_server.PAGE_CLOSE_GRACE_SECONDS
+        self._original_idle_grace = codex_server.CLIENT_IDLE_GRACE_SECONDS
         codex_server.POLL_INTERVAL_SECONDS = 0.01
         codex_server.PAGE_CLOSE_GRACE_SECONDS = 0.12
         self.server = codex_server.CodexHTTPServer(
@@ -72,6 +73,7 @@ class ServerLifecycleTests(unittest.TestCase):
         self.server.server_close()
         codex_server.POLL_INTERVAL_SECONDS = self._original_poll_interval
         codex_server.PAGE_CLOSE_GRACE_SECONDS = self._original_close_grace
+        codex_server.CLIENT_IDLE_GRACE_SECONDS = self._original_idle_grace
 
     def _wait_until(self, condition: Callable[[], bool], timeout: float = 1) -> bool:
         deadline = time.monotonic() + timeout
@@ -104,6 +106,51 @@ class ServerLifecycleTests(unittest.TestCase):
         time.sleep(codex_server.PAGE_CLOSE_GRACE_SECONDS * 2)
 
         self.assertTrue(self.thread.is_alive())
+
+    def test_server_stops_when_no_page_connects(self) -> None:
+        self.assertTrue(self._wait_until(lambda: not self.thread.is_alive()))
+
+    def test_anonymous_activity_does_not_cancel_startup_shutdown(self) -> None:
+        self.server.note_client_activity()
+
+        self.assertTrue(self._wait_until(lambda: not self.thread.is_alive()))
+
+    def test_server_stops_when_page_disappears_without_close_notification(self) -> None:
+        codex_server.CLIENT_IDLE_GRACE_SECONDS = 0.12
+        self.server.note_client_activity("lost-page")
+
+        self.assertTrue(self._wait_until(lambda: not self.thread.is_alive()))
+
+    def test_active_page_heartbeat_prevents_idle_shutdown(self) -> None:
+        codex_server.CLIENT_IDLE_GRACE_SECONDS = 0.12
+        self.server.note_client_activity("active-page")
+
+        for _ in range(4):
+            time.sleep(0.05)
+            self.server.note_client_activity("active-page")
+
+        self.assertTrue(self.thread.is_alive())
+
+    def test_headless_server_stays_running_without_a_page(self) -> None:
+        headless_server = codex_server.CodexHTTPServer(
+            ("127.0.0.1", 0),
+            TestService(),
+            Path(__file__).resolve().parents[1] / "web",
+            auto_exit=False,
+        )
+        headless_thread = threading.Thread(
+            target=headless_server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        headless_thread.start()
+        try:
+            time.sleep(codex_server.PAGE_CLOSE_GRACE_SECONDS * 2)
+            self.assertTrue(headless_thread.is_alive())
+        finally:
+            headless_server.shutdown()
+            headless_thread.join(timeout=1)
+            headless_server.server_close()
 
     def test_page_close_stops_server_after_grace_period(self) -> None:
         self.server.note_client_activity("page-to-close")

@@ -131,7 +131,7 @@ def show_error(message: str) -> None:
     if sys.stderr is not None:
         try:
             print(safe_message, file=sys.stderr)
-        except (AttributeError, OSError):
+        except (AttributeError, OSError, ValueError):
             pass
     if sys.platform == "win32":
         try:

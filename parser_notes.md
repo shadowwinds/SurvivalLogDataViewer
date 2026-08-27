@@ -160,7 +160,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 
 分发目录为 `dist\SurvivalLogDataViewer\`，其中的 `生存日志图鉴.exe` 可以直接双击运行。必须整体分发该文件夹，不能只复制 exe。打包内容包含精简 Python 运行时、标准库服务、网页资源、自动更新所需的 UnityPy 核心导入图和预生成 SQLite 数据库，不包含 UnityPy 导出/CLI 工具、缓存、调试符号、Streamlit、PyArrow、NumPy、Pandas、Plotly 或 Matplotlib，也不包含游戏安装目录、bundle、catalog 或原始存档。
 
-独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本。普通启动不显示终端；图鉴页面明确关闭后服务约 30 秒自动退出，后台标签页或切回游戏不会触发退出，页面恢复可见时会立即刷新。`--headless` 模式保持常驻。默认端口 `8501` 被其他图鉴实例占用时会自动选择空闲端口；显式指定的其他端口冲突则返回错误。打包脚本会检查旧分发数据库与新静态数据的 schema、游戏版本和关键表行数，仅在兼容时保留完成状态，并在替换发布目录前启动本地服务执行 HTTP 自检；启动错误会记录到分发目录日志或 `%LOCALAPPDATA%\SurvivalLogDataViewer\SurvivalLogDataViewer.log`。打包脚本从 README 的用户区标记生成独立包 README，因此发布包只保留面向用户的说明。
+独立版直接使用 exe 同目录中的 `SurvivalLogDataViewer.sqlite3`，不创建或读取用户目录数据库副本。普通启动不显示终端；图鉴页面明确关闭后服务约 30 秒自动退出，启动后没有网页成功建立 API 心跳也会在约 30 秒后退出，浏览器异常结束且关闭通知丢失时会在约 90 秒没有心跳后回收。后台标签页或切回游戏时，只要网页仍能按轮询发送心跳就不会触发退出，页面恢复可见时会立即刷新。`--headless` 模式保持常驻。默认端口 `8501` 被其他图鉴实例占用时会自动选择空闲端口；显式指定的其他端口冲突则返回错误。打包脚本会强制关闭已有独立版进程，检查旧分发数据库与新静态数据的 schema、游戏版本和关键表行数，仅在兼容时保留完成状态，并在替换发布目录前启动本地服务执行首页、状态和配方接口自检；启动错误会记录到分发目录日志或 `%LOCALAPPDATA%\SurvivalLogDataViewer\SurvivalLogDataViewer.log`。打包脚本从 README 的用户区标记生成独立包 README，因此发布包只保留面向用户的说明。
 
 ## 7. 已知限制
 

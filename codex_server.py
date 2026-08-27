@@ -39,6 +39,11 @@ from codex_recipe import RecipeConfigError, build_recipe_error, build_recipe_pla
 
 POLL_INTERVAL_SECONDS = 5
 PAGE_CLOSE_GRACE_SECONDS = 30
+# A lost pagehide/beacon must not leave the local server alive forever. This
+# is deliberately longer than the normal close grace so background tabs can
+# continue to send throttled polling requests without being mistaken for a
+# closed page.
+CLIENT_IDLE_GRACE_SECONDS = 90
 DEFAULT_PORT = 8501
 CATEGORY_EMOJI = {
     "food": "🍞",
@@ -550,7 +555,11 @@ class CodexHTTPServer(ThreadingHTTPServer):
         self._lifecycle_lock = threading.Lock()
         self._active_client_ids: set[str] = set()
         self._closed_client_ids: set[str] = set()
-        self._page_close_requested_at: float | None = None
+        self._client_last_activity: dict[str, float] = {}
+        # Start a grace timer immediately; the first API heartbeat cancels it.
+        self._shutdown_requested_at: float | None = (
+            time.monotonic() if self.auto_exit else None
+        )
         if self.auto_exit:
             monitor = threading.Thread(
                 target=self._monitor_client,
@@ -560,30 +569,53 @@ class CodexHTTPServer(ThreadingHTTPServer):
             monitor.start()
 
     def note_client_activity(self, client_id: str | None = None) -> None:
+        if not client_id:
+            return
+        now = time.monotonic()
         with self._lifecycle_lock:
-            if client_id:
-                if client_id in self._closed_client_ids:
-                    return
-                self._active_client_ids.add(client_id)
-            self._page_close_requested_at = None
+            if client_id in self._closed_client_ids:
+                return
+            self._active_client_ids.add(client_id)
+            self._client_last_activity[client_id] = now
+            self._shutdown_requested_at = None
 
     def note_client_closed(self, client_id: str | None = None) -> None:
+        if not client_id:
+            return
+        now = time.monotonic()
         with self._lifecycle_lock:
-            if client_id:
-                self._closed_client_ids.add(client_id)
-                self._active_client_ids.discard(client_id)
-                if self._active_client_ids:
-                    self._page_close_requested_at = None
-                    return
-            self._page_close_requested_at = time.monotonic()
+            self._closed_client_ids.add(client_id)
+            self._active_client_ids.discard(client_id)
+            self._client_last_activity.pop(client_id, None)
+            if self._active_client_ids:
+                self._shutdown_requested_at = None
+                return
+            self._shutdown_requested_at = now
 
     def _monitor_client(self) -> None:
         while not self._stopping.wait(POLL_INTERVAL_SECONDS):
+            now = time.monotonic()
+            stop_for_idle_client = False
             with self._lifecycle_lock:
-                close_requested_at = self._page_close_requested_at
+                stale_clients = {
+                    client_id
+                    for client_id in self._active_client_ids
+                    if now - self._client_last_activity.get(client_id, now)
+                    >= CLIENT_IDLE_GRACE_SECONDS
+                }
+                if stale_clients:
+                    self._active_client_ids.difference_update(stale_clients)
+                    for client_id in stale_clients:
+                        self._client_last_activity.pop(client_id, None)
+                    if not self._active_client_ids:
+                        stop_for_idle_client = True
+                close_requested_at = self._shutdown_requested_at
             if (
-                close_requested_at is not None
-                and time.monotonic() - close_requested_at >= PAGE_CLOSE_GRACE_SECONDS
+                stop_for_idle_client
+                or (
+                    close_requested_at is not None
+                    and now - close_requested_at >= PAGE_CLOSE_GRACE_SECONDS
+                )
             ):
                 self.shutdown()
                 return

@@ -53,7 +53,7 @@
 
 必须整体保留 `SurvivalLogDataViewer/` 文件夹，其中的 exe、网页资源和 SQLite 数据库缺一不可。需要备份个人完成状态时，关闭图鉴页面后复制 `SurvivalLogDataViewer.sqlite3` 即可。
 
-浏览器切换到后台或切回游戏时，本地服务会继续运行。明确关闭所有图鉴页面后，程序通常会在约 30 秒后自动退出。
+浏览器切换到后台或切回游戏时，本地服务会继续运行。明确关闭所有图鉴页面后，程序通常会在约 30 秒后自动退出；如果浏览器没有成功打开或页面没有完成加载，服务也会在启动等待时间结束后退出。浏览器崩溃或被强制结束而没有发送关闭通知时，服务会在约 90 秒没有收到网页心跳后自动回收。`--headless` 是开发和自检模式，按设计保持常驻。
 
 ### 运行前检查
 
@@ -164,6 +164,8 @@ PowerShell -ExecutionPolicy Bypass -File .\package_frontend.ps1
 ```
 
 产物位于 `dist\SurvivalLogDataViewer\`，包含网页资源、预生成 SQLite 数据库和精简的 UnityPy 运行依赖，不包含游戏目录、catalog、bundle 或原始存档。脚本从 README 的用户区标记生成发布包中的 README，因此独立包不会携带开发者说明。
+
+打包脚本会先强制关闭后台的 `生存日志图鉴.exe` 进程，构建完成后再执行首页、状态和配方接口自检；只有自检通过才替换现有发布目录。兼容的旧数据库会保留完成状态，存在 WAL 旁车文件时也会通过 SQLite backup 一并保留。
 
 `package_frontend.ps1` 是当前工作区的本地打包脚本，按项目约定继续被 Git 忽略；从干净克隆构建时需要另行提供该脚本。详细资源格式、数据库结构、完成状态同步和限制见 [`parser_notes.md`](./parser_notes.md)，长期工作规范见 [`AGENTS.md`](./AGENTS.md)。
 <!-- END DEVELOPER GUIDE -->
