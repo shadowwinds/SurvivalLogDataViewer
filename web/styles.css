@@ -947,6 +947,26 @@ button {
   background: var(--surface);
 }
 
+.recipe-save-content {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.28fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.recipe-column {
+  min-width: 0;
+}
+
+.recipe-column > .recipe-section:first-child {
+  margin-top: 0;
+}
+
+.recipe-column + .recipe-column {
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+
 .recipe-save-heading {
   display: flex;
   align-items: flex-start;
@@ -1195,6 +1215,17 @@ button {
 
   .detail-content {
     min-height: 0;
+  }
+
+  .recipe-save-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recipe-column + .recipe-column {
+    padding-top: 20px;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 }
 

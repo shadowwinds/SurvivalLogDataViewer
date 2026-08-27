@@ -334,9 +334,10 @@
     );
     panel.append(meta);
 
+    const inventoryColumn = makeElement("div", "recipe-column recipe-inventory-column");
     const inventorySection = makeElement("section", "recipe-section");
-    inventorySection.append(makeElement("h5", "recipe-section-title", "可烹饪食材"));
     const inventory = Array.isArray(save.inventory) ? save.inventory : [];
+    inventorySection.append(makeElement("h5", "recipe-section-title", "拥有食材"));
     if (!inventory.length) {
       inventorySection.append(makeElement("div", "empty-state compact", save.status === "ok" ? "当前没有可烹饪食材" : "库存暂不可用"));
     } else {
@@ -353,8 +354,9 @@
       });
       inventorySection.append(list);
     }
-    panel.append(inventorySection);
+    inventoryColumn.append(inventorySection);
 
+    const dishesColumn = makeElement("div", "recipe-column recipe-dishes-column");
     const matchSection = makeElement("section", "recipe-section");
     const matches = Array.isArray(save.matches) ? save.matches : [];
     matchSection.append(
@@ -370,8 +372,6 @@
       });
       matchSection.append(list);
     }
-    panel.append(matchSection);
-
     const nearSection = makeElement("section", "recipe-section recipe-near-section");
     const nearMatches = Array.isArray(save.near_matches) ? save.near_matches : [];
     nearSection.append(
@@ -385,7 +385,11 @@
       nearMatches.forEach((nearMatch) => list.append(renderRecipeResult(nearMatch, { near: true })));
       nearSection.append(list);
     }
-    panel.append(nearSection);
+    dishesColumn.append(matchSection, nearSection);
+
+    const content = makeElement("div", "recipe-save-content");
+    content.append(inventoryColumn, dishesColumn);
+    panel.append(content);
     return panel;
   }
 
