@@ -10,6 +10,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 import codex_database
+from codex_server import CodexService
 from codex_database import get_category_summaries, open_database, sync_game_completion
 from codex_save import (
     MAX_DIAGNOSTIC_LOG_BYTES,
@@ -112,6 +113,39 @@ class PublicSaveTests(unittest.TestCase):
                     self.assertTrue(database.with_suffix(".log").is_file())
                 finally:
                     connection.close()
+
+
+class ServiceDiagnosticLogTests(unittest.TestCase):
+    def _run_service(self, root: Path, log_path: Path | None) -> Path:
+        if not DATABASE.is_file():
+            self.skipTest(f"缺少本地测试数据库：{DATABASE}")
+
+        database = root / "survival_log_codex.sqlite3"
+        shutil.copy2(DATABASE, database)
+        save_file = root / "HistorySave_test2.bytes"
+        shutil.copy2(FIXTURE_DIR / "HistorySave_test2.bytes", save_file)
+        service = CodexService(database, save_file, log_path=log_path)
+        try:
+            result = service._ensure_sync()
+        finally:
+            service.close()
+        self.assertEqual(result.status, "ok")
+        return database
+
+    def test_source_service_does_not_configure_diagnostic_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = self._run_service(Path(directory), None)
+            self.assertFalse(database.with_suffix(".log").exists())
+
+    def test_packaged_service_can_configure_diagnostic_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log_path = root / "SurvivalLogDataViewer.log"
+            database = self._run_service(root, log_path)
+            self.assertTrue(log_path.is_file())
+            self.assertFalse(database.with_suffix(".log").exists())
+            event = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(event["event"], "save_sync")
 
 
 class DatabasePathTests(unittest.TestCase):

@@ -902,7 +902,7 @@ def build_database(
                 connection,
                 save_file or default_save_file(),
                 force=True,
-                log_path=database_path.with_suffix(".log"),
+                log_path=None,
             )
             if save_sync.status == "error":
                 raise RuntimeError(save_sync.message)

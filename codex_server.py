@@ -293,9 +293,16 @@ def _highlight_summary(items: list[dict[str, str]]) -> str:
 class CodexService:
     """Serialize database access and avoid parsing the save when its signature is unchanged."""
 
-    def __init__(self, database_path: Path, save_file: Path):
+    def __init__(
+        self,
+        database_path: Path,
+        save_file: Path,
+        *,
+        log_path: Path | None = None,
+    ):
         self.database_path = database_path.expanduser().resolve()
         self.save_file = save_file.expanduser().resolve()
+        self.log_path = log_path.expanduser().resolve() if log_path is not None else None
         self.connection = open_database(self.database_path, check_same_thread=False)
         self._lock = threading.RLock()
         self._last_success_signature: tuple[Any, ...] | None = None
@@ -355,7 +362,7 @@ class CodexService:
             result = sync_game_completion(
                 self.connection,
                 self.save_file,
-                log_path=self.database_path.with_suffix(".log"),
+                log_path=self.log_path,
             )
             self._last_sync = result
             if result.status in {"ok", "fallback"}:
@@ -708,8 +715,10 @@ def run_local_server(
     save_file: Path,
     port: int = 8501,
     headless: bool = False,
+    *,
+    log_path: Path | None = None,
 ) -> None:
-    service = CodexService(database_path, save_file)
+    service = CodexService(database_path, save_file, log_path=log_path)
     try:
         server = CodexHTTPServer(
             ("127.0.0.1", port),

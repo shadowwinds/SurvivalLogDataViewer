@@ -15,6 +15,7 @@ from codex_update import update_database_if_needed, validate_game_root
 
 
 DATABASE_NAME = "SurvivalLogDataViewer.sqlite3"
+LOG_NAME = "SurvivalLogDataViewer.log"
 
 
 def application_directory() -> Path:
@@ -137,11 +138,13 @@ def run_frontend(args: argparse.Namespace) -> None:
         print(result.message)
     except Exception as exc:
         show_error(f"自动更新图鉴失败，将继续使用现有数据库：{exc}")
+    log_path = application_directory() / LOG_NAME if getattr(sys, "frozen", False) else None
     run_local_server(
         database_path,
         save_file,
         args.port,
         args.headless,
+        log_path=log_path,
     )
 
 

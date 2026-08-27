@@ -38,7 +38,7 @@
 
 解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。未识别的存档条目 ID 会保留在诊断结果中，不会静默转换为其他条目。
 
-网页服务和数据库同步可以将诊断写入数据库同目录的 UTF-8 JSON Lines 日志。源码数据库对应 `survival_log_codex.log`，独立版对应 `SurvivalLogDataViewer.log`；数据库目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
+独立版的网页服务和数据库同步会将诊断写入分发目录中的 UTF-8 JSON Lines 日志 `SurvivalLogDataViewer.log`；源码版不生成存档同步诊断日志。分发目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
 
 完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
@@ -132,7 +132,7 @@ python "codex_database.py" `
 
 数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v4 的菜谱物品和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜谱库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
-源码默认数据库为 `data/survival_log_codex.sqlite3`，诊断日志写在同一目录。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
+源码默认数据库为 `data/survival_log_codex.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
 
 没有存档时可以使用 `--no-save-sync` 只构建静态数据库，完成状态保持未完成。
 

@@ -49,7 +49,7 @@
 
 ### 日志、文件和退出
 
-存档同步诊断写入数据库同目录的日志文件：独立版为 `SurvivalLogDataViewer.log`。日志只记录解析阶段、文件摘要、图鉴映射位置、候选评分和错误原因，不记录原始存档字节；数据库目录不可写时会回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。
+独立版会将存档同步诊断写入 `SurvivalLogDataViewer.log`。源码版不生成存档同步诊断日志。日志只记录解析阶段、文件摘要、图鉴映射位置、候选评分和错误原因，不记录原始存档字节；分发目录不可写时会回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。
 
 必须整体保留 `SurvivalLogDataViewer/` 文件夹，其中的 exe、网页资源和 SQLite 数据库缺一不可。需要备份个人完成状态时，关闭图鉴页面后复制 `SurvivalLogDataViewer.sqlite3` 即可。
 
@@ -115,7 +115,7 @@
 | `survival_log_codex.spec` | PyInstaller 依赖配置 |
 | `web/` | 静态网页资源 |
 | `snapshots/` | 七份版本化 Markdown 快照 |
-| `data/` | 源码运行数据库和诊断日志，可重建 |
+| `data/` | 源码运行数据库，可重建；存档同步诊断日志不在源码版生成 |
 | `parser_notes.md` | 资源格式、schema、分类和运行限制 |
 
 ### 开发环境和依赖
