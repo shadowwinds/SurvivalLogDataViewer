@@ -14,3 +14,5 @@ __pycache__/
 /test
 _vendor_unitypy/
 *.ps1
+!/data/
+!/data/survival_log_codex.sqlite3
