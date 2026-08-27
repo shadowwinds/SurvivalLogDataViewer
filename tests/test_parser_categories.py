@@ -129,6 +129,7 @@ class CategorySelectionTests(unittest.TestCase):
         selected = select_category_rows(build_test_context())
 
         self.assertEqual([row.row_id for row in selected["food"]], [10])
+        self.assertEqual([row.row_id for row in selected["dish"]], [100])
         self.assertEqual([row.row_id for row in selected["prey"]], [10])
         self.assertEqual([row.row_id for row in selected["plant"]], [21])
         self.assertEqual([row.row_id for row in selected["craft"]], [31])
@@ -203,7 +204,7 @@ class DatabaseRefreshTests(unittest.TestCase):
         self._temporary_directory.cleanup()
 
     def test_same_game_version_with_old_database_policy_is_rebuilt(self) -> None:
-        database = self._make_metadata_database("2")
+        database = self._make_metadata_database("5")
         game = GameInstallation(
             root=Path("test-game"),
             catalog_path=Path("test-catalog"),

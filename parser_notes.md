@@ -46,9 +46,9 @@
 
 `codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`GameSaveData` 的标准 `CurSave` 使用当前 176 成员 schema；同时兼容已验证的 181 成员历史变体（`SaveChildData` 末尾增加 5 个整数），两种形式都必须完整读取到文件末尾。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜肴候选过滤。
 
-子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；数据库从所有 `Config_Furniture` 名称中识别冰箱、冰柜、冷冻柜或冷藏柜，并读取 `ChapterAgentMap` 中这些家具的库存。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`。没有实际 15000/15001 家具时，才回退到 `DoorBoxItems`/`DoorBoxItems2`；实际家具与兼容字段同时存在时保留实际家具结果并记录诊断。其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目不进入菜谱库存，`Config_Item.CanCook == false` 的物品也会被排除；输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格。
+子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；数据库只收录本地化名称严格等于 `双门冰箱`、`豪华版双门冰箱`、`双开门冰箱` 或 `冰柜` 的 `Config_Furniture`，并读取 `ChapterAgentMap` 中这些家具的库存。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具配置均保留。`冷冻柜`、大型或巨型冷冻柜、医用冷藏柜、食堂冰箱、普通冰箱、其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目不进入菜谱库存。旧版 `DoorBoxItems`/`DoorBoxItems2` 只对 15000/15001 保留兼容回退，且仅在没有对应实际家具时使用；实际家具与兼容字段同时存在时保留实际家具结果并记录诊断。`Config_Item.CanCook == false` 的物品也会被排除；后端输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格供匹配和诊断。
 
-数据库 schema v5 额外保存全部 `Config_Item` 的烹饪相关字段、冰箱/冰柜家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键。`SpecificItems` 按实际物品 ID 多重集合精确匹配；`TagCombo` 只按 `Config_ItemSubCategory` 将配方放入候选组，不单独决定最终菜肴。工具枚举库存中的实际组合，按原生 `CookingTierResolver` 对 Meat、Custard、Fish、Vegetable、Fruit、Seasoning、Mushroom 分别计算 High/Mid/Low，整组取最差档位，再选择同一候选组的 `Tier=1/2/3` 配方。当前静态候选固定为全部 496 道菜肴；同时设置 `SpecificItems` 和 `TagCombo` 的配置会直接报错。每个存档另计算精确配方缺一个物品或分类配方缺一个分类槽位的 `near_matches`，并排除已解锁及已经完全可烹饪的菜肴；网页只展示选中存档，不展示诊断字段。
+数据库 schema v6 额外保存全部 `Config_Item` 的烹饪相关字段、严格四类冰箱/冰柜家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建。`SpecificItems` 按实际物品 ID 多重集合精确匹配；只有缺口总数量严格为 1 的配方才进入 `near_matches`。`TagCombo` 逐个尝试移除一个分类槽位，再用实际库存数量枚举剩余组合；只有剩余槽位和数量全部满足、补入一个候选食材后能解析出有效烹饪档位的菜肴才返回。分类配方的多个候选食材共用一个 `missing_sub_category` 缺口，候选列表放在 `missing_item_candidates`，不计为多个缺口。近匹配排除已解锁及已经完全可烹饪的菜肴；网页只展示选中存档的名称、数量、菜肴档位和食材名称，不展示诊断字段、ID、来源、容器或存档文件名。
 
 ## 3. 主图鉴分类和关联
 
@@ -130,7 +130,7 @@ python "codex_database.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v5 的菜肴物品、冰箱/冰柜映射和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v6 的菜肴物品、严格四类冰箱/冰柜映射和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
 源码默认数据库为 `data/survival_log_codex.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
 
@@ -146,7 +146,7 @@ python "codex_server.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端提供六类主图鉴分类和“可烹饪菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，并展示该存档的实时库存、实际食材组合、候选组、解析档位、最终 Tier 配方和仅差一个食材的结果；前端不会写回存档。
+前端提供六类主图鉴分类和“可烹饪菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，下拉切换后只展示该存档；页面采用固定视口高度，左侧拥有食材、右侧可烹饪菜肴和仅差一个食材结果分别滚动。页面只显示存档名称、食材名称及数量、菜肴名称和档位，前端不会写回存档。
 
 ## 6. 独立版运行和打包
 

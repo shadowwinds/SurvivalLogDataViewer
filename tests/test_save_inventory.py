@@ -78,8 +78,17 @@ class SaveInventorySourceTests(unittest.TestCase):
                             "ItemList": [self._item(2529)],
                         },
                         {
+                            "AgentConfigId": 215,
+                            "BagFurnitureConfigId": 217,
+                            "ItemList": [self._item(2530)],
+                        },
+                        {
                             "AgentConfigId": 9001,
                             "ItemList": [self._item(2529)],
+                        },
+                        {
+                            "AgentConfigId": 9002,
+                            "ItemList": [self._item(2531)],
                         },
                     ]
                 },
@@ -90,15 +99,54 @@ class SaveInventorySourceTests(unittest.TestCase):
         state = _inventory_from_game_save(
             root,
             self.file_info,
-            storage_furniture={215: "双门冰箱", 216: "冰柜", 9002: "冷冻柜"},
+            storage_furniture={
+                215: "双门冰箱",
+                216: "冰柜",
+                217: "双门冰箱",
+                9002: "冷冻柜",
+            },
         )
 
-        self.assertEqual([item.item_config_id for item in state.items], [2527, 2528, 2529])
+        self.assertEqual([item.item_config_id for item in state.items], [2527, 2528, 2529, 2530])
         self.assertEqual(state.items[1].source, "双门冰箱")
         self.assertEqual(state.items[2].source, "冰柜")
+        self.assertEqual(state.items[3].source, "双门冰箱")
         self.assertEqual(state.container_counts["storage_215"], 1)
         self.assertEqual(state.container_counts["storage_216"], 1)
+        self.assertEqual(state.container_counts["storage_217"], 1)
         self.assertNotIn("storage_9001", state.container_counts)
+        self.assertNotIn("storage_9002", state.container_counts)
+
+    def test_multiple_storage_configs_with_same_name_are_all_read(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": []},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 908,
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 909,
+                            "ItemList": [self._item(2528)],
+                        },
+                    ]
+                },
+            }
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={908: "冰柜", 909: "冰柜"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527, 2528])
+        self.assertEqual([item.source for item in state.items], ["冰柜", "冰柜"])
+        self.assertEqual(
+            state.container_counts,
+            {"主控背包": 0, "storage_908": 1, "storage_909": 1},
+        )
 
 
 if __name__ == "__main__":

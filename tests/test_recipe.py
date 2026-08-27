@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 import unittest
 
 from codex_recipe import (
@@ -9,6 +10,7 @@ from codex_recipe import (
     RecipeSpec,
     StorageFurnitureSpec,
     _inventory_payload,
+    _load_storage_furniture_from_database,
     TierRule,
     find_near_matches,
     match_inventory,
@@ -185,7 +187,16 @@ class CookingTierTests(unittest.TestCase):
 
         self.assertEqual([match["recipe_id"] for match in near_matches], [4001])
         self.assertEqual([item["item_id"] for item in near_matches[0]["missing_items"]], [2527])
+        self.assertEqual(near_matches[0]["missing_item_candidates"], [])
         self.assertEqual(near_matches[0]["available_combination"][0]["source"], "冰柜")
+
+        missing_two = find_near_matches(
+            [],
+            [recipe(4002, specific_items=(2527, 2528))],
+            self.items,
+            self.rules,
+        )
+        self.assertEqual(missing_two, [])
 
         complete = find_near_matches(
             [InventoryItem(2527, 2, "主控背包", "backpack")],
@@ -209,8 +220,38 @@ class CookingTierTests(unittest.TestCase):
 
         self.assertEqual([match["recipe_id"] for match in near_matches], [4103])
         self.assertEqual(near_matches[0]["missing_sub_category"]["sub_category"], 4)
-        self.assertEqual([item["item_id"] for item in near_matches[0]["missing_items"]], [2901])
+        self.assertEqual(near_matches[0]["missing_sub_category"]["count"], 1)
+        self.assertEqual(near_matches[0]["missing_items"], [])
+        self.assertEqual(
+            [item["item_id"] for item in near_matches[0]["missing_item_candidates"]],
+            [2901],
+        )
         self.assertEqual(near_matches[0]["available_combination"][0]["item_id"], 2528)
+
+    def test_tag_recipe_near_match_requires_every_other_slot_and_quantity(self) -> None:
+        self.assertEqual(
+            find_near_matches(
+                [InventoryItem(2528, 1, "主控背包", "backpack")],
+                [recipe(4110, tier=3, tag_combo=(4, 5, 5))],
+                self.items,
+                self.rules,
+            ),
+            [],
+        )
+
+        near_matches = find_near_matches(
+            [InventoryItem(2528, 1, "主控背包", "backpack")],
+            [recipe(4111, tier=3, tag_combo=(5, 5))],
+            self.items,
+            self.rules,
+        )
+        self.assertEqual([match["recipe_id"] for match in near_matches], [4111])
+        self.assertEqual(near_matches[0]["missing_items"], [])
+        self.assertEqual(near_matches[0]["missing_sub_category"]["count"], 1)
+        self.assertEqual(
+            [item["item_id"] for item in near_matches[0]["missing_item_candidates"]],
+            [2527],
+        )
 
     def test_near_matches_exclude_completed_and_already_cookable_recipes(self) -> None:
         recipes = [
@@ -274,6 +315,18 @@ class RecipeConfigTests(unittest.TestCase):
             [
                 ConfigRow(
                     "Config_Furniture",
+                    {"ID": 102, "Name_Local": "冷冻柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 106, "Name_Local": "大型冷冻柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 107, "Name_Local": "巨型冷冻柜（非卖品）"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
                     {"ID": 15000, "Name": "Fridge_Double", "Name_Local": "双开门冰箱"},
                 ),
                 ConfigRow(
@@ -282,7 +335,39 @@ class RecipeConfigTests(unittest.TestCase):
                 ),
                 ConfigRow(
                     "Config_Furniture",
+                    {"ID": 215, "Name_Local": "双门冰箱"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 80062, "Name_Local": "豪华版双门冰箱"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 908, "Name_Local": "冰柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 909, "Name_Local": "冰柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 431, "Name_Local": "冰箱"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 66114, "Name_Local": "医用冷藏柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 67024, "Name_Local": "食堂冰箱"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
                     {"ID": 9999, "Name_Local": "普通储物柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 9998, "Name": "冰柜", "Name_Local": "普通储物柜"},
                 ),
             ]
         )
@@ -290,10 +375,36 @@ class RecipeConfigTests(unittest.TestCase):
         self.assertEqual(
             specs,
             (
+                StorageFurnitureSpec(215, "双门冰箱"),
+                StorageFurnitureSpec(908, "冰柜"),
+                StorageFurnitureSpec(909, "冰柜"),
                 StorageFurnitureSpec(15000, "双开门冰箱"),
                 StorageFurnitureSpec(15001, "冰柜"),
+                StorageFurnitureSpec(80062, "豪华版双门冰箱"),
             ),
         )
+
+    def test_database_storage_mapping_rechecks_strict_names(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute(
+                "CREATE TABLE storage_furniture (config_id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
+            )
+            connection.executemany(
+                "INSERT INTO storage_furniture(config_id, name) VALUES (?, ?)",
+                [
+                    (102, "冷冻柜"),
+                    (215, "双门冰箱"),
+                    (107, "巨型冷冻柜（非卖品）"),
+                ],
+            )
+            self.assertEqual(
+                _load_storage_furniture_from_database(connection),
+                {215: "双门冰箱"},
+            )
+        finally:
+            connection.close()
 
     def test_specific_items_and_tag_combo_are_rejected_together(self) -> None:
         row = ConfigRow(

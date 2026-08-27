@@ -236,9 +236,13 @@
     renderHeader();
   }
 
-  function formatRecipeItem(item) {
-    const category = item.sub_category_name || `ID:${item.sub_category}`;
-    return `${item.name || `ID:${item.item_id}`}（ID ${item.item_id}） · ${category} · ${item.source || "未知来源"}`;
+  function recipeDisplayName(value, fallback) {
+    const name = typeof value === "string" ? value.trim() : "";
+    return name && !/^ID\s*:/i.test(name) ? name : fallback;
+  }
+
+  function recipeItemName(item) {
+    return recipeDisplayName(item && item.name, "未命名食材");
   }
 
   function renderRecipeSelector(payload) {
@@ -253,9 +257,8 @@
     const selected = saves.find((save) => save.file_name === preferred) || saves[0] || null;
     state.recipeSaveSelection = selected ? selected.file_name : "";
     saves.forEach((save) => {
-      const option = makeElement("option", "", save.name || save.file_name || "未命名存档");
+      const option = makeElement("option", "", recipeDisplayName(save.name, "未命名存档"));
       option.value = save.file_name || "";
-      option.title = save.file_name || "";
       option.selected = Boolean(selected && save.file_name === selected.file_name);
       select.append(option);
     });
@@ -271,9 +274,8 @@
         const ingredient = makeElement(
           "span",
           "recipe-ingredient",
-          `${item.name || `ID:${item.item_id}`}（ID ${item.item_id}） · ${item.sub_category_name || `ID:${item.sub_category}`} · ${item.source || "未知来源"}`,
+          recipeItemName(item),
         );
-        ingredient.title = `${item.name || `ID:${item.item_id}`}，价格 ${item.price}`;
         combination.append(ingredient);
       });
     }
@@ -285,8 +287,7 @@
     const heading = makeElement("div", "recipe-match-heading");
     const title = makeElement("div", "recipe-match-title");
     title.append(
-      makeElement("strong", "recipe-match-name", result.name || `ID:${result.recipe_id}`),
-      makeElement("span", "recipe-match-id", `ID ${result.recipe_id}`),
+      makeElement("strong", "recipe-match-name", recipeDisplayName(result.name, "未命名菜肴")),
     );
     heading.append(
       title,
@@ -298,15 +299,23 @@
       const missingItems = Array.isArray(result.missing_items) ? result.missing_items : [];
       const missingCategory = result.missing_sub_category;
       const missingText = missingItems.length
-        ? `还需：${missingItems.map((item) => item.name || `ID:${item.item_id}`).join("、")}`
-        : `还需：${missingCategory && (missingCategory.name || `ID:${missingCategory.sub_category}`)}`;
+        ? `还需：${recipeItemName(missingItems[0])}`
+        : `还需 1 个${recipeDisplayName(missingCategory && missingCategory.name, "食材")}`;
       card.append(makeElement("div", "recipe-near-missing", missingText));
-      if (missingItems.length) renderRecipeCombination(card, missingItems, "");
+      if (missingItems.length) renderRecipeCombination(card, missingItems.slice(0, 1), "");
+      const candidates = Array.isArray(result.missing_item_candidates)
+        ? result.missing_item_candidates
+            .map(recipeItemName)
+            .filter((name, index, names) => names.indexOf(name) === index)
+        : [];
+      if (candidates.length) {
+        card.append(makeElement("div", "recipe-near-candidates", `可选食材：${candidates.join("、")}`));
+      }
       card.append(makeElement("div", "recipe-near-available-label", "当前组合"));
       renderRecipeCombination(card, result.available_combination, "尚无可用组合");
     } else {
       const candidate = Array.isArray(result.candidate_group)
-        ? `分类组合：${result.candidate_group.join("、")}`
+        ? "分类配方"
         : "指定食材精确匹配";
       card.append(makeElement("div", "recipe-match-candidate", candidate));
       renderRecipeCombination(card, result.representative_combination, "尚无可用组合");
@@ -320,8 +329,7 @@
     const heading = makeElement("div", "recipe-save-heading");
     const title = makeElement("div", "recipe-save-title");
     title.append(
-      makeElement("h4", "recipe-save-name", save.name || save.file_name || "未命名存档"),
-      makeElement("div", "recipe-save-file", save.file_name || ""),
+      makeElement("h4", "recipe-save-name", recipeDisplayName(save.name, "未命名存档")),
     );
     const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
     heading.append(title, makeElement("span", `recipe-status ${save.status || "error"}`, statusText));
@@ -330,7 +338,6 @@
     meta.append(
       makeElement("span", "recipe-meta-item", save.mode || "未知模式"),
       makeElement("span", "recipe-meta-item", `第 ${Number(save.max_day || 0)} 天`),
-      makeElement("span", "recipe-meta-item", `主角 ID ${Number(save.player_select_id || 0)}`),
     );
     panel.append(meta);
 
@@ -345,11 +352,9 @@
       inventory.forEach((item) => {
         const row = makeElement("div", "recipe-inventory-row");
         row.append(
-          makeElement("span", "recipe-inventory-name", item.name || `ID:${item.item_id}`),
+          makeElement("span", "recipe-inventory-name", recipeItemName(item)),
           makeElement("span", "recipe-inventory-count", `× ${item.count}`),
-          makeElement("span", "recipe-inventory-detail", `${item.sub_category_name || `ID:${item.sub_category}`} · ${item.source || "未知来源"}`),
         );
-        row.title = formatRecipeItem(item);
         list.append(row);
       });
       inventorySection.append(list);

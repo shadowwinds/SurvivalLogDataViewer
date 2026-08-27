@@ -41,6 +41,14 @@ CODEX_CATEGORY_SOURCE_TABLES = {
     "craft": "Config_ProductionList",
     "furniture": "Config_Furniture",
 }
+ALLOWED_STORAGE_FURNITURE_NAMES = frozenset(
+    {
+        "双门冰箱",
+        "豪华版双门冰箱",
+        "双开门冰箱",
+        "冰柜",
+    }
+)
 
 
 class SaveParseError(ValueError):
@@ -1094,6 +1102,18 @@ def _append_inventory_items(
     return count
 
 
+def _allowed_storage_furniture_names(storage_furniture: Mapping[int, str]) -> dict[int, str]:
+    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
+    return {
+        int(config_id): str(name).strip()
+        for config_id, name in storage_furniture.items()
+        if isinstance(config_id, int)
+        and not isinstance(config_id, bool)
+        and config_id > 0
+        and str(name).strip().casefold() in allowed_names
+    }
+
+
 def _inventory_from_game_save(
     root: dict[str, object],
     file_info: SaveFileInfo,
@@ -1124,14 +1144,9 @@ def _inventory_from_game_save(
         diagnostics.append("CurSave.LeadingRole 缺失或为 null")
 
     legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
-    storage_names = {
-        int(config_id): str(name)
-        for config_id, name in (legacy_storage if storage_furniture is None else storage_furniture).items()
-        if isinstance(config_id, int)
-        and not isinstance(config_id, bool)
-        and config_id > 0
-        and str(name)
-    }
+    storage_names = _allowed_storage_furniture_names(
+        legacy_storage if storage_furniture is None else storage_furniture
+    )
     marked_agents: dict[int, list[dict[str, object]]] = {
         config_id: [] for config_id in storage_names
     }
@@ -1875,6 +1890,7 @@ def write_save_diagnostic(
 
 
 __all__ = [
+    "ALLOWED_STORAGE_FURNITURE_NAMES",
     "CODEX_CATEGORY_IDS",
     "CODEX_CATEGORY_SOURCE_TABLES",
     "CodexMapCandidate",

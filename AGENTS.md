@@ -53,7 +53,7 @@
 
 食品和猎物允许重叠，不得照搬参考网页的物品分类。六个主图鉴分类均严格使用配置中的 `InCodex == true`，只有没有该字段的菜肴表保留全部行。家具中的功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`；没有独立配置表的条件组、奖励组、动作、房间和掉落组保留原始 ID。
 
-菜肴库存只读取主控背包，以及 `Config_Furniture` 名称中识别为冰箱、冰柜、冷冻柜或冷藏柜的所有家具。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`；其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 仅在没有对应实际 15000/15001 家具时兼容回退。
+菜肴库存只读取主控背包，以及本地化名称严格等于 `双门冰箱`、`豪华版双门冰箱`、`双开门冰箱` 或 `冰柜` 的所有家具。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`；同名的多个家具配置均允许读取。`冷冻柜`、大型或巨型冷冻柜、医用冷藏柜、食堂冰箱、普通冰箱、其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 仅保留 15000/15001 的兼容回退，且只在没有对应实际家具时使用。
 
 当前版本的全量配置数量和实际图鉴展示数量只在 `parser_notes.md` 维护，其他文档不得复制固定数字。
 

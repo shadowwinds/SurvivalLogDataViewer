@@ -13,6 +13,7 @@ from typing import Any, Collection, Iterable, Mapping
 
 from codex_parser import ConfigRow, Reader, config_row_name, load_text_asset
 from codex_save import (
+    ALLOWED_STORAGE_FURNITURE_NAMES,
     InventoryItem,
     SaveHistoryRecord,
     SaveParseError,
@@ -50,15 +51,6 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-STORAGE_FURNITURE_MARKERS = (
-    "冰箱",
-    "冰柜",
-    "冷冻",
-    "冷藏",
-    "fridge",
-    "freezer",
-    "refrigerator",
-)
 
 
 @dataclass(frozen=True)
@@ -173,16 +165,17 @@ def item_specs_from_rows(
 def storage_furniture_specs_from_rows(
     rows: Iterable[ConfigRow],
 ) -> tuple[StorageFurnitureSpec, ...]:
-    """Identify every furniture config whose name describes cold storage."""
+    """Identify furniture configs with one of the four supported storage names."""
 
+    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
     result: list[StorageFurnitureSpec] = []
     for row in rows:
         values = row.values
-        names = " ".join(
-            str(values.get(field) or "")
-            for field in ("Name_Local", "Name", "FurnitureName_Local", "FurnitureName")
-        ).casefold()
-        if not any(marker.casefold() in names for marker in STORAGE_FURNITURE_MARKERS):
+        names = {
+            str(values.get(field) or "").strip().casefold()
+            for field in ("Name_Local", "FurnitureName_Local")
+        }
+        if not names.intersection(allowed_names):
             continue
         result.append(StorageFurnitureSpec(config_id=row.row_id, name=config_row_name(row)))
     return tuple(sorted(result, key=lambda item: item.config_id))
@@ -363,7 +356,12 @@ def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dic
         if "no such table" not in str(exc).lower():
             raise
         return dict(LEGACY_STORAGE_FURNITURE)
-    result = {int(row["config_id"]): str(row["name"]) for row in rows if str(row["name"])}
+    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
+    result = {
+        int(row["config_id"]): str(row["name"]).strip()
+        for row in rows
+        if str(row["name"]).strip().casefold() in allowed_names
+    }
     return result or dict(LEGACY_STORAGE_FURNITURE)
 
 
@@ -715,6 +713,7 @@ def _near_match_payload(
     items: Mapping[int, RecipeItemSpec],
     lots: Mapping[int, Collection[InventoryItem]],
     missing_items: Collection[RecipeItemSpec] = (),
+    missing_item_candidates: Collection[RecipeItemSpec] = (),
     missing_sub_category: int | None = None,
 ) -> dict[str, object]:
     payload = _match_payload(
@@ -731,6 +730,10 @@ def _near_match_payload(
         _static_item_payload(spec)
         for spec in sorted(missing_items, key=lambda value: value.item_id)
     ]
+    payload["missing_item_candidates"] = [
+        _static_item_payload(spec)
+        for spec in sorted(missing_item_candidates, key=lambda value: value.item_id)
+    ]
     missing_category_name = f"ID:{missing_sub_category}"
     if missing_sub_category is not None:
         for spec in sorted(items.values(), key=lambda value: value.item_id):
@@ -741,6 +744,7 @@ def _near_match_payload(
         {
             "sub_category": missing_sub_category,
             "name": missing_category_name,
+            "count": 1,
         }
         if missing_sub_category is not None
         else None
@@ -808,41 +812,7 @@ def find_near_matches(
             )
         )
 
-    category_counts: Counter[int] = Counter()
-    for item_id, count in counts.items():
-        spec = items.get(item_id)
-        if spec is not None:
-            category_counts[spec.sub_category] += count
-
     for tag_combo, group in sorted(tag_groups.items()):
-        required_categories = Counter(tag_combo)
-        deficits = {
-            tag: max(0, count - category_counts.get(tag, 0))
-            for tag, count in required_categories.items()
-        }
-        shortage = [tag for tag, count in deficits.items() for _ in range(count)]
-        if len(shortage) != 1:
-            continue
-        missing_tag = shortage[0]
-        partial_tags = list(tag_combo)
-        partial_tags.remove(missing_tag)
-        partial_combinations = _enumerate_tag_combinations(
-            tuple(partial_tags), counts, items
-        )
-        if not partial_combinations:
-            continue
-        candidates = tuple(
-            sorted(
-                (
-                    spec
-                    for spec in items.values()
-                    if spec.can_cook and spec.sub_category == missing_tag
-                ),
-                key=lambda spec: spec.item_id,
-            )
-        )
-        if not candidates:
-            continue
         candidate_by_tier: dict[int, list[RecipeSpec]] = defaultdict(list)
         for recipe in group:
             if recipe.tier in (1, 2, 3):
@@ -850,33 +820,55 @@ def find_near_matches(
         if not candidate_by_tier:
             continue
 
+        pending_candidate_ids = [recipe.recipe_id for recipe in group]
         by_recipe_id: dict[int, dict[str, object]] = {}
-        for partial_combo in partial_combinations:
-            for candidate in candidates:
-                full_combo = tuple(partial_combo) + (candidate.item_id,)
-                tier = resolve_cooking_tier(full_combo, items=items, rules=rules)
-                if tier is None:
-                    continue
-                tier_candidates = candidate_by_tier.get(tier, ())
-                if not tier_candidates:
-                    continue
-                selected = min(tier_candidates, key=lambda value: value.recipe_id)
-                entry = by_recipe_id.setdefault(
-                    selected.recipe_id,
-                    {
-                        "recipe": selected,
-                        "combos": [],
-                        "missing_items": {},
-                    },
+        for missing_tag in sorted(set(tag_combo)):
+            partial_tags = list(tag_combo)
+            partial_tags.remove(missing_tag)
+            partial_combinations = _enumerate_tag_combinations(
+                tuple(partial_tags), counts, items
+            )
+            if not partial_combinations:
+                continue
+            candidates = tuple(
+                sorted(
+                    (
+                        spec
+                        for spec in items.values()
+                        if spec.can_cook and spec.sub_category == missing_tag
+                    ),
+                    key=lambda spec: spec.item_id,
                 )
-                entry["combos"].append(tuple(partial_combo))
-                entry["missing_items"][candidate.item_id] = candidate
+            )
+            if not candidates:
+                continue
 
-        pending_candidate_ids = [
-            recipe.recipe_id
-            for recipe in group
-            if recipe.recipe_id not in completed
-        ]
+            for partial_combo in partial_combinations:
+                for candidate in candidates:
+                    full_combo = tuple(partial_combo) + (candidate.item_id,)
+                    if Counter(
+                        items[item_id].sub_category for item_id in full_combo
+                    ) != Counter(tag_combo):
+                        continue
+                    tier = resolve_cooking_tier(full_combo, items=items, rules=rules)
+                    if tier is None:
+                        continue
+                    tier_candidates = candidate_by_tier.get(tier, ())
+                    if not tier_candidates:
+                        continue
+                    selected = min(tier_candidates, key=lambda value: value.recipe_id)
+                    entry = by_recipe_id.setdefault(
+                        selected.recipe_id,
+                        {
+                            "recipe": selected,
+                            "combos": [],
+                            "missing_tag": missing_tag,
+                            "candidate_items": {},
+                        },
+                    )
+                    entry["combos"].append(tuple(partial_combo))
+                    entry["candidate_items"][candidate.item_id] = candidate
+
         for recipe_id in sorted(by_recipe_id):
             entry = by_recipe_id[recipe_id]
             selected = entry["recipe"]
@@ -890,8 +882,8 @@ def find_near_matches(
                     tier=selected.tier,
                     items=items,
                     lots=lots,
-                    missing_items=entry["missing_items"].values(),
-                    missing_sub_category=missing_tag,
+                    missing_item_candidates=entry["candidate_items"].values(),
+                    missing_sub_category=entry["missing_tag"],
                 )
             )
 

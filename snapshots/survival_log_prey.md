@@ -7,7 +7,7 @@
 - 条目数量：19
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
-- 说明：按物品配置中的猎物稀有度导出：Prey_Rarity 大于 0；保留原始 InCodex 值，不以该值过滤猎物。
+- 说明：按物品配置中的图鉴标记和猎物稀有度导出：InCodex=true 且 Prey_Rarity 大于 0；食品物品可以同时出现在食品分类。
 
 ## 条目
 
