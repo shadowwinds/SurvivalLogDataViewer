@@ -49,6 +49,18 @@ class RecipeConfigError(ValueError):
     """Raised when a recipe or tier configuration cannot be interpreted safely."""
 
 
+LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
+STORAGE_FURNITURE_MARKERS = (
+    "冰箱",
+    "冰柜",
+    "冷冻",
+    "冷藏",
+    "fridge",
+    "freezer",
+    "refrigerator",
+)
+
+
 @dataclass(frozen=True)
 class RecipeItemSpec:
     item_id: int
@@ -59,6 +71,7 @@ class RecipeItemSpec:
     sub_category_name: str
     price: float
     raw_json: str
+    in_codex: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,6 +93,12 @@ class TierRule:
     mid_low_threshold: float
     high_source: str
     mid_low_source: str
+
+
+@dataclass(frozen=True)
+class StorageFurnitureSpec:
+    config_id: int
+    name: str
 
 
 def _as_int(value: object, default: int = 0) -> int:
@@ -145,9 +164,28 @@ def item_specs_from_rows(
                 sub_category_name=names.get(_as_int(values.get("SubCategory")), ""),
                 price=float(values.get("price") or 0),
                 raw_json=json.dumps(values, ensure_ascii=False, separators=(",", ":")),
+                in_codex=values.get("InCodex") is True,
             )
         )
     return tuple(sorted(result, key=lambda item: item.item_id))
+
+
+def storage_furniture_specs_from_rows(
+    rows: Iterable[ConfigRow],
+) -> tuple[StorageFurnitureSpec, ...]:
+    """Identify every furniture config whose name describes cold storage."""
+
+    result: list[StorageFurnitureSpec] = []
+    for row in rows:
+        values = row.values
+        names = " ".join(
+            str(values.get(field) or "")
+            for field in ("Name_Local", "Name", "FurnitureName_Local", "FurnitureName")
+        ).casefold()
+        if not any(marker.casefold() in names for marker in STORAGE_FURNITURE_MARKERS):
+            continue
+        result.append(StorageFurnitureSpec(config_id=row.row_id, name=config_row_name(row)))
+    return tuple(sorted(result, key=lambda item: item.config_id))
 
 
 def read_global_settings(game_root: Path) -> dict[str, tuple[int, float, str | None]]:
@@ -229,6 +267,7 @@ def populate_recipe_tables(
     *,
     items: Iterable[RecipeItemSpec],
     rules: Iterable[TierRule],
+    storage_furniture: Iterable[StorageFurnitureSpec] = (),
 ) -> dict[str, int]:
     item_rows = [
         (
@@ -254,6 +293,10 @@ def populate_recipe_tables(
         )
         for rule in rules
     ]
+    storage_rows = [
+        (storage.config_id, storage.name)
+        for storage in storage_furniture
+    ]
     connection.executemany(
         """
         INSERT INTO recipe_items(
@@ -272,7 +315,18 @@ def populate_recipe_tables(
         """,
         rule_rows,
     )
-    return {"recipe_items": len(item_rows), "recipe_tier_rules": len(rule_rows)}
+    connection.executemany(
+        """
+        INSERT INTO storage_furniture(config_id, name)
+        VALUES (?, ?)
+        """,
+        storage_rows,
+    )
+    return {
+        "recipe_items": len(item_rows),
+        "recipe_tier_rules": len(rule_rows),
+        "storage_furniture": len(storage_rows),
+    }
 
 
 def _load_items_from_database(connection: sqlite3.Connection) -> dict[int, RecipeItemSpec]:
@@ -294,9 +348,23 @@ def _load_items_from_database(connection: sqlite3.Connection) -> dict[int, Recip
             sub_category_name=str(row["sub_category_name"] or ""),
             price=float(row["price"]),
             raw_json=str(row["raw_json"]),
+            in_codex=json.loads(str(row["raw_json"])).get("InCodex") is True,
         )
         for row in rows
     }
+
+
+def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dict[int, str]:
+    try:
+        rows = connection.execute(
+            "SELECT config_id, name FROM storage_furniture ORDER BY config_id"
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc).lower():
+            raise
+        return dict(LEGACY_STORAGE_FURNITURE)
+    result = {int(row["config_id"]): str(row["name"]) for row in rows if str(row["name"])}
+    return result or dict(LEGACY_STORAGE_FURNITURE)
 
 
 def _load_rules_from_database(connection: sqlite3.Connection) -> dict[int, TierRule]:
@@ -620,6 +688,216 @@ def match_inventory(
     return [by_recipe_id[key] for key in sorted(by_recipe_id)], sorted(set(diagnostics))
 
 
+def _static_item_payload(
+    spec: RecipeItemSpec,
+    *,
+    count: int = 1,
+) -> dict[str, object]:
+    return {
+        "item_id": spec.item_id,
+        "name": spec.name,
+        "count": count,
+        "source": "尚未拥有",
+        "container": "unknown",
+        "category": spec.category,
+        "sub_category": spec.sub_category,
+        "sub_category_name": spec.sub_category_name or f"ID:{spec.sub_category}",
+        "price": spec.price,
+    }
+
+
+def _near_match_payload(
+    recipe: RecipeSpec,
+    *,
+    combo: tuple[int, ...],
+    candidate_recipe_ids: Collection[int],
+    tier: int,
+    items: Mapping[int, RecipeItemSpec],
+    lots: Mapping[int, Collection[InventoryItem]],
+    missing_items: Collection[RecipeItemSpec] = (),
+    missing_sub_category: int | None = None,
+) -> dict[str, object]:
+    payload = _match_payload(
+        recipe,
+        combo=combo,
+        candidate_recipe_ids=candidate_recipe_ids,
+        tier=tier,
+        combination_count=1,
+        items=items,
+        lots=lots,
+    )
+    payload["available_combination"] = payload.pop("representative_combination")
+    payload["missing_items"] = [
+        _static_item_payload(spec)
+        for spec in sorted(missing_items, key=lambda value: value.item_id)
+    ]
+    missing_category_name = f"ID:{missing_sub_category}"
+    if missing_sub_category is not None:
+        for spec in sorted(items.values(), key=lambda value: value.item_id):
+            if spec.sub_category == missing_sub_category:
+                missing_category_name = spec.sub_category_name or missing_category_name
+                break
+    payload["missing_sub_category"] = (
+        {
+            "sub_category": missing_sub_category,
+            "name": missing_category_name,
+        }
+        if missing_sub_category is not None
+        else None
+    )
+    return payload
+
+
+def find_near_matches(
+    inventory: Collection[InventoryItem],
+    recipes: Collection[RecipeSpec],
+    items: Mapping[int, RecipeItemSpec],
+    rules: Mapping[int, TierRule],
+    *,
+    completed_recipe_ids: Collection[int] = (),
+    excluded_recipe_ids: Collection[int] = (),
+) -> list[dict[str, object]]:
+    """Find pending recipes that need exactly one more item or category slot."""
+
+    completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
+    excluded = completed | frozenset(int(recipe_id) for recipe_id in excluded_recipe_ids)
+    counts, lots = _available_item_ids(inventory, items=items)
+    tag_groups: dict[tuple[int, ...], list[RecipeSpec]] = defaultdict(list)
+    specific_recipes: list[RecipeSpec] = []
+    for recipe in sorted(recipes, key=lambda value: value.recipe_id):
+        if recipe.tag_combo and recipe.specific_items:
+            raise RecipeConfigError(
+                f"Config_CookingRecipe ID {recipe.recipe_id} 同时设置 SpecificItems 和 TagCombo；"
+                "当前工具拒绝静默猜测其匹配语义"
+            )
+        if recipe.recipe_id in excluded:
+            continue
+        if recipe.tag_combo:
+            tag_groups[tuple(sorted(recipe.tag_combo))].append(recipe)
+        elif recipe.specific_items:
+            specific_recipes.append(recipe)
+
+    near_matches: list[dict[str, object]] = []
+    for recipe in specific_recipes:
+        required = Counter(recipe.specific_items)
+        if any(
+            item_id not in items or not items[item_id].can_cook
+            for item_id in required
+        ):
+            continue
+        missing_ids: list[int] = []
+        for item_id, required_count in required.items():
+            missing_ids.extend(
+                [item_id] * max(0, required_count - counts.get(item_id, 0))
+            )
+        if len(missing_ids) != 1:
+            continue
+        missing_id = missing_ids[0]
+        available_combo = list(recipe.specific_items)
+        available_combo.remove(missing_id)
+        tier = resolve_cooking_tier(recipe.specific_items, items=items, rules=rules) or 0
+        near_matches.append(
+            _near_match_payload(
+                recipe,
+                combo=tuple(available_combo),
+                candidate_recipe_ids=(recipe.recipe_id,),
+                tier=tier,
+                items=items,
+                lots=lots,
+                missing_items=(items[missing_id],),
+            )
+        )
+
+    category_counts: Counter[int] = Counter()
+    for item_id, count in counts.items():
+        spec = items.get(item_id)
+        if spec is not None:
+            category_counts[spec.sub_category] += count
+
+    for tag_combo, group in sorted(tag_groups.items()):
+        required_categories = Counter(tag_combo)
+        deficits = {
+            tag: max(0, count - category_counts.get(tag, 0))
+            for tag, count in required_categories.items()
+        }
+        shortage = [tag for tag, count in deficits.items() for _ in range(count)]
+        if len(shortage) != 1:
+            continue
+        missing_tag = shortage[0]
+        partial_tags = list(tag_combo)
+        partial_tags.remove(missing_tag)
+        partial_combinations = _enumerate_tag_combinations(
+            tuple(partial_tags), counts, items
+        )
+        if not partial_combinations:
+            continue
+        candidates = tuple(
+            sorted(
+                (
+                    spec
+                    for spec in items.values()
+                    if spec.can_cook and spec.sub_category == missing_tag
+                ),
+                key=lambda spec: spec.item_id,
+            )
+        )
+        if not candidates:
+            continue
+        candidate_by_tier: dict[int, list[RecipeSpec]] = defaultdict(list)
+        for recipe in group:
+            if recipe.tier in (1, 2, 3):
+                candidate_by_tier[recipe.tier].append(recipe)
+        if not candidate_by_tier:
+            continue
+
+        by_recipe_id: dict[int, dict[str, object]] = {}
+        for partial_combo in partial_combinations:
+            for candidate in candidates:
+                full_combo = tuple(partial_combo) + (candidate.item_id,)
+                tier = resolve_cooking_tier(full_combo, items=items, rules=rules)
+                if tier is None:
+                    continue
+                tier_candidates = candidate_by_tier.get(tier, ())
+                if not tier_candidates:
+                    continue
+                selected = min(tier_candidates, key=lambda value: value.recipe_id)
+                entry = by_recipe_id.setdefault(
+                    selected.recipe_id,
+                    {
+                        "recipe": selected,
+                        "combos": [],
+                        "missing_items": {},
+                    },
+                )
+                entry["combos"].append(tuple(partial_combo))
+                entry["missing_items"][candidate.item_id] = candidate
+
+        pending_candidate_ids = [
+            recipe.recipe_id
+            for recipe in group
+            if recipe.recipe_id not in completed
+        ]
+        for recipe_id in sorted(by_recipe_id):
+            entry = by_recipe_id[recipe_id]
+            selected = entry["recipe"]
+            combinations = entry["combos"]
+            representative = min(combinations)
+            near_matches.append(
+                _near_match_payload(
+                    selected,
+                    combo=tuple(representative),
+                    candidate_recipe_ids=pending_candidate_ids,
+                    tier=selected.tier,
+                    items=items,
+                    lots=lots,
+                    missing_items=entry["missing_items"].values(),
+                    missing_sub_category=missing_tag,
+                )
+            )
+
+    return sorted(near_matches, key=lambda match: int(match["recipe_id"]))
+
+
 def _inventory_payload(
     inventory: SaveInventoryState,
     *,
@@ -632,7 +910,7 @@ def _inventory_payload(
         if spec is None:
             diagnostics.append(f"库存中的未知物品 ID {item.item_config_id} 已排除")
             continue
-        if not spec.can_cook:
+        if not spec.can_cook or not spec.in_codex:
             continue
         result.append(
             {
@@ -648,6 +926,18 @@ def _inventory_payload(
             }
         )
     return result, sorted(set(diagnostics))
+
+
+def _matchable_inventory(
+    inventory: SaveInventoryState,
+    *,
+    items: Mapping[int, RecipeItemSpec],
+) -> tuple[InventoryItem, ...]:
+    return tuple(
+        item
+        for item in inventory.items
+        if (spec := items.get(item.item_config_id)) is not None and spec.can_cook
+    )
 
 
 def _history_save_name(record: SaveHistoryRecord) -> str:
@@ -702,8 +992,9 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
     items = _load_items_from_database(connection)
     rules = _load_rules_from_database(connection)
     recipes = _load_recipes_from_database(connection)
+    storage_furniture = _load_storage_furniture_from_database(connection)
     if len(items) == 0:
-        raise RecipeConfigError("数据库未包含 recipe_items；请先使用 schema v4 重建数据库")
+        raise RecipeConfigError("数据库未包含 recipe_items；请先重建数据库")
     if len(rules) != len(SUPPORTED_TIER_SUBCATEGORIES):
         raise RecipeConfigError(
             f"数据库烹饪档位阈值不完整：actual={len(rules)}, expected={len(SUPPORTED_TIER_SUBCATEGORIES)}"
@@ -731,47 +1022,56 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
     saves: list[dict[str, object]] = []
     seen_names: set[str] = set()
     root = Path(history.file_info.path).parent
+    history_file_names = {record.file_name for record in history.history_records}
+    selected_save_file = (
+        history.last_play_file_name
+        if history.last_play_file_name in history_file_names
+        else history.history_records[0].file_name if history.history_records else None
+    )
     for record in history.history_records:
         payload = _save_payload_base(record)
         try:
             _validate_save_filename(record.file_name)
         except RecipeConfigError as exc:
-            payload.update({"status": "error", "inventory": [], "matches": [], "diagnostics": [str(exc)]})
+            payload.update({"status": "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [str(exc)]})
             saves.append(payload)
             all_diagnostics.append(str(exc))
             continue
         if record.file_name in seen_names:
             message = f"HistorySave 重复列出子存档：{record.file_name}"
-            payload.update({"status": "error", "inventory": [], "matches": [], "diagnostics": [message]})
+            payload.update({"status": "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
             saves.append(payload)
             all_diagnostics.append(message)
             continue
         seen_names.add(record.file_name)
         requested = root / record.file_name
         try:
-            inventory = read_game_save_inventory(requested)
+            inventory = read_game_save_inventory(
+                requested,
+                storage_furniture=storage_furniture,
+            )
         except SaveParseError as exc:
             message = str(exc)
-            payload.update({"status": "missing" if not requested.exists() else "error", "inventory": [], "matches": [], "diagnostics": [message]})
+            payload.update({"status": "missing" if not requested.exists() else "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
             saves.append(payload)
             all_diagnostics.append(message)
             continue
         inventory_payload, inventory_diagnostics = _inventory_payload(inventory, items=items)
-        eligible_inventory = [
-            InventoryItem(
-                item_config_id=int(item["item_id"]),
-                item_count=int(item["count"]),
-                source=str(item["source"]),
-                container=str(item["container"]),
-            )
-            for item in inventory_payload
-        ]
+        eligible_inventory = _matchable_inventory(inventory, items=items)
         matches, match_diagnostics = match_inventory(
             eligible_inventory,
             recipes,
             items,
             rules,
             completed_recipe_ids=completed,
+        )
+        near_matches = find_near_matches(
+            eligible_inventory,
+            recipes,
+            items,
+            rules,
+            completed_recipe_ids=completed,
+            excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
         )
         diagnostics = sorted(set(inventory_diagnostics + match_diagnostics))
         payload.update(
@@ -781,6 +1081,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
                 "container_counts": inventory.container_counts,
                 "inventory": inventory_payload,
                 "matches": matches,
+                "near_matches": near_matches,
                 "diagnostics": diagnostics,
             }
         )
@@ -789,6 +1090,8 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
     return {
         "status": "partial" if all_diagnostics else "ok",
         "history_source": _file_info_payload(history.file_info),
+        "default_save_file": selected_save_file,
+        "selected_save_file": selected_save_file,
         "completed_dish_ids": sorted(completed),
         "completed_dish_count": len(completed),
         "pending_dish_count": len(pending_payload),
@@ -809,6 +1112,8 @@ def build_recipe_error(message: str, *, diagnostics: Collection[str] = ()) -> di
         "pending_dishes": [],
         "thresholds": [],
         "saves": [],
+        "default_save_file": None,
+        "selected_save_file": None,
         "diagnostics": sorted(set([message, *diagnostics])),
     }
 
@@ -817,17 +1122,20 @@ __all__ = [
     "RecipeConfigError",
     "RecipeItemSpec",
     "RecipeSpec",
+    "StorageFurnitureSpec",
     "SUPPORTED_TIER_SUBCATEGORIES",
     "TIER_LABELS",
     "TIER_LABELS_ZH",
     "TierRule",
     "build_recipe_error",
     "build_recipe_plan",
+    "find_near_matches",
     "item_specs_from_rows",
     "load_recipe_static_data",
     "match_inventory",
     "populate_recipe_tables",
     "recipe_specs_from_rows",
     "resolve_cooking_tier",
+    "storage_furniture_specs_from_rows",
     "tier_rules_from_settings",
 ]

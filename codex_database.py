@@ -28,6 +28,7 @@ from codex_recipe import (
     RecipeConfigError,
     load_recipe_static_data,
     populate_recipe_tables,
+    storage_furniture_specs_from_rows,
 )
 from codex_save import (
     CODEX_CATEGORY_SOURCE_TABLES,
@@ -45,7 +46,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 4
+DATABASE_SCHEMA_VERSION = 5
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_DIR / "data"
 DEFAULT_DATABASE_PATH = DATA_DIR / "survival_log_codex.sqlite3"
@@ -260,6 +261,11 @@ CREATE TABLE IF NOT EXISTS recipe_tier_rules (
     mid_low_source TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS storage_furniture (
+    config_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_codex_entry_categories_category
     ON codex_entry_categories(category, sort_order);
 CREATE INDEX IF NOT EXISTS idx_codex_entries_name
@@ -270,6 +276,8 @@ CREATE INDEX IF NOT EXISTS idx_category_completion_category
     ON category_completion(category, completed);
 CREATE INDEX IF NOT EXISTS idx_recipe_items_cookable_category
     ON recipe_items(can_cook, sub_category, price);
+CREATE INDEX IF NOT EXISTS idx_storage_furniture_name
+    ON storage_furniture(name);
 """
 
 
@@ -779,6 +787,9 @@ def build_database(
     ensure_database_outside_game_root(game_root, database_path)
     context = build_extraction_context(game_root)
     recipe_items, recipe_specs, tier_rules = load_recipe_static_data(game_root, context)
+    storage_furniture = storage_furniture_specs_from_rows(
+        context.tables.get("Config_Furniture", ())
+    )
     if len(recipe_specs) != 496:
         raise RecipeConfigError(
             f"Config_CookingRecipe 图鉴配方数量不完整：actual={len(recipe_specs)}, expected=496"
@@ -800,6 +811,7 @@ def build_database(
             connection.execute("DELETE FROM auxiliary_rows")
             connection.execute("DELETE FROM recipe_items")
             connection.execute("DELETE FROM recipe_tier_rules")
+            connection.execute("DELETE FROM storage_furniture")
 
             for sort_order, (category, label) in enumerate(CATEGORY_LABELS.items()):
                 connection.execute(
@@ -880,6 +892,7 @@ def build_database(
                 connection,
                 items=recipe_items,
                 rules=tier_rules,
+                storage_furniture=storage_furniture,
             )
 
             metadata = {
@@ -893,6 +906,7 @@ def build_database(
                 "recipe_item_count": str(recipe_table_counts["recipe_items"]),
                 "recipe_count": str(len(recipe_specs)),
                 "recipe_tier_rule_count": str(recipe_table_counts["recipe_tier_rules"]),
+                "storage_furniture_count": str(recipe_table_counts["storage_furniture"]),
             }
             _upsert_metadata(connection, metadata)
 

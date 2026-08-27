@@ -45,13 +45,15 @@
 六类主图鉴必须通过统一的分类注册表和 `extract_category` 流程导出；辅助配置单独导出为 `auxiliary`，不计入六类完成进度。
 
 - 食品：`Config_Item` 中 `InCodex == true && Category == 1` 的条目，关联 `Config_ItemSubCategory` 和 `Config_FoodType`。
-- 菜肴：`Config_CookingRecipe` 全部行，关联 `Config_Item` 和 `Config_ItemSubCategory`。
-- 植物：`Config_Plant` 全部行及 `Config_PlantLv`，收获物、种子和枯萎产物关联 `Config_Item`。
-- 猎物：`Config_Item` 中 `Prey_Rarity > 0` 的条目，不以 `InCodex` 过滤，同时保留原始字段。
-- 制造：`Config_ProductionList` 全部行及 `Config_ProductionLv`，材料、产物、失败产物和完美产物关联 `Config_Item`。
-- 家具：`Config_Furniture` 全部行，按语义关联家具功能、种植、烹饪、电力、状态、标签和伙伴配置表。
+- 菜肴：`Config_CookingRecipe` 全部行，因该表没有 `InCodex` 字段，关联 `Config_Item` 和 `Config_ItemSubCategory`。
+- 植物：`Config_Plant` 中 `InCodex == true` 的条目及其 `Config_PlantLv`，收获物、种子和枯萎产物关联 `Config_Item`。
+- 猎物：`Config_Item` 中 `InCodex == true && Prey_Rarity > 0` 的条目，同时保留原始字段。
+- 制造：`Config_ProductionList` 中 `InCodex == true` 的条目及其 `Config_ProductionLv`，材料、产物、失败产物和完美产物关联 `Config_Item`。
+- 家具：`Config_Furniture` 中 `InCodex == true` 的条目，按语义关联家具功能、种植、烹饪、电力、状态、标签和伙伴配置表。
 
-食品和猎物允许重叠，不得照搬参考网页的物品分类。植物、制造和家具按各自主配置表全量收录，`InCodex` 只作为原始字段记录。家具中的功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`；没有独立配置表的条件组、奖励组、动作、房间和掉落组保留原始 ID。
+食品和猎物允许重叠，不得照搬参考网页的物品分类。六个主图鉴分类均严格使用配置中的 `InCodex == true`，只有没有该字段的菜肴表保留全部行。家具中的功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`；没有独立配置表的条件组、奖励组、动作、房间和掉落组保留原始 ID。
+
+菜肴库存只读取主控背包，以及 `Config_Furniture` 名称中识别为冰箱、冰柜、冷冻柜或冷藏柜的所有家具。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`；其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 仅在没有对应实际 15000/15001 家具时兼容回退。
 
 当前版本的全量配置数量和实际图鉴展示数量只在 `parser_notes.md` 维护，其他文档不得复制固定数字。
 

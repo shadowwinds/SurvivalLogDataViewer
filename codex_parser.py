@@ -585,9 +585,8 @@ def classify_codex_items(context: ExtractionContext) -> tuple[list[ConfigRow], l
     """Select the food and prey rows used by the current export policy.
 
     The game has no standalone Config_Prey table. Prey are Config_Item rows
-    with a prey rarity; food requires both the codex marker and Category == 1.
-    An item can therefore occur in both tabs.  The prey selector intentionally
-    keeps every positive-rarity row, while the raw InCodex value is preserved.
+    with a prey rarity; both selectors require the explicit InCodex marker.
+    An item can therefore occur in both tabs.
     """
 
     items = context.tables["Config_Item"]
@@ -595,9 +594,9 @@ def classify_codex_items(context: ExtractionContext) -> tuple[list[ConfigRow], l
     prey: list[ConfigRow] = []
     for row in items:
         values = row.values
-        if int(values.get("Prey_Rarity") or 0) > 0:
+        if values.get("InCodex") is True and int(values.get("Prey_Rarity") or 0) > 0:
             prey.append(row)
-        if values.get("InCodex") and int(values.get("Category") or 0) == 1:
+        if values.get("InCodex") is True and int(values.get("Category") or 0) == 1:
             food.append(row)
     return food, prey
 
@@ -609,10 +608,10 @@ def select_category_rows(context: ExtractionContext) -> dict[str, list[ConfigRow
     return {
         "food": food,
         "dish": list(context.tables["Config_CookingRecipe"]),
-        "plant": list(context.tables["Config_Plant"]),
+        "plant": [row for row in context.tables["Config_Plant"] if row.values.get("InCodex") is True],
         "prey": prey,
-        "craft": list(context.tables["Config_ProductionList"]),
-        "furniture": list(context.tables["Config_Furniture"]),
+        "craft": [row for row in context.tables["Config_ProductionList"] if row.values.get("InCodex") is True],
+        "furniture": [row for row in context.tables["Config_Furniture"] if row.values.get("InCodex") is True],
     }
 
 

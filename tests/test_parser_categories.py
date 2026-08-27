@@ -76,6 +76,17 @@ def build_test_context() -> ExtractionContext:
                 "Prey_Rarity": 2,
             },
         ),
+        ConfigRow(
+            "Config_Item",
+            {
+                "ID": 13,
+                "ItemName": "Item_13",
+                "ItemName_Local": "Item 13",
+                "Category": 1,
+                "InCodex": 1,
+                "Prey_Rarity": 3,
+            },
+        ),
     ]
     tables["Config_ItemSubCategory"] = [
         ConfigRow(
@@ -87,16 +98,22 @@ def build_test_context() -> ExtractionContext:
         ConfigRow("Config_CookingRecipe", {"ID": 100, "RecipeName": "Recipe_100"})
     ]
     tables["Config_Plant"] = [
-        ConfigRow("Config_Plant", {"ID": 20, "Name": "Plant_20", "InCodex": False})
+        ConfigRow("Config_Plant", {"ID": 20, "Name": "Plant_20", "InCodex": False}),
+        ConfigRow("Config_Plant", {"ID": 21, "Name": "Plant_21", "InCodex": True}),
     ]
     tables["Config_ProductionList"] = [
         ConfigRow(
             "Config_ProductionList",
             {"ID": 30, "ShopName": "Craft_30", "InCodex": False},
-        )
+        ),
+        ConfigRow(
+            "Config_ProductionList",
+            {"ID": 31, "ShopName": "Craft_31", "InCodex": True},
+        ),
     ]
     tables["Config_Furniture"] = [
-        ConfigRow("Config_Furniture", {"ID": 40, "Name": "Furniture_40", "InCodex": False})
+        ConfigRow("Config_Furniture", {"ID": 40, "Name": "Furniture_40", "InCodex": False}),
+        ConfigRow("Config_Furniture", {"ID": 41, "Name": "Furniture_41", "InCodex": True}),
     ]
     return ExtractionContext(
         game_root=Path("test-game"),
@@ -112,16 +129,16 @@ class CategorySelectionTests(unittest.TestCase):
         selected = select_category_rows(build_test_context())
 
         self.assertEqual([row.row_id for row in selected["food"]], [10])
-        self.assertEqual([row.row_id for row in selected["prey"]], [10, 12])
-        self.assertEqual([row.row_id for row in selected["plant"]], [20])
-        self.assertEqual([row.row_id for row in selected["craft"]], [30])
-        self.assertEqual([row.row_id for row in selected["furniture"]], [40])
+        self.assertEqual([row.row_id for row in selected["prey"]], [10])
+        self.assertEqual([row.row_id for row in selected["plant"]], [21])
+        self.assertEqual([row.row_id for row in selected["craft"]], [31])
+        self.assertEqual([row.row_id for row in selected["furniture"]], [41])
 
     def test_database_memberships_share_overlapping_item_entry(self) -> None:
         entries, memberships = collect_entries(build_test_context())
 
-        self.assertEqual(len(entries), 6)
-        self.assertEqual(len(memberships), 7)
+        self.assertEqual(len(entries), 5)
+        self.assertEqual(len(memberships), 6)
         self.assertEqual(entries["Config_Item:10"].row_id, 10)
         self.assertEqual(
             {(entry_key, category) for entry_key, category, _ in memberships

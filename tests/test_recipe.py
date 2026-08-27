@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from codex_recipe import (
     RecipeConfigError,
     RecipeItemSpec,
     RecipeSpec,
+    StorageFurnitureSpec,
+    _inventory_payload,
     TierRule,
+    find_near_matches,
     match_inventory,
     recipe_specs_from_rows,
     resolve_cooking_tier,
+    storage_furniture_specs_from_rows,
 )
 from codex_parser import ConfigRow
-from codex_save import InventoryItem
+from codex_save import InventoryItem, SaveFileInfo, SaveInventoryState
 
 
 def item(
@@ -170,8 +175,126 @@ class CookingTierTests(unittest.TestCase):
         self.assertEqual(diagnostics, [])
         self.assertEqual([match["recipe_id"] for match in matches], [3011])
 
+    def test_specific_recipe_near_match_uses_one_item_quantity_gap(self) -> None:
+        near_matches = find_near_matches(
+            [InventoryItem(2527, 1, "冰柜", "freezer")],
+            [recipe(4001, specific_items=(2527, 2527))],
+            self.items,
+            self.rules,
+        )
+
+        self.assertEqual([match["recipe_id"] for match in near_matches], [4001])
+        self.assertEqual([item["item_id"] for item in near_matches[0]["missing_items"]], [2527])
+        self.assertEqual(near_matches[0]["available_combination"][0]["source"], "冰柜")
+
+        complete = find_near_matches(
+            [InventoryItem(2527, 2, "主控背包", "backpack")],
+            [recipe(4001, specific_items=(2527, 2527))],
+            self.items,
+            self.rules,
+        )
+        self.assertEqual(complete, [])
+
+    def test_tag_recipe_near_match_resolves_missing_slot_and_tier(self) -> None:
+        near_matches = find_near_matches(
+            [InventoryItem(2528, 1, "主控背包", "backpack")],
+            [
+                recipe(4101, tier=1, tag_combo=(4, 5)),
+                recipe(4102, tier=2, tag_combo=(4, 5)),
+                recipe(4103, tier=3, tag_combo=(4, 5)),
+            ],
+            self.items,
+            self.rules,
+        )
+
+        self.assertEqual([match["recipe_id"] for match in near_matches], [4103])
+        self.assertEqual(near_matches[0]["missing_sub_category"]["sub_category"], 4)
+        self.assertEqual([item["item_id"] for item in near_matches[0]["missing_items"]], [2901])
+        self.assertEqual(near_matches[0]["available_combination"][0]["item_id"], 2528)
+
+    def test_near_matches_exclude_completed_and_already_cookable_recipes(self) -> None:
+        recipes = [
+            recipe(4201, tier=2, tag_combo=(5,)),
+            recipe(4202, tier=2, tag_combo=(5,)),
+        ]
+        inventory = [InventoryItem(2528, 1, "主控背包", "backpack")]
+
+        matches, _diagnostics = match_inventory(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            completed_recipe_ids={4201},
+        )
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            completed_recipe_ids={4201},
+            excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+        )
+
+        self.assertEqual([match["recipe_id"] for match in matches], [4202])
+        self.assertEqual(near_matches, [])
+
+    def test_recipe_inventory_display_requires_in_codex_but_matching_does_not(self) -> None:
+        hidden_item = RecipeItemSpec(
+            **{
+                **self.items[2527].__dict__,
+                "in_codex": False,
+            }
+        )
+        visible_items = dict(self.items)
+        visible_items[2527] = hidden_item
+        recipes = [recipe(4301, tier=3, tag_combo=(5,))]
+        matches, _diagnostics = match_inventory(
+            [InventoryItem(2527, 1, "主控背包", "backpack")],
+            recipes,
+            visible_items,
+            self.rules,
+        )
+
+        self.assertEqual([match["recipe_id"] for match in matches], [4301])
+        inventory_state = SaveInventoryState(
+            SaveFileInfo(Path("<memory>"), "0" * 64, 0, 0, "test"),
+            (InventoryItem(2527, 1, "主控背包", "backpack"),),
+        )
+        inventory_payload, diagnostics = _inventory_payload(
+            inventory_state,
+            items=visible_items,
+        )
+        self.assertEqual(inventory_payload, [])
+        self.assertEqual(diagnostics, [])
+
 
 class RecipeConfigTests(unittest.TestCase):
+    def test_storage_furniture_is_selected_by_localized_name(self) -> None:
+        specs = storage_furniture_specs_from_rows(
+            [
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 15000, "Name": "Fridge_Double", "Name_Local": "双开门冰箱"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 15001, "Name_Local": "冰柜"},
+                ),
+                ConfigRow(
+                    "Config_Furniture",
+                    {"ID": 9999, "Name_Local": "普通储物柜"},
+                ),
+            ]
+        )
+
+        self.assertEqual(
+            specs,
+            (
+                StorageFurnitureSpec(15000, "双开门冰箱"),
+                StorageFurnitureSpec(15001, "冰柜"),
+            ),
+        )
+
     def test_specific_items_and_tag_combo_are_rejected_together(self) -> None:
         row = ConfigRow(
             "Config_CookingRecipe",

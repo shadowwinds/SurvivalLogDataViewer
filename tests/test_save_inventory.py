@@ -61,6 +61,45 @@ class SaveInventorySourceTests(unittest.TestCase):
             ],
         )
 
+    def test_agent_config_id_recognizes_mapped_storage_and_ignores_other_furniture(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": [self._item(2527)]},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "BagFurnitureConfigId": 0,
+                            "ItemList": [self._item(2528)],
+                        },
+                        {
+                            "AgentConfigId": 216,
+                            "BagFurnitureConfigId": 0,
+                            "ItemList": [self._item(2529)],
+                        },
+                        {
+                            "AgentConfigId": 9001,
+                            "ItemList": [self._item(2529)],
+                        },
+                    ]
+                },
+                "DoorBoxItems": [self._item(2530)],
+                "DoorBoxItems2": [self._item(2531)],
+            }
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "双门冰箱", 216: "冰柜", 9002: "冷冻柜"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527, 2528, 2529])
+        self.assertEqual(state.items[1].source, "双门冰箱")
+        self.assertEqual(state.items[2].source, "冰柜")
+        self.assertEqual(state.container_counts["storage_215"], 1)
+        self.assertEqual(state.container_counts["storage_216"], 1)
+        self.assertNotIn("storage_9001", state.container_counts)
+
 
 if __name__ == "__main__":
     unittest.main()

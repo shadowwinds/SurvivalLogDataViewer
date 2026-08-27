@@ -138,6 +138,7 @@ class CodexSaveState:
     candidate_offsets: tuple[int, ...] = ()
     unknown_ids: dict[str, tuple[int, ...]] = field(default_factory=dict)
     history_records: tuple[SaveHistoryRecord, ...] = ()
+    last_play_file_name: str = ""
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -433,7 +434,7 @@ def _parse_history_data_strict(
         for index in range(history_count):
             history_records.append(_read_history_child(reader, index))
 
-    reader.memorypack_string("LastPlayFileName")
+    last_play_file_name = reader.memorypack_string("LastPlayFileName") or ""
     reader.int_list("UnlockedAchievementIds")
     reader.int_list("UnlockedPlayerSelectIds")
     _read_history_int_list_map(reader, "ClearedEndings")
@@ -505,6 +506,7 @@ def _parse_history_data_strict(
         candidate_score=(3, len(raw_categories), 1000, total_ids, 0),
         candidate_offsets=(codex_offset,),
         history_records=tuple(history_records),
+        last_play_file_name=last_play_file_name,
     )
 
 
@@ -740,6 +742,11 @@ _SAVE_SCHEMAS: dict[str, tuple[tuple[str, str], ...]] = {
     "DynamicEventArgsSave": (("TriggerHour", "int"), ("EventType", "int"), ("EventId", "int"), ("TaskCount", "int"), ("TaskFinishTime", "int"), ("ActionProgress", "Dictionary<int,int>"), ("ItemProgress", "Dictionary<int,int>"), ("CachedNextEventId", "Nullable<int>"), ("IsChose", "bool"), ("WaitingFurnitureId", "int"), ("DayProgress", "Dictionary<int,int>"), ("CurrentFsmStateId", "byte")),
     "PhoneSMSMsgSave": (("Side", "string"), ("ContentKey", "string"), ("ContentRaw", "string"), ("TimeText", "string"), ("SpeakerTag", "string"), ("IsEvent", "bool"), ("EventState", "string"), ("EventId", "int"), ("ExpireRealMs", "long"), ("TimeScale", "int"), ("TaskDeadlineGameSec", "long"), ("SMSId", "int"), ("IsTrade", "bool"), ("QuotedText", "string"), ("QuotedImagePath", "string"), ("ShelfSnapshotJson", "string"), ("AffinityDelta", "int"), ("FloatPlayed", "bool")),
 }
+
+
+_SAVE_CHILD_V181_EXTRA_FIELDS = tuple(
+    (f"LegacyExtraInt{index}", "int") for index in range(5)
+)
 
 
 _SAVE_PRIMITIVE_SIZES = {
@@ -1004,22 +1011,10 @@ def _save_file_info(path: Path, data: bytes, *, used_backup: bool = False) -> Sa
     )
 
 
-def _read_game_save_wire(data: bytes) -> dict[str, object]:
-    current_schema = _SAVE_SCHEMAS["GameSaveData"]
-    if not data:
-        raise SaveParseError("GameSaveData 文件为空", code="game_save_empty", stage="game_save_wire")
-    if data[0] == len(current_schema):
-        schemas: Mapping[str, tuple[tuple[str, str], ...]] = _SAVE_SCHEMAS
-    elif data[0] == len(current_schema) - 1:
-        schemas = dict(_SAVE_SCHEMAS)
-        schemas["GameSaveData"] = current_schema[:-1]
-    else:
-        raise SaveParseError(
-            f"GameSaveData 的成员数量变化：actual={data[0]}, expected={len(current_schema)} 或 {len(current_schema) - 1}",
-            code="game_save_schema_mismatch",
-            stage="game_save_wire",
-            offset=0,
-        )
+def _read_game_save_wire_with_schemas(
+    data: bytes,
+    schemas: Mapping[str, tuple[tuple[str, str], ...]],
+) -> dict[str, object]:
     wire = _SaveWireReader(data, schemas=schemas)
     root = wire.read_object("GameSaveData", "GameSaveData", capture=True)
     if root is None:
@@ -1037,6 +1032,35 @@ def _read_game_save_wire(data: bytes) -> dict[str, object]:
             offset=wire.pos,
         )
     return root
+
+
+def _read_game_save_wire(data: bytes) -> dict[str, object]:
+    current_schema = _SAVE_SCHEMAS["GameSaveData"]
+    if not data:
+        raise SaveParseError("GameSaveData 文件为空", code="game_save_empty", stage="game_save_wire")
+    if data[0] == len(current_schema):
+        schemas: Mapping[str, tuple[tuple[str, str], ...]] = _SAVE_SCHEMAS
+    elif data[0] == len(current_schema) - 1:
+        schemas = dict(_SAVE_SCHEMAS)
+        schemas["GameSaveData"] = current_schema[:-1]
+    else:
+        raise SaveParseError(
+            f"GameSaveData 的成员数量变化：actual={data[0]}, expected={len(current_schema)} 或 {len(current_schema) - 1}",
+            code="game_save_schema_mismatch",
+            stage="game_save_wire",
+            offset=0,
+        )
+    try:
+        return _read_game_save_wire_with_schemas(data, schemas)
+    except SaveParseError as first_error:
+        message = str(first_error)
+        if "GameSaveData.History[" not in message or "actual=181" not in message:
+            raise
+        compatible_schemas = dict(schemas)
+        compatible_schemas["SaveChildData"] = (
+            _SAVE_SCHEMAS["SaveChildData"] + _SAVE_CHILD_V181_EXTRA_FIELDS
+        )
+        return _read_game_save_wire_with_schemas(data, compatible_schemas)
 
 
 def _item_dicts(value: object) -> list[dict[str, object]]:
@@ -1075,6 +1099,7 @@ def _inventory_from_game_save(
     file_info: SaveFileInfo,
     *,
     cookable_item_ids: Collection[int] | None = None,
+    storage_furniture: Mapping[int, str] | None = None,
 ) -> SaveInventoryState:
     child = root.get("CurSave")
     if not isinstance(child, dict):
@@ -1098,44 +1123,79 @@ def _inventory_from_game_save(
     else:
         diagnostics.append("CurSave.LeadingRole 缺失或为 null")
 
-    marked_agents: dict[int, list[dict[str, object]]] = {15000: [], 15001: []}
+    legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
+    storage_names = {
+        int(config_id): str(name)
+        for config_id, name in (legacy_storage if storage_furniture is None else storage_furniture).items()
+        if isinstance(config_id, int)
+        and not isinstance(config_id, bool)
+        and config_id > 0
+        and str(name)
+    }
+    marked_agents: dict[int, list[dict[str, object]]] = {
+        config_id: [] for config_id in storage_names
+    }
     chapter_agents = child.get("ChapterAgentMap")
     if isinstance(chapter_agents, dict):
         for agents in chapter_agents.values():
             for agent in _item_dicts(agents):
-                config_id = agent.get("BagFurnitureConfigId")
-                if config_id in marked_agents:
+                bag_config_id = agent.get("BagFurnitureConfigId")
+                config_id = (
+                    bag_config_id
+                    if isinstance(bag_config_id, int)
+                    and not isinstance(bag_config_id, bool)
+                    and bag_config_id in storage_names
+                    else agent.get("AgentConfigId")
+                )
+                if isinstance(config_id, int) and not isinstance(config_id, bool) and config_id in marked_agents:
                     marked_agents[config_id].append(agent)
     else:
         diagnostics.append("CurSave.ChapterAgentMap 缺失或为 null")
 
     fallback_fields = {15000: "DoorBoxItems", 15001: "DoorBoxItems2"}
-    source_names = {15000: "双开门冰箱", 15001: "冰柜"}
-    container_keys = {15000: "fridge_15000", 15001: "freezer_15001"}
-    for config_id in (15000, 15001):
+    container_keys = {
+        config_id: (
+            "fridge_15000"
+            if config_id == 15000
+            else "freezer_15001"
+            if config_id == 15001
+            else f"storage_{config_id}"
+        )
+        for config_id in storage_names
+    }
+    for config_id in sorted(storage_names):
+        source_name = storage_names[config_id]
+        container_key = container_keys[config_id]
         marked_count = 0
-        for agent in sorted(marked_agents[config_id], key=lambda value: (int(value.get("NewInstanceId") or 0), int(value.get("SaveInstanceId") or 0))):
+        for agent in sorted(
+            marked_agents[config_id],
+            key=lambda value: (
+                int(value.get("NewInstanceId") or 0),
+                int(value.get("SaveInstanceId") or 0),
+            ),
+        ):
             marked_count += _append_inventory_items(
                 raw_items,
                 agent.get("ItemList"),
-                source=source_names[config_id],
-                container=container_keys[config_id],
+                source=source_name,
+                container=container_key,
                 diagnostics=diagnostics,
             )
-        direct_items = child.get(fallback_fields[config_id])
+        fallback_field = fallback_fields.get(config_id)
+        direct_items = child.get(fallback_field) if fallback_field else None
         direct_count = len(_item_dicts(direct_items))
         if marked_agents[config_id]:
-            container_counts[container_keys[config_id]] = marked_count
-            if direct_count:
+            container_counts[container_key] = marked_count
+            if direct_count and fallback_field:
                 diagnostics.append(
-                    f"{source_names[config_id]}同时存在标记家具和兼容字段 {fallback_fields[config_id]}；已保留标记家具结果"
+                    f"{source_name}同时存在标记家具和兼容字段 {fallback_field}；已保留标记家具结果"
                 )
-        else:
+        elif fallback_field:
             container_counts[container_keys[config_id]] = _append_inventory_items(
                 raw_items,
                 direct_items,
-                source=f"{source_names[config_id]}（兼容字段）",
-                container=container_keys[config_id],
+                source=f"{source_name}（兼容字段）",
+                container=container_key,
                 diagnostics=diagnostics,
             )
 
@@ -1156,15 +1216,27 @@ def read_game_save_inventory_bytes(
     source_path: Path | None = None,
     file_info: SaveFileInfo | None = None,
     cookable_item_ids: Collection[int] | None = None,
+    storage_furniture: Mapping[int, str] | None = None,
 ) -> SaveInventoryState:
     """Read only the current save's player inventory from GameSaveData bytes."""
 
     info = file_info or _save_file_info(source_path or Path("<memory>"), data)
     root = _read_game_save_wire(data)
-    return _inventory_from_game_save(root, info, cookable_item_ids=cookable_item_ids)
+    return _inventory_from_game_save(
+        root,
+        info,
+        cookable_item_ids=cookable_item_ids,
+        storage_furniture=storage_furniture,
+    )
 
 
-def _read_stable_game_save_file(path: Path, *, used_backup: bool, cookable_item_ids: Collection[int] | None) -> SaveInventoryState:
+def _read_stable_game_save_file(
+    path: Path,
+    *,
+    used_backup: bool,
+    cookable_item_ids: Collection[int] | None,
+    storage_furniture: Mapping[int, str] | None,
+) -> SaveInventoryState:
     try:
         before = path.stat()
         if not path.is_file():
@@ -1176,7 +1248,12 @@ def _read_stable_game_save_file(path: Path, *, used_backup: bool, cookable_item_
     if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
         raise SaveParseError(f"子存档正在写入，读取期间文件发生变化：{path}", code="game_save_changed", stage="file_open")
     info = _save_file_info(path, data, used_backup=used_backup)
-    return read_game_save_inventory_bytes(data, file_info=info, cookable_item_ids=cookable_item_ids)
+    return read_game_save_inventory_bytes(
+        data,
+        file_info=info,
+        cookable_item_ids=cookable_item_ids,
+        storage_furniture=storage_furniture,
+    )
 
 
 def read_game_save_inventory(
@@ -1184,6 +1261,7 @@ def read_game_save_inventory(
     *,
     allow_backup: bool = True,
     cookable_item_ids: Collection[int] | None = None,
+    storage_furniture: Mapping[int, str] | None = None,
 ) -> SaveInventoryState:
     """Read a child save, preferring its active bytes and then its .bak copy."""
 
@@ -1203,6 +1281,7 @@ def read_game_save_inventory(
                 candidate,
                 used_backup=used_backup,
                 cookable_item_ids=cookable_item_ids,
+                storage_furniture=storage_furniture,
             )
         except SaveParseError as exc:
             errors.append(str(exc))

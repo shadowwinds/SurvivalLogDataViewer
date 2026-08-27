@@ -410,7 +410,7 @@ class CodexService:
             categories.append(
                 {
                     "category": "recipes",
-                    "label": "可烹饪菜谱",
+                    "label": "可烹饪菜肴",
                     "emoji": CATEGORY_EMOJI["recipes"],
                     "total": None,
                     "completed": None,

@@ -4,7 +4,7 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机 `HistorySave.bytes` 中的图鉴完成状态。不启动游戏，不修改存档、mod DLL、游戏资源或 Steam Cloud。
 
-当前本地游戏资源版本为 `1.0.15130`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置：
+当前本地游戏资源版本为 `1.0.15218`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -14,7 +14,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前版本主图鉴全量配置为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249；六类分类映射合计 `2124`。实际在游戏图鉴中展示并需要完成的数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87，合计 `935`。前一组是解析配置数量，后一组是运行时图鉴完成基数，不能混用。
+当前版本主图鉴配置总量为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87，六类分类映射合计 `935`。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
 
 ## 2. 游戏图鉴和存档
 
@@ -42,24 +42,24 @@
 
 完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
 
-### 存档可烹饪菜谱
+### 存档可烹饪菜肴
 
-`codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜谱候选过滤。
+`codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`GameSaveData` 的标准 `CurSave` 使用当前 176 成员 schema；同时兼容已验证的 181 成员历史变体（`SaveChildData` 末尾增加 5 个整数），两种形式都必须完整读取到文件末尾。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜肴候选过滤。
 
-子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；`ChapterAgentMap` 中标记 `BagFurnitureConfigId` 为 `15000`（双开门冰箱）或 `15001`（冰柜）的家具库存优先使用。没有标记家具时，才回退到 `DoorBoxItems`/`DoorBoxItems2`；标记家具与兼容字段同时存在时保留标记结果并记录诊断。车辆后备箱、工作台抽屉不进入菜谱库存，`Config_Item.CanCook == false` 的物品也会被排除；输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格。
+子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；数据库从所有 `Config_Furniture` 名称中识别冰箱、冰柜、冷冻柜或冷藏柜，并读取 `ChapterAgentMap` 中这些家具的库存。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`。没有实际 15000/15001 家具时，才回退到 `DoorBoxItems`/`DoorBoxItems2`；实际家具与兼容字段同时存在时保留实际家具结果并记录诊断。其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目不进入菜谱库存，`Config_Item.CanCook == false` 的物品也会被排除；输出仍保留实际物品 ID、数量、来源、容器、分类、子分类和价格。
 
-数据库 schema v4 额外保存全部 `Config_Item` 的烹饪相关字段和七类烹饪档位阈值及其 `Config_GlobalSetting` 键。`SpecificItems` 按实际物品 ID 多重集合精确匹配；`TagCombo` 只按 `Config_ItemSubCategory` 将配方放入候选组，不单独决定最终菜肴。工具枚举库存中的实际组合，按原生 `CookingTierResolver` 对 Meat、Custard、Fish、Vegetable、Fruit、Seasoning、Mushroom 分别计算 High/Mid/Low，整组取最差档位，再选择同一候选组的 `Tier=1/2/3` 配方。当前静态候选固定为全部 496 道菜谱；同时设置 `SpecificItems` 和 `TagCombo` 的配置会直接报错。
+数据库 schema v5 额外保存全部 `Config_Item` 的烹饪相关字段、冰箱/冰柜家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键。`SpecificItems` 按实际物品 ID 多重集合精确匹配；`TagCombo` 只按 `Config_ItemSubCategory` 将配方放入候选组，不单独决定最终菜肴。工具枚举库存中的实际组合，按原生 `CookingTierResolver` 对 Meat、Custard、Fish、Vegetable、Fruit、Seasoning、Mushroom 分别计算 High/Mid/Low，整组取最差档位，再选择同一候选组的 `Tier=1/2/3` 配方。当前静态候选固定为全部 496 道菜肴；同时设置 `SpecificItems` 和 `TagCombo` 的配置会直接报错。每个存档另计算精确配方缺一个物品或分类配方缺一个分类槽位的 `near_matches`，并排除已解锁及已经完全可烹饪的菜肴；网页只展示选中存档，不展示诊断字段。
 
 ## 3. 主图鉴分类和关联
 
 食品和猎物使用当前游戏 Codex 字段，两个分类允许重叠：
 
-- 食品：`Config_Item.InCodex == true && Category == 1`。
-- 猎物：`Config_Item.Prey_Rarity > 0`，不以 `InCodex` 过滤，但保留该原始字段。
-- 菜肴：当前 `Config_CookingRecipe` 的全部 496 条配置。
-- 植物：当前 `Config_Plant` 的全部 38 条配置。
-- 制造：当前 `Config_ProductionList` 的全部 148 条配置。
-- 家具：当前 `Config_Furniture` 的全部 1249 条配置。
+- 食品：`Config_Item.InCodex == true && Category == 1`，当前展示 174 条。
+- 猎物：`Config_Item.InCodex == true && Prey_Rarity > 0`，当前展示 19 条。
+- 菜肴：当前 `Config_CookingRecipe` 的全部 496 条配置（该表没有 `InCodex` 字段）。
+- 植物：`Config_Plant.InCodex == true`，当前展示 34 条。
+- 制造：`Config_ProductionList.InCodex == true`，当前展示 125 条。
+- 家具：`Config_Furniture.InCodex == true`，当前展示 87 条。
 
 因此，猎物物品可以同时出现在食品和猎物 Markdown 中；数据库只保存一份完成状态，并通过分类映射分别计数。主 Markdown 只展开主表条目，物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `survival_log_auxiliary.md`。
 
@@ -130,7 +130,7 @@ python "codex_database.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v4 的菜谱物品和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜谱库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+数据库保存主条目、分类映射、共享主完成状态、分类完成状态、关联关系、辅助配置原始行、资源元数据，以及 schema v5 的菜肴物品、冰箱/冰柜映射和烹饪档位规则。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
 源码默认数据库为 `data/survival_log_codex.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的根目录数据库时，工具会先复制到临时文件并执行 `PRAGMA integrity_check`，校验通过后原子迁移；存在 WAL/SHM 旁车文件、锁定或冲突时会保留旧文件并继续使用它。显式 `--database` 路径不会触发迁移。
 
@@ -146,7 +146,7 @@ python "codex_server.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端提供六类主图鉴分类和“可烹饪菜谱”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜谱栏目按 `HistorySave` 的全局未完成菜肴状态展示所有子存档的实时库存、实际食材组合、候选组、解析档位和最终 Tier 配方；前端不会写回存档。
+前端提供六类主图鉴分类和“可烹饪菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，并展示该存档的实时库存、实际食材组合、候选组、解析档位、最终 Tier 配方和仅差一个食材的结果；前端不会写回存档。
 
 ## 6. 独立版运行和打包
 
@@ -165,7 +165,7 @@ PowerShell -ExecutionPolicy Bypass -File ".\package_frontend.ps1"
 ## 7. 已知限制
 
 - 静态解析器不推断完成状态；数据库和前端只读读取 `HistorySave.bytes` 的持久化图鉴列表。
-- 可烹饪菜谱视图只读取当前版本已知的严格 `HistoryData`、`GameSaveData` schema；版本变化会显示 schema 诊断，不会用旧字段偏移猜测库存。
+- 可烹饪菜肴视图只读取当前版本已知的严格 `HistoryData`、`GameSaveData` schema；版本变化会显示 schema 诊断，不会用旧字段偏移猜测库存。
 - `Config_CodexMilestone` 用于游戏图鉴里程碑，不参与六类主条目数量和完成勾选。
 - 条件组、奖励组、动作、房间和掉落组等没有独立解析表的引用保留原始 ID，并以 `ID:xxxx` 标明。
 - 参考仓库只用于字段命名和交叉校验，最终数据源始终是当前本地游戏资源。
