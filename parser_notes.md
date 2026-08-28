@@ -46,7 +46,7 @@
 
 完整的库存来源历史、字段词典、实测证据和后续排查清单见 [`save_inventory_pipeline.md`](./save_inventory_pipeline.md)。
 
-`codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`GameSaveData` 的标准 `CurSave` 使用当前 176 成员 schema；同时兼容已验证的 181 成员历史变体（`SaveChildData` 末尾增加 5 个整数）和 183 成员历史变体（末尾增加 7 个整数），三种形式都必须完整读取到文件末尾。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜肴候选过滤。
+`codex_save.py` 对当前版本的 `HistoryData` 使用严格的 16 成员 schema。`GameSaveData` 的标准 `CurSave` 使用当前 176 成员 schema；同时兼容已验证的 181 成员历史变体（`SaveChildData` 末尾增加 5 个整数）和 183 成员历史变体（末尾增加 6 个整数及一个 `Dictionary<int,string>`），三种形式都必须完整读取到文件末尾。`HistoryList` 中的子存档文件名必须是单层 `Save_*.bytes` 文件名，并在读取前后检查文件大小和修改时间；主文件解析失败时才尝试同名 `.bak`。全局 `HistoryData.CodexUnlocked` 是菜肴图鉴完成状态的唯一来源，因此“未完成菜肴”与具体子存档库存无关，所有 `HistoryList` 子存档共用同一份未完成列表。运行时 `Save_*.bytes` 里的 `CodexUnlocked`、`UnlockedCookingRecipeIds`、`CraftLevel` 和 `CraftUnlockedCookingRecipeIds` 不参与菜肴候选过滤。
 
 子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；先读取 `LeadingRole.Name` 并按已验证名称映射确定角色，再按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 的顺序兼容回退，名称未知、缺失或与数字身份冲突时会保留角色上下文和诊断。储物家具以静态库 `storage_furniture` 表为权威来源，覆盖当前 `Config_Furniture` 中 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的全部配置，不受图鉴 `is_current` 可见性影响，也不按本地化名称筛选；旧数据库缺少专用表时才回退到旧的当前图鉴行。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具实例均单独保留。容器必须同时有储物行为配置、当前角色槽位和地图证据：先比较主控 `MapConfigIdHome`、`ChapterAgentMap` 地图键与实例 `MapConfigId`，任一地图 ID 不一致始终判定为其他位置；再按当前角色选择槽位，角色 1 使用 `HomeBuildingPos`/`Home_`，角色 2 使用 `NeighborGirlBuildingPos`，角色 3 使用 `WarehousePos`。空槽位不再因地图相同而视为家中，其他角色的已知槽位判定为其他位置，未知槽位判定为未知并跳过库存；位置、实例和角色解析诊断仍保留在后端 `storage_containers`/存档 JSON。`IsDoorBox == true` 仅在地图明确属于当前家中时作为兼容储物容器读取；工作台抽屉 `WorkbenchDrawerItems` 作为家中直接容器读取，车辆后备箱和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 只对 15000/15001 保留兼容回退，且仅在没有对应实际家具并已解析出已知角色时使用。
 
@@ -56,7 +56,7 @@
 
 实际存档对比表明，`ChapterAgentMap` 的外层键是章节分组键，不是角色 ID，也不是地图 ID；角色 1、2、3 的存档都可能同时出现键 `1` 和键 `2`。当前优先使用 `GameSaveData.InitChapterId` 选择同名外层键，并在存档 JSON 中记录选择来源和诊断。`InitChapterId` 缺失或对应键不存在时，才使用“角色槽位 + `MapConfigIdHome`”找到唯一候选；候选不唯一或无法确认时跳过依赖章节分组的容器。外层键选定后，容器还必须满足储物行为配置、实例 `MapConfigId == MapConfigIdHome` 和当前角色槽位三项条件；因此地图字段负责地图一致性，槽位字段负责角色归属，不能用任一字段替代外层键判定。该规则覆盖本节前文中将 `ChapterAgentMap` 键作为地图证据的旧表述。
 
-当前已验证 `SaveChildData` 的标准 176 成员格式，以及末尾增加 5 个整数的 181 成员格式和末尾增加 7 个整数的 183 成员格式；三种形式都必须严格读取到文件末尾。
+当前已验证 `SaveChildData` 的标准 176 成员格式、末尾增加 5 个整数的 181 成员格式，以及末尾增加 6 个整数和一个 `Dictionary<int,string>` 的 183 成员格式；三种形式都必须严格读取到文件末尾。
 
 ## 3. 主图鉴分类和关联
 

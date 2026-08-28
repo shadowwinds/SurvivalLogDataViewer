@@ -824,9 +824,12 @@ _SAVE_SCHEMAS: dict[str, tuple[tuple[str, str], ...]] = {
 _SAVE_CHILD_V181_EXTRA_FIELDS = tuple(
     (f"LegacyExtraInt{index}", "int") for index in range(5)
 )
+# This historical variant adds a map after six scalar fields. The map was
+# null in the earlier fixture, so treating its marker as a seventh int masked
+# the incompatibility until a real save populated it.
 _SAVE_CHILD_V183_EXTRA_FIELDS = tuple(
-    (f"LegacyV183ExtraInt{index}", "int") for index in range(7)
-)
+    (f"LegacyV183ExtraInt{index}", "int") for index in range(6)
+) + (("LegacyV183ExtraMap", "Dictionary<int,string>"),)
 
 
 _SAVE_PRIMITIVE_SIZES = {

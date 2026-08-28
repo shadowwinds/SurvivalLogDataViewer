@@ -1,7 +1,64 @@
+import struct
 import unittest
 from pathlib import Path
 
-from codex_save import SaveFileInfo, _inventory_from_game_save
+from codex_save import (
+    SaveFileInfo,
+    _SAVE_SCHEMAS,
+    _inventory_from_game_save,
+    _read_game_save_wire,
+)
+
+
+class SaveWireCompatibilityTests(unittest.TestCase):
+    @staticmethod
+    def _null_value(type_name: str) -> bytes:
+        if type_name == "bool" or type_name == "byte":
+            return b"\x00"
+        if type_name in {"int", "long", "float"}:
+            return b"\x00" * {"int": 4, "long": 8, "float": 4}[type_name]
+        if type_name == "Nullable<bool>":
+            return b"\x00" * 2
+        if type_name.startswith("Nullable<"):
+            return b"\x00" * 8
+        if type_name == "string":
+            return struct.pack("<i", -1)
+        if (
+            type_name.endswith("[]")
+            or type_name.startswith("List<")
+            or type_name.startswith("Dictionary<")
+        ):
+            return struct.pack("<i", -1)
+        return b"\xff"
+
+    @staticmethod
+    def _utf8_string(value: str) -> bytes:
+        raw = value.encode("utf-8")
+        return struct.pack("<ii", ~len(raw), len(value)) + raw
+
+    @classmethod
+    def _v183_game_save(cls) -> bytes:
+        root_schema = _SAVE_SCHEMAS["GameSaveData"]
+        child_schema = _SAVE_SCHEMAS["SaveChildData"]
+        result = [bytes([len(root_schema)])]
+        for name, type_name in root_schema:
+            if name == "CurSave":
+                result.append(bytes([183]))
+                result.extend(cls._null_value(field_type) for _, field_type in child_schema)
+                result.extend(struct.pack("<i", value) for value in (0, 0, 0, -1, -1, 0))
+                result.append(struct.pack("<i", 1))
+                result.append(struct.pack("<i", 919))
+                result.append(cls._utf8_string("v183-extra"))
+            elif name == "ProficiencyData":
+                result.extend((bytes([2]), struct.pack("<i", -1), struct.pack("<i", -1)))
+            else:
+                result.append(cls._null_value(type_name))
+        return b"".join(result)
+
+    def test_v183_extra_dictionary_is_skipped_before_proficiency_data(self) -> None:
+        parsed = _read_game_save_wire(self._v183_game_save())
+        self.assertIsInstance(parsed["CurSave"], dict)
+        self.assertIsNone(parsed["CurSave"]["LeadingRole"])
 
 
 class SaveInventorySourceTests(unittest.TestCase):

@@ -53,7 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 6
+RECIPE_PLAN_CACHE_VERSION = 7
 
 
 @dataclass(frozen=True)
