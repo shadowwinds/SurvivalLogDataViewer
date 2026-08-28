@@ -53,7 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 3
+RECIPE_PLAN_CACHE_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,13 @@ class RecipeSpec:
     specific_items: tuple[int, ...]
     tier: int
     raw_json: str
+
+
+@dataclass(frozen=True)
+class _RecipeOutcome:
+    kind: str
+    tier: int | None
+    generic_recipe: RecipeSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -565,6 +572,70 @@ def _recipes_by_tier(
     return dict(result)
 
 
+def _specific_recipe_index(
+    recipes: Collection[RecipeSpec],
+    *,
+    items: Mapping[int, RecipeItemSpec],
+) -> dict[tuple[int, ...], tuple[RecipeSpec, ...]]:
+    """Index valid SpecificItems recipes by their unordered ingredient multiset."""
+
+    result: dict[tuple[int, ...], list[RecipeSpec]] = defaultdict(list)
+    for recipe in sorted(recipes, key=lambda value: value.recipe_id):
+        if not recipe.specific_items:
+            continue
+        required = Counter(recipe.specific_items)
+        if any(
+            not _is_cookable_ingredient(items.get(item_id))
+            for item_id in required
+        ):
+            continue
+        result[tuple(sorted(required.elements()))].append(recipe)
+    return {key: tuple(value) for key, value in result.items()}
+
+
+def _resolve_actual_recipe_outcome(
+    combo: tuple[int, ...],
+    *,
+    tag_combo: tuple[int, ...] | None,
+    generic_by_tier: Mapping[int, Collection[RecipeSpec]],
+    specific_by_combo: Mapping[tuple[int, ...], Collection[RecipeSpec]],
+    items: Mapping[int, RecipeItemSpec],
+    rules: Mapping[int, TierRule],
+) -> _RecipeOutcome | None:
+    """Resolve one complete input using the game's specific-then-generic order."""
+
+    if not combo or any(
+        not _is_cookable_ingredient(items.get(item_id)) for item_id in combo
+    ):
+        return None
+    if tag_combo is not None and Counter(
+        items[item_id].sub_category for item_id in combo
+    ) != Counter(tag_combo):
+        return None
+
+    specific_recipes = tuple(specific_by_combo.get(tuple(sorted(combo)), ()))
+    if specific_recipes:
+        return _RecipeOutcome(
+            kind="specific",
+            tier=resolve_cooking_tier(combo, items=items, rules=rules),
+        )
+    if tag_combo is None:
+        return None
+
+    tier = resolve_cooking_tier(combo, items=items, rules=rules)
+    if tier is None:
+        return None
+    tier_candidates = generic_by_tier.get(tier, ())
+    if not tier_candidates:
+        return None
+    selected = min(tier_candidates, key=lambda recipe: recipe.recipe_id)
+    return _RecipeOutcome(
+        kind="generic",
+        tier=tier,
+        generic_recipe=selected,
+    )
+
+
 def _representative_items(
     item_ids: tuple[int, ...],
     *,
@@ -640,9 +711,9 @@ def match_inventory(
 ) -> tuple[list[dict[str, object]], list[str]]:
     """Return pending recipes that are actually cookable from one inventory.
 
-    SpecificItems and TagCombo recipes are evaluated independently, matching
-    the web cooking reducer's availability model rather than reserving shared
-    ingredients between result groups.
+    SpecificItems and TagCombo results are kept independent, but every complete
+    TagCombo input uses the game's specific-first outcome precedence instead of
+    reserving shared ingredients between result groups.
     """
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
@@ -662,6 +733,7 @@ def match_inventory(
             specific_recipes.append(recipe)
 
     matches: list[dict[str, object]] = []
+    specific_by_combo = _specific_recipe_index(specific_recipes, items=items)
     for recipe in specific_recipes:
         required = Counter(recipe.specific_items)
         if any(counts.get(item_id, 0) < count for item_id, count in required.items()):
@@ -692,20 +764,28 @@ def match_inventory(
         )
         combinations_by_recipe: dict[int, list[tuple[int, ...]]] = defaultdict(list)
         for combo in combinations:
-            tier = resolve_cooking_tier(combo, items=items, rules=rules)
-            if tier is None:
-                diagnostics.append(
-                    f"食材组合 {combo!r} 无法计算 CookingTierResolver 档位；已跳过候选组 {tag_combo!r}"
-                )
+            outcome = _resolve_actual_recipe_outcome(
+                combo,
+                tag_combo=tag_combo,
+                generic_by_tier=candidate_by_tier,
+                specific_by_combo=specific_by_combo,
+                items=items,
+                rules=rules,
+            )
+            if outcome is None:
+                tier = resolve_cooking_tier(combo, items=items, rules=rules)
+                if tier is None:
+                    diagnostics.append(
+                        f"食材组合 {combo!r} 无法计算 CookingTierResolver 档位；已跳过候选组 {tag_combo!r}"
+                    )
+                elif not candidate_by_tier.get(tier):
+                    diagnostics.append(
+                        f"候选组 {tag_combo!r} 缺少 Tier={tier} 菜谱；已保留配置诊断"
+                    )
                 continue
-            tier_candidates = candidate_by_tier.get(tier, [])
-            if not tier_candidates:
-                diagnostics.append(
-                    f"候选组 {tag_combo!r} 缺少 Tier={tier} 菜谱；已保留配置诊断"
-                )
+            if outcome.kind != "generic" or outcome.generic_recipe is None:
                 continue
-            selected = min(tier_candidates, key=lambda recipe: recipe.recipe_id)
-            combinations_by_recipe[selected.recipe_id].append(combo)
+            combinations_by_recipe[outcome.generic_recipe.recipe_id].append(combo)
         recipes_by_id = {recipe.recipe_id: recipe for recipe in group}
         for recipe_id in sorted(combinations_by_recipe):
             selected = recipes_by_id[recipe_id]
@@ -827,12 +907,13 @@ def find_near_matches(
     completed_recipe_ids: Collection[int] = (),
     excluded_recipe_ids: Collection[int] = (),
 ) -> list[dict[str, object]]:
-    """Find pending recipes needing one slot, independently of exact matches."""
+    """Find pending one-slot recipes using the same complete-input precedence."""
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
     excluded = completed | frozenset(int(recipe_id) for recipe_id in excluded_recipe_ids)
     counts, lots = _available_item_ids(inventory, items=items)
     tag_groups: dict[tuple[int, ...], list[RecipeSpec]] = defaultdict(list)
+    all_specific_recipes: list[RecipeSpec] = []
     specific_recipes: list[RecipeSpec] = []
     for recipe in sorted(recipes, key=lambda value: value.recipe_id):
         if recipe.tag_combo and recipe.specific_items:
@@ -840,13 +921,17 @@ def find_near_matches(
                 f"Config_CookingRecipe ID {recipe.recipe_id} 同时设置 SpecificItems 和 TagCombo；"
                 "当前工具拒绝静默猜测其匹配语义"
             )
-        if recipe.recipe_id in excluded:
-            continue
         if recipe.tag_combo:
+            if recipe.recipe_id in excluded:
+                continue
             tag_groups[tuple(sorted(recipe.tag_combo))].append(recipe)
         elif recipe.specific_items:
+            all_specific_recipes.append(recipe)
+            if recipe.recipe_id in excluded:
+                continue
             specific_recipes.append(recipe)
 
+    specific_by_combo = _specific_recipe_index(all_specific_recipes, items=items)
     near_matches: list[dict[str, object]] = []
     for recipe in specific_recipes:
         required = Counter(recipe.specific_items)
@@ -888,9 +973,16 @@ def find_near_matches(
         # tier as a one-slot near match.
         matched_tiers: set[int] = set()
         for available_combo in _enumerate_tag_combinations(tag_combo, counts, items):
-            tier = resolve_cooking_tier(available_combo, items=items, rules=rules)
-            if tier in candidate_by_tier:
-                matched_tiers.add(tier)
+            outcome = _resolve_actual_recipe_outcome(
+                available_combo,
+                tag_combo=tag_combo,
+                generic_by_tier=candidate_by_tier,
+                specific_by_combo=specific_by_combo,
+                items=items,
+                rules=rules,
+            )
+            if outcome is not None and outcome.kind == "generic" and outcome.tier is not None:
+                matched_tiers.add(outcome.tier)
 
         pending_candidate_ids = [recipe.recipe_id for recipe in group]
         by_recipe_id: dict[int, dict[str, object]] = {}
@@ -923,15 +1015,22 @@ def find_near_matches(
                         items[item_id].sub_category for item_id in full_combo
                     ) != Counter(tag_combo):
                         continue
-                    tier = resolve_cooking_tier(full_combo, items=items, rules=rules)
-                    if tier is None:
+                    outcome = _resolve_actual_recipe_outcome(
+                        full_combo,
+                        tag_combo=tag_combo,
+                        generic_by_tier=candidate_by_tier,
+                        specific_by_combo=specific_by_combo,
+                        items=items,
+                        rules=rules,
+                    )
+                    if outcome is None or outcome.kind != "generic":
                         continue
+                    if outcome.tier is None or outcome.generic_recipe is None:
+                        continue
+                    tier = outcome.tier
                     if tier in matched_tiers:
                         continue
-                    tier_candidates = candidate_by_tier.get(tier, ())
-                    if not tier_candidates:
-                        continue
-                    selected = min(tier_candidates, key=lambda value: value.recipe_id)
+                    selected = outcome.generic_recipe
                     entry = by_recipe_id.setdefault(
                         selected.recipe_id,
                         {

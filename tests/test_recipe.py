@@ -341,6 +341,145 @@ class CookingTierTests(unittest.TestCase):
             [2527, 2528, 2529],
         )
 
+    def test_specific_recipe_wins_over_single_slot_generic_result(self) -> None:
+        cases = (
+            (2530, 5, 9, 4044, 7003),
+            (2908, 11, 15, 4067, 7006),
+            (2524, 5, 9, 4070, 7003),
+        )
+        for item_id, sub_category, price, specific_id, generic_id in cases:
+            with self.subTest(item_id=item_id):
+                items = dict(self.items)
+                items[item_id] = item(
+                    item_id,
+                    sub_category=sub_category,
+                    price=price,
+                )
+                rules = dict(self.rules)
+                if sub_category == 11:
+                    items[2909] = item(2909, sub_category=11, price=7)
+                    rules[11] = TierRule(
+                        11,
+                        "Mushroom",
+                        30,
+                        16,
+                        "mushroom.high",
+                        "mushroom.mid_low",
+                    )
+                recipes = [
+                    recipe(specific_id, specific_items=(item_id,)),
+                    recipe(generic_id, tier=3, tag_combo=(sub_category,)),
+                ]
+                inventory = [InventoryItem(item_id, 1, "主控背包", "backpack")]
+
+                matches, diagnostics = match_inventory(
+                    inventory,
+                    recipes,
+                    items,
+                    rules,
+                )
+                near_matches = find_near_matches(
+                    inventory,
+                    recipes,
+                    items,
+                    rules,
+                )
+
+                self.assertEqual(diagnostics, [])
+                self.assertEqual(
+                    [match["recipe_id"] for match in matches],
+                    [specific_id],
+                )
+                generic_near = [
+                    match for match in near_matches if match["recipe_id"] == generic_id
+                ]
+                self.assertEqual(len(generic_near), 1)
+                self.assertNotIn(
+                    item_id,
+                    {
+                        candidate["item_id"]
+                        for candidate in generic_near[0]["missing_item_candidates"]
+                    },
+                )
+
+    def test_specific_precedence_uses_exact_multiset_only(self) -> None:
+        recipes = [
+            recipe(4701, specific_items=(2527, 2527)),
+            recipe(4702, tier=1, tag_combo=(5, 5)),
+            recipe(4703, tier=2, tag_combo=(5, 5)),
+            recipe(4704, tier=3, tag_combo=(5, 5)),
+        ]
+        exact_matches, diagnostics = match_inventory(
+            [InventoryItem(2527, 2, "主控背包", "backpack")],
+            recipes,
+            self.items,
+            self.rules,
+        )
+        self.assertEqual(diagnostics, [])
+        self.assertEqual([match["recipe_id"] for match in exact_matches], [4701])
+
+        near_matches = find_near_matches(
+            [InventoryItem(2527, 1, "主控背包", "backpack")],
+            recipes,
+            self.items,
+            self.rules,
+        )
+        candidates = {
+            candidate["item_id"]
+            for match in near_matches
+            for candidate in match["missing_item_candidates"]
+        }
+        self.assertNotIn(2527, candidates)
+        self.assertIn(2528, candidates)
+        self.assertIn(2529, candidates)
+
+        different_length_matches, diagnostics = match_inventory(
+            [InventoryItem(2527, 1, "主控背包", "backpack")],
+            [recipe(4705, specific_items=(2527, 2527)), recipe(4706, tier=3, tag_combo=(5,))],
+            self.items,
+            self.rules,
+        )
+        self.assertEqual(diagnostics, [])
+        self.assertEqual([match["recipe_id"] for match in different_length_matches], [4706])
+
+    def test_completed_specific_recipe_still_blocks_generic_result(self) -> None:
+        items = dict(self.items)
+        items[2530] = item(2530, sub_category=5, price=9)
+        recipes = [
+            recipe(4801, specific_items=(2530,)),
+            recipe(4802, tier=3, tag_combo=(5,)),
+        ]
+        inventory = [InventoryItem(2530, 1, "主控背包", "backpack")]
+
+        matches, diagnostics = match_inventory(
+            inventory,
+            recipes,
+            items,
+            self.rules,
+            completed_recipe_ids={4801},
+        )
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            items,
+            self.rules,
+            completed_recipe_ids={4801},
+        )
+
+        self.assertEqual(diagnostics, [])
+        self.assertEqual(matches, [])
+        generic_near = [
+            match for match in near_matches if match["recipe_id"] == 4802
+        ]
+        self.assertEqual(len(generic_near), 1)
+        self.assertNotIn(
+            2530,
+            {
+                candidate["item_id"]
+                for candidate in generic_near[0]["missing_item_candidates"]
+            },
+        )
+
     def test_non_food_category_is_not_a_cookable_ingredient(self) -> None:
         items = dict(self.items)
         items[9600] = item(9600, sub_category=5, price=20, category=2)
