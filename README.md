@@ -29,9 +29,13 @@
 
 默认存档不存在时，程序会弹出文件选择窗口。可以选择其他 `HistorySave.bytes` 文件，程序只读读取所选文件，并在主存档写入期间尝试读取同名 `.bak` 备份。
 
-完成状态同步只读游戏保存的图鉴完成列表；菜肴页面另行只读各子存档的主控背包、工作台抽屉和按当前角色判定位于玩家家中的全部储物容器。子存档先按 `LeadingRole.Name` 解析角色，名称缺失、未知或冲突时按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 顺序兼容回退并显示诊断。储物容器按专用配置功能、角色槽位和 `MapConfigIdHome`/章节地图/实例地图三重证据识别，不按容器名称筛选；角色 1/2/3 分别使用 `HomeBuildingPos`/`Home_`、`NeighborGirlBuildingPos`、`WarehousePos` 槽位，空槽位不因地图相同而视为家中，其他角色槽位和未知位置不会并入食材库存，但每个实例及位置诊断仍会保留。专用储物配置覆盖全部 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的家具，因此旧配置 ID `80062` 和其他非当前图鉴家具也可被识别。程序不读取联网数据，也不会写回存档；主存档和备份都无法解析时，页面会保留上一次有效状态并显示同步错误。
+完成状态同步只读游戏保存的图鉴完成列表；菜肴页面另行只读各子存档的主控背包、工作台抽屉和按当前角色判定位于玩家家中的全部储物容器。子存档先按 `LeadingRole.Name` 解析角色，名称缺失、未知或冲突时按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 顺序兼容回退并显示诊断。储物容器先按 `InitChapterId` 选择 `ChapterAgentMap` 外层章节分组，再按专用配置功能、角色槽位和 `MapConfigIdHome`/实例 `MapConfigId` 证据识别，不按容器名称筛选；外层键不是角色 ID、地图 ID 或“数值越大越新”，角色 1/2/3 分别使用 `HomeBuildingPos`/`Home_`、`NeighborGirlBuildingPos`、`WarehousePos` 槽位，空槽位不因地图相同而视为家中，其他角色槽位和未知位置不会并入食材库存，但每个实例及位置诊断仍会保留。专用储物配置覆盖全部 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的家具，因此旧配置 ID `80062` 和其他非当前图鉴家具也可被识别。程序不读取联网数据，也不会写回存档；主存档和备份都无法解析时，页面会保留上一次有效状态并显示同步错误。
 
 当前数据库 schema 为 v8。菜肴近匹配只有在精确配方缺一个物品数量，或分类配方只缺一个分类槽位且其余实际库存组合完整时才显示；多个可替代食材仍属于同一个分类槽位。
+
+### 存档章节分组说明
+
+`ChapterAgentMap` 的外层键表示章节分组，不表示角色 ID、地图 ID 或“数值越大越新”。程序优先用 `GameSaveData.InitChapterId` 选择外层键；只有该字段缺失或对应键不存在时，才使用角色槽位和 `MapConfigIdHome` 寻找唯一候选。选定外层键后，仍需同时满足储物行为、实例 `MapConfigId` 与家地图一致、以及当前角色槽位一致，才会把容器内容计入食材库存；无法唯一确认的章节分组会跳过并显示诊断。
 
 ### 使用图鉴页面
 

@@ -12,7 +12,7 @@ import struct
 import sys
 import unicodedata
 from collections.abc import Collection, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
@@ -65,6 +65,7 @@ PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID = {1: 1, 1002: 2, 1003: 3}
 PLAYER_SELECT_ID_BY_ROLE_NAME = {
     "玩家-打工仔": 1,
     "玩家-大学生": 2,
+    "玩家-仓库管理员": 3,
 }
 KNOWN_HOME_STORAGE_SLOT_PREFIXES = frozenset(
     prefix
@@ -143,6 +144,9 @@ class SaveRoleContext:
     home_map_config_id: int | None
     resolution_source: str
     diagnostics: tuple[str, ...] = ()
+    resolved_chapter_map_key: int | None = None
+    chapter_resolution_source: str = "unresolved"
+    chapter_diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -820,6 +824,9 @@ _SAVE_SCHEMAS: dict[str, tuple[tuple[str, str], ...]] = {
 _SAVE_CHILD_V181_EXTRA_FIELDS = tuple(
     (f"LegacyExtraInt{index}", "int") for index in range(5)
 )
+_SAVE_CHILD_V183_EXTRA_FIELDS = tuple(
+    (f"LegacyV183ExtraInt{index}", "int") for index in range(7)
+)
 
 
 _SAVE_PRIMITIVE_SIZES = {
@@ -831,7 +838,7 @@ _SAVE_PRIMITIVE_SIZES = {
 }
 _SAVE_CAPTURE_FIELDS = {
     "GameSaveData": frozenset({
-        "Name", "FileName", "HistoryMaxDay", "TurnIndex", "isFinished", "FinishResult",
+        "Name", "FileName", "InitChapterId", "HistoryMaxDay", "TurnIndex", "isFinished", "FinishResult",
         "PlayerSelectId", "DifficultyPresetId", "DifficultyLevels", "EndlessActive",
         "IsPureEndless", "EndlessStartDay", "EndlessOriginEnding", "CurSave",
     }),
@@ -1129,12 +1136,19 @@ def _read_game_save_wire(data: bytes) -> dict[str, object]:
         return _read_game_save_wire_with_schemas(data, schemas)
     except SaveParseError as first_error:
         message = str(first_error)
-        if "GameSaveData.History[" not in message or "actual=181" not in message:
+        if "GameSaveData.History[" not in message and "GameSaveData.CurSave" not in message:
+            raise
+        match = re.search(r"actual=(\d+)", message)
+        if match is None:
+            raise
+        extra_fields = {
+            181: _SAVE_CHILD_V181_EXTRA_FIELDS,
+            183: _SAVE_CHILD_V183_EXTRA_FIELDS,
+        }.get(int(match.group(1)))
+        if extra_fields is None:
             raise
         compatible_schemas = dict(schemas)
-        compatible_schemas["SaveChildData"] = (
-            _SAVE_SCHEMAS["SaveChildData"] + _SAVE_CHILD_V181_EXTRA_FIELDS
-        )
+        compatible_schemas["SaveChildData"] = _SAVE_SCHEMAS["SaveChildData"] + extra_fields
         return _read_game_save_wire_with_schemas(data, compatible_schemas)
 
 
@@ -1337,21 +1351,117 @@ def _agent_instance_id(agent: Mapping[str, object]) -> int | None:
     return None
 
 
+def _storage_agent_matches_home_evidence(
+    agent: Mapping[str, object],
+    *,
+    storage_config_ids: Collection[int],
+    home_map_config_id: int | None,
+    player_select_id: int | None,
+) -> bool:
+    config_id = _effective_agent_config_id(agent, storage_config_ids)
+    if config_id not in storage_config_ids and agent.get("IsDoorBox") is not True:
+        return False
+    if player_select_id is None or home_map_config_id is None:
+        return False
+    map_config_id = _optional_positive_int(agent.get("MapConfigId"))
+    if map_config_id != home_map_config_id:
+        return False
+    slot_pos_point = str(agent.get("SlotPosPoint") or "").strip().casefold()
+    if slot_pos_point.startswith(_home_storage_slot_prefixes(player_select_id)):
+        return True
+    return (
+        not slot_pos_point
+        and _known_player_select_id(player_select_id)
+        and agent.get("IsDoorBox") is True
+    )
+
+
+def _select_storage_group_key(
+    chapter_agents: Mapping[object, object],
+    *,
+    storage_config_ids: Collection[int],
+    home_map_config_id: int | None,
+    init_chapter_id: int | None,
+    player_select_id: int | None,
+) -> tuple[int | None, str, tuple[str, ...]]:
+    """Select the active ChapterAgentMap group from save chapter evidence."""
+
+    diagnostics: list[str] = []
+    numeric_keys = {
+        key
+        for key in chapter_agents
+        if isinstance(key, int) and not isinstance(key, bool)
+    }
+    if init_chapter_id is not None and init_chapter_id in numeric_keys:
+        diagnostics.append(
+            f"使用 GameSaveData.InitChapterId={init_chapter_id} 选择 ChapterAgentMap 外层键；该键表示章节分组，不是角色 ID 或地图 ID"
+        )
+        return init_chapter_id, "game_save_init_chapter_id", tuple(diagnostics)
+
+    if init_chapter_id is not None:
+        diagnostics.append(
+            f"GameSaveData.InitChapterId={init_chapter_id} 不存在于 ChapterAgentMap 外层键 {sorted(numeric_keys)}"
+        )
+
+    if player_select_id is None:
+        diagnostics.append("当前角色 ID 未知，无法选择 ChapterAgentMap 容器分组")
+        return None, "unresolved", tuple(diagnostics)
+
+    candidates: set[int] = set()
+    for chapter_map_key, agents in chapter_agents.items():
+        if not isinstance(chapter_map_key, int) or isinstance(chapter_map_key, bool):
+            continue
+        if any(
+            _storage_agent_matches_home_evidence(
+                agent,
+                storage_config_ids=storage_config_ids,
+                home_map_config_id=home_map_config_id,
+                player_select_id=player_select_id,
+            )
+            for agent in _item_dicts(agents)
+        ):
+            candidates.add(chapter_map_key)
+
+    if len(candidates) == 1:
+        selected = next(iter(candidates))
+        diagnostics.append(
+            f"未使用角色 ID 作为 ChapterAgentMap 键；已按唯一角色槽位和地图证据选择容器分组 {selected}"
+        )
+        return selected, "unique_role_slot_and_map", tuple(diagnostics)
+    if len(candidates) > 1:
+        details = ", ".join(str(key) for key in sorted(candidates))
+        diagnostics.append(
+            f"角色 {player_select_id} 的家中储物容器出现在多个 ChapterAgentMap 外层分组（{details}），无法确定活动分组；已跳过这些容器"
+        )
+        return None, "ambiguous_role_slot_and_map", tuple(diagnostics)
+
+    diagnostics.append(
+        f"ChapterAgentMap 未找到角色 {player_select_id} 的可确认家中储物分组；已跳过依赖章节分组的容器"
+    )
+    return None, "unresolved", tuple(diagnostics)
+
+
 def _storage_location(
     agent: Mapping[str, object],
     *,
     chapter_map_key: int | None,
+    selected_chapter_map_key: int | None = None,
     home_map_config_id: int | None,
     player_select_id: int | None,
 ) -> tuple[str, bool | None]:
     map_config_id = _optional_positive_int(agent.get("MapConfigId"))
     slot_pos_point = str(agent.get("SlotPosPoint") or "").strip().casefold()
 
-    if (
-        chapter_map_key is not None
-        and home_map_config_id is not None
-        and chapter_map_key != home_map_config_id
-    ):
+    if selected_chapter_map_key is None:
+        if (
+            player_select_id is not None
+            and not _known_player_select_id(player_select_id)
+            and slot_pos_point.startswith(tuple(KNOWN_HOME_STORAGE_SLOT_PREFIXES))
+        ):
+            return STORAGE_LOCATION_OTHER, False
+        return STORAGE_LOCATION_UNKNOWN, None
+
+    if chapter_map_key != selected_chapter_map_key:
         return STORAGE_LOCATION_OTHER, False
 
     if (
@@ -1378,7 +1488,6 @@ def _storage_location(
         _known_player_select_id(player_select_id)
         and not slot_pos_point
         and map_config_id == home_map_config_id
-        and chapter_map_key == home_map_config_id
         and agent.get("IsDoorBox") is True
     ):
         return STORAGE_LOCATION_HOME, True
@@ -1411,6 +1520,7 @@ def _storage_container_from_agent(
     config_id: int | None,
     name: str,
     chapter_map_key: int | None,
+    selected_chapter_map_key: int | None,
     home_map_config_id: int | None,
     player_select_id: int | None,
     item_stack_count: int,
@@ -1418,6 +1528,7 @@ def _storage_container_from_agent(
     location, is_home = _storage_location(
         agent,
         chapter_map_key=chapter_map_key,
+        selected_chapter_map_key=selected_chapter_map_key,
         home_map_config_id=home_map_config_id,
         player_select_id=player_select_id,
     )
@@ -1473,6 +1584,7 @@ def _inventory_from_game_save(
     )
     diagnostics.extend(role_diagnostics)
     home_map_config_id = role_context.home_map_config_id
+    init_chapter_id = _optional_positive_int(root.get("InitChapterId"))
     legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
     storage_names = _normalize_storage_furniture(
         legacy_storage if storage_furniture is None else storage_furniture
@@ -1487,7 +1599,22 @@ def _inventory_from_game_save(
     storage_agents: list[tuple[int | None, int | None, dict[str, object]]] = []
     actual_storage_config_ids: set[int] = set()
     chapter_agents = child.get("ChapterAgentMap")
+    selected_chapter_map_key: int | None = None
+    chapter_resolution_source = "unresolved"
+    group_diagnostics: tuple[str, ...] = ()
     if isinstance(chapter_agents, dict):
+        (
+            selected_chapter_map_key,
+            chapter_resolution_source,
+            group_diagnostics,
+        ) = _select_storage_group_key(
+            chapter_agents,
+            storage_config_ids=storage_names,
+            home_map_config_id=home_map_config_id,
+            init_chapter_id=init_chapter_id,
+            player_select_id=role_context.resolved_player_select_id,
+        )
+        diagnostics.extend(group_diagnostics)
         for chapter_map_key, agents in chapter_agents.items():
             for agent in _item_dicts(agents):
                 config_id = _effective_agent_config_id(agent, storage_names)
@@ -1502,7 +1629,16 @@ def _inventory_from_game_save(
                 if config_id in {15000, 15001}:
                     actual_storage_config_ids.add(config_id)
     else:
+        group_diagnostics = ("CurSave.ChapterAgentMap missing or null",)
+        diagnostics.extend(group_diagnostics)
         diagnostics.append("CurSave.ChapterAgentMap 缺失或为 null")
+
+    role_context = replace(
+        role_context,
+        resolved_chapter_map_key=selected_chapter_map_key,
+        chapter_resolution_source=chapter_resolution_source,
+        chapter_diagnostics=group_diagnostics,
+    )
 
     storage_agents.sort(
         key=lambda value: (
@@ -1522,6 +1658,7 @@ def _inventory_from_game_save(
             config_id=config_id,
             name=name,
             chapter_map_key=chapter_map_key,
+            selected_chapter_map_key=selected_chapter_map_key,
             home_map_config_id=home_map_config_id,
             player_select_id=role_context.resolved_player_select_id,
             item_stack_count=item_stack_count,

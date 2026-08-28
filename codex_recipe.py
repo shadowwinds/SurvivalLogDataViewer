@@ -53,7 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 5
+RECIPE_PLAN_CACHE_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -1189,6 +1189,9 @@ def _save_payload_base(record: SaveHistoryRecord) -> dict[str, object]:
         "home_map_config_id": None,
         "role_resolution_source": "unresolved",
         "role_diagnostics": [],
+        "resolved_chapter_map_key": None,
+        "chapter_resolution_source": "unresolved",
+        "chapter_diagnostics": [],
         "max_day": record.max_day,
         "turn": record.turn,
         "is_finished": record.is_finished,
@@ -1320,6 +1323,21 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
                 ),
                 "role_diagnostics": (
                     list(role_context.diagnostics)
+                    if role_context is not None
+                    else []
+                ),
+                "resolved_chapter_map_key": (
+                    role_context.resolved_chapter_map_key
+                    if role_context is not None
+                    else None
+                ),
+                "chapter_resolution_source": (
+                    role_context.chapter_resolution_source
+                    if role_context is not None
+                    else "unresolved"
+                ),
+                "chapter_diagnostics": (
+                    list(role_context.chapter_diagnostics)
                     if role_context is not None
                     else []
                 ),

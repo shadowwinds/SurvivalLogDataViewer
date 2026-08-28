@@ -655,8 +655,62 @@ class SaveInventorySourceTests(unittest.TestCase):
             ["home", "home"],
         )
 
+    def test_init_chapter_id_selects_group_independently_of_role_id(self) -> None:
+        root = {
+            "InitChapterId": 1,
+            "PlayerSelectId": 3,
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-仓库管理员",
+                    "AgentConfigId": 1003,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "WarehousePos01",
+                            "SaveInstanceId": 1001,
+                            "ItemList": [self._item(2527)],
+                        }
+                    ],
+                    3: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "WarehousePos01",
+                            "SaveInstanceId": 1003,
+                            "ItemList": [self._item(2528)],
+                        }
+                    ],
+                },
+            },
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.role_context.role_name, "玩家-仓库管理员")
+        self.assertEqual(state.role_context.resolved_player_select_id, 3)
+        self.assertEqual(state.role_context.resolved_chapter_map_key, 1)
+        self.assertEqual(
+            state.role_context.chapter_resolution_source,
+            "game_save_init_chapter_id",
+        )
+        self.assertEqual(
+            {container.chapter_map_key: container.is_home for container in state.storage_containers},
+            {1: True, 3: False},
+        )
+
     def test_chapter_map_key_mismatch_is_other_even_when_agent_map_matches(self) -> None:
         root = {
+            "InitChapterId": 1,
             "PlayerSelectId": 2,
             "CurSave": {
                 "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},

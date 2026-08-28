@@ -322,6 +322,7 @@
   function renderRecipeDiagnostics(save) {
     const diagnostics = [
       ...(Array.isArray(save && save.role_diagnostics) ? save.role_diagnostics : []),
+      ...(Array.isArray(save && save.chapter_diagnostics) ? save.chapter_diagnostics : []),
       ...(Array.isArray(save && save.diagnostics) ? save.diagnostics : []),
     ]
       .map((value) => String(value || "").trim())
@@ -351,6 +352,18 @@
     const source = labels[save && save.role_resolution_source] || "角色来源未知";
     const resolved = Number(save && save.resolved_player_select_id);
     return Number.isInteger(resolved) && resolved > 0 ? `${source} · ID ${resolved}` : source;
+  }
+
+  function recipeChapterResolutionLabel(save) {
+    const labels = {
+      game_save_init_chapter_id: "InitChapterId 选择章节分组",
+      unique_role_slot_and_map: "唯一槽位/地图回退",
+      ambiguous_role_slot_and_map: "槽位/地图候选有歧义",
+      unresolved: "章节分组未解析",
+    };
+    const source = labels[save && save.chapter_resolution_source] || "章节分组来源未知";
+    const key = Number(save && save.resolved_chapter_map_key);
+    return Number.isInteger(key) && key > 0 ? `${source} ${key}` : source;
   }
 
   function recipeSaveFileLabel(save) {
@@ -439,7 +452,7 @@
     const mode = save.mode || "未知模式";
     const day = `第 ${Number(save.max_day || 0)} 天`;
     const roleName = recipeDisplayName(save.role_name, "角色未知");
-    context.textContent = `${roleName} · ${recipeRoleResolutionLabel(save)} · ${mode} ${day}`;
+    context.textContent = `${roleName} · ${recipeRoleResolutionLabel(save)} · ${recipeChapterResolutionLabel(save)} · ${mode} ${day}`;
     const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
     status.className = `recipe-status ${save.status || "error"}`;
     status.dataset.status = save.status || "error";
