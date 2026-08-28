@@ -897,6 +897,8 @@ button {
 .recipe-saves-heading {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  min-height: 34px;
   min-width: 0;
   width: 100%;
   overflow: hidden;
