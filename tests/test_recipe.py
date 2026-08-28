@@ -230,7 +230,32 @@ class CookingTierTests(unittest.TestCase):
             [item["item_id"] for item in near_matches[0]["missing_item_candidates"]],
             [2901],
         )
+        self.assertEqual(
+            [item["name"] for item in near_matches[0]["missing_item_candidates"]],
+            ["Item 2901"],
+        )
         self.assertEqual(near_matches[0]["available_combination"][0]["item_id"], 2528)
+
+        items = dict(self.items)
+        items[2902] = item(2902, sub_category=4, price=5)
+        generic_near_matches = find_near_matches(
+            [InventoryItem(2528, 1, "主控背包", "backpack")],
+            [recipe(4104, tier=3, tag_combo=(4, 5))],
+            items,
+            self.rules,
+        )
+        self.assertEqual(
+            [item["name"] for item in generic_near_matches[0]["missing_item_candidates"]],
+            ["Item 2901", "Item 2902"],
+        )
+        self.assertEqual(
+            {
+                item["item_id"] for item in generic_near_matches[0]["missing_item_candidates"]
+            }.intersection(
+                item["item_id"] for item in generic_near_matches[0]["available_combination"]
+            ),
+            set(),
+        )
 
     def test_tag_recipe_near_match_requires_every_other_slot_and_quantity(self) -> None:
         self.assertEqual(

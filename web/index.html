@@ -97,12 +97,14 @@
           </aside>
         </div>
 
-        <section class="recipe-view" id="recipeView" hidden aria-label="可烹饪菜肴">
+        <section class="recipe-view" id="recipeView" hidden aria-label="智能菜肴">
           <div class="recipe-saves-heading">
-            <label class="recipe-save-picker" for="recipeSaveSelect">
-              <span>存档</span>
+            <div class="recipe-save-toolbar" id="recipeSaveToolbar">
+              <span class="recipe-save-label">存档</span>
               <select id="recipeSaveSelect" class="recipe-save-select" aria-label="选择存档"></select>
-            </label>
+              <span id="recipeSaveContext" class="recipe-save-context"></span>
+              <span id="recipeSaveStatus" class="recipe-status" data-status=""></span>
+            </div>
           </div>
           <div class="recipe-save-panels" id="recipeSavePanels" aria-live="polite"></div>
         </section>

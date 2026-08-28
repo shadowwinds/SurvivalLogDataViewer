@@ -89,9 +89,10 @@
       button.classList.toggle("active", category.category === state.category);
 
       const identity = makeElement("span", "category-identity");
+      const label = category.category === "recipes" ? "智能菜肴" : category.label;
       identity.append(
         makeElement("span", "category-emoji", category.emoji),
-        makeElement("span", "category-label", category.label),
+        makeElement("span", "category-label", label),
       );
       const count = makeElement(
         "span",
@@ -245,6 +246,14 @@
     return recipeDisplayName(item && item.name, "未命名食材");
   }
 
+  function recipeSaveFileLabel(save) {
+    const fileName = typeof (save && save.file_name) === "string"
+      ? save.file_name.split(/[\\/]/).pop()
+      : "";
+    const label = fileName.replace(/^Save_/i, "").replace(/\.bytes$/i, "");
+    return label || recipeDisplayName(save && save.name, "未命名存档");
+  }
+
   function renderRecipeSelector(payload) {
     const select = byId("recipeSaveSelect");
     const saves = Array.isArray(payload && payload.saves) ? payload.saves : [];
@@ -257,34 +266,16 @@
     const selected = saves.find((save) => save.file_name === preferred) || saves[0] || null;
     state.recipeSaveSelection = selected ? selected.file_name : "";
     saves.forEach((save) => {
-      const option = makeElement("option", "", recipeDisplayName(save.name, "未命名存档"));
+      const option = makeElement(
+        "option",
+        "",
+        recipeSaveFileLabel(save),
+      );
       option.value = save.file_name || "";
       option.selected = Boolean(selected && save.file_name === selected.file_name);
       select.append(option);
     });
     select.disabled = !selected;
-  }
-
-  function compactRecipeItems(items, emptyText = "无") {
-    if (!Array.isArray(items) || !items.length) return emptyText;
-    const merged = new Map();
-    items.forEach((item) => {
-      const key = item && item.item_id !== undefined
-        ? String(item.item_id)
-        : recipeItemName(item);
-      const current = merged.get(key);
-      if (current) {
-        current.count += Number(item && item.count) > 0 ? Number(item.count) : 1;
-        return;
-      }
-      merged.set(key, {
-        name: recipeItemName(item),
-        count: Number(item && item.count) > 0 ? Number(item.count) : 1,
-      });
-    });
-    return Array.from(merged.values())
-      .map((item) => item.count > 1 ? `${item.name} ×${item.count}` : item.name)
-      .join("、");
   }
 
   function recipeKindLabel(result) {
@@ -294,24 +285,63 @@
     return Array.isArray(result && result.candidate_group) ? "通用菜肴" : "特色菜肴";
   }
 
-  function recipeNearSummary(result) {
-    const missingItems = Array.isArray(result && result.missing_items)
-      ? result.missing_items
-      : [];
-    const missingCategory = result && result.missing_sub_category;
-    const missing = missingItems.length
-      ? compactRecipeItems(missingItems)
-      : recipeDisplayName(missingCategory && missingCategory.name, "食材");
-    const available = compactRecipeItems(
-      result && result.available_combination,
-      "尚无可用组合",
+  function uniqueRecipeNames(items) {
+    const names = [];
+    const seen = new Set();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const name = recipeItemName(item);
+      if (seen.has(name)) return;
+      seen.add(name);
+      names.push(name);
+    });
+    return names;
+  }
+
+  function appendRecipeIngredient(parent, text, className = "") {
+    const label = String(text || "未命名食材");
+    const ingredient = makeElement(
+      "span",
+      `recipe-ingredient${className ? ` ${className}` : ""}`,
+      label,
     );
-    return `缺少：${missing}；当前：${available}`;
+    ingredient.title = label;
+    parent.append(ingredient);
+  }
+
+  function appendRecipeIngredients(parent, items, emptyText = "无") {
+    const ingredientItems = Array.isArray(items) ? items : [];
+    if (!ingredientItems.length) {
+      parent.append(makeElement("span", "recipe-inline-empty", emptyText));
+      return;
+    }
+    ingredientItems.forEach((item) => appendRecipeIngredient(parent, recipeItemName(item)));
+  }
+
+  function renderRecipeHeader(save) {
+    const context = byId("recipeSaveContext");
+    const status = byId("recipeSaveStatus");
+    if (!context || !status) return;
+    if (!save) {
+      context.textContent = "";
+      status.textContent = "";
+      status.className = "recipe-status";
+      status.dataset.status = "";
+      status.hidden = true;
+      return;
+    }
+    const mode = save.mode || "未知模式";
+    const day = `第 ${Number(save.max_day || 0)} 天`;
+    context.textContent = `${mode} ${day}`;
+    const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
+    status.className = `recipe-status ${save.status || "error"}`;
+    status.dataset.status = save.status || "error";
+    status.textContent = statusText;
+    status.hidden = false;
   }
 
   function renderRecipeResult(result, { near = false } = {}) {
     const card = makeElement("article", `recipe-match${near ? " recipe-near-match" : ""}`);
-    const primary = makeElement("div", "recipe-match-line recipe-match-line-primary");
+    const row = makeElement("div", "recipe-match-row");
     const name = makeElement(
       "strong",
       "recipe-match-name",
@@ -322,38 +352,32 @@
       `recipe-kind recipe-kind-${result.recipe_kind || (Array.isArray(result.candidate_group) ? "generic" : "specific")}`,
       recipeKindLabel(result),
     );
-    primary.append(name, badge);
-    const secondaryText = near
-      ? recipeNearSummary(result)
-      : `食材：${compactRecipeItems(result.representative_combination, "尚无可用组合")}`;
-    const secondary = makeElement(
-      "div",
-      "recipe-match-line recipe-match-line-secondary",
-      secondaryText,
-    );
-    secondary.title = secondaryText;
+    const ingredients = makeElement("div", "recipe-match-ingredients");
+    if (!near) {
+      appendRecipeIngredients(ingredients, result.representative_combination);
+    } else {
+      ingredients.append(makeElement("span", "recipe-inline-label", "缺少："));
+      const missingItems = Array.isArray(result.missing_items) ? result.missing_items : [];
+      const candidates = Array.isArray(result.missing_item_candidates)
+        ? result.missing_item_candidates
+        : [];
+      if (candidates.length) {
+        appendRecipeIngredient(ingredients, uniqueRecipeNames(candidates).join("|"), "recipe-missing-ingredient");
+      } else {
+        appendRecipeIngredients(ingredients, missingItems);
+      }
+      ingredients.append(makeElement("span", "recipe-inline-label", "当前："));
+      appendRecipeIngredients(ingredients, result.available_combination);
+    }
+    ingredients.title = ingredients.textContent;
     name.title = recipeDisplayName(result.name, "未命名菜肴");
-    card.append(primary, secondary);
+    row.append(name, ingredients, badge);
+    card.append(row);
     return card;
   }
 
   function renderRecipeSave(save) {
     const panel = makeElement("article", "recipe-save-panel");
-    const heading = makeElement("div", "recipe-save-heading");
-    const title = makeElement("div", "recipe-save-title");
-    title.append(
-      makeElement("h4", "recipe-save-name", recipeDisplayName(save.name, "未命名存档")),
-    );
-    const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
-    heading.append(title, makeElement("span", `recipe-status ${save.status || "error"}`, statusText));
-    panel.append(heading);
-    const meta = makeElement("div", "recipe-save-meta");
-    meta.append(
-      makeElement("span", "recipe-meta-item", save.mode || "未知模式"),
-      makeElement("span", "recipe-meta-item", `第 ${Number(save.max_day || 0)} 天`),
-    );
-    panel.append(meta);
-
     const inventoryColumn = makeElement("div", "recipe-column recipe-inventory-column");
     const inventorySection = makeElement("section", "recipe-section");
     const inventory = Array.isArray(save.inventory) ? save.inventory : [];
@@ -416,6 +440,7 @@
     container.replaceChildren();
     const saves = Array.isArray(payload && payload.saves) ? payload.saves : [];
     const selected = saves.find((save) => save.file_name === state.recipeSaveSelection);
+    renderRecipeHeader(selected);
     if (!selected) {
       container.append(makeElement("div", "empty-state", "没有可显示的存档结果"));
       return;
