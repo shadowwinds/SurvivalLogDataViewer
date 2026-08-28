@@ -21,11 +21,14 @@ class SaveInventorySourceTests(unittest.TestCase):
     def test_marked_furniture_uses_config_id_and_wins_over_fallback(self) -> None:
         root = {
             "CurSave": {
-                "LeadingRole": {"ItemList": [self._item(2527)]},
+                "LeadingRole": {"ItemList": [self._item(2527)], "MapConfigIdHome": 1},
                 "ChapterAgentMap": {
                     1: [
                         {
                             "BagFurnitureConfigId": 15000,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos04",
+                            "SaveInstanceId": 1001,
                             "ItemList": [self._item(2528)],
                         }
                     ]
@@ -64,30 +67,40 @@ class SaveInventorySourceTests(unittest.TestCase):
     def test_agent_config_id_recognizes_mapped_storage_and_ignores_other_furniture(self) -> None:
         root = {
             "CurSave": {
-                "LeadingRole": {"ItemList": [self._item(2527)]},
+                "LeadingRole": {"ItemList": [self._item(2527)], "MapConfigIdHome": 1},
                 "ChapterAgentMap": {
                     1: [
                         {
                             "AgentConfigId": 215,
                             "BagFurnitureConfigId": 0,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
                             "ItemList": [self._item(2528)],
                         },
                         {
                             "AgentConfigId": 216,
                             "BagFurnitureConfigId": 0,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos02",
                             "ItemList": [self._item(2529)],
                         },
                         {
                             "AgentConfigId": 215,
                             "BagFurnitureConfigId": 217,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos03",
                             "ItemList": [self._item(2530)],
                         },
                         {
                             "AgentConfigId": 9001,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos04",
                             "ItemList": [self._item(2529)],
                         },
                         {
                             "AgentConfigId": 9002,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos05",
                             "ItemList": [self._item(2531)],
                         },
                     ]
@@ -103,7 +116,6 @@ class SaveInventorySourceTests(unittest.TestCase):
                 215: "双门冰箱",
                 216: "冰柜",
                 217: "双门冰箱",
-                9002: "冷冻柜",
             },
         )
 
@@ -120,15 +132,21 @@ class SaveInventorySourceTests(unittest.TestCase):
     def test_multiple_storage_configs_with_same_name_are_all_read(self) -> None:
         root = {
             "CurSave": {
-                "LeadingRole": {"ItemList": []},
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
                 "ChapterAgentMap": {
                     1: [
                         {
                             "AgentConfigId": 908,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "SaveInstanceId": 1001,
                             "ItemList": [self._item(2527)],
                         },
                         {
                             "AgentConfigId": 909,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos02",
+                            "SaveInstanceId": 1002,
                             "ItemList": [self._item(2528)],
                         },
                     ]
@@ -147,6 +165,130 @@ class SaveInventorySourceTests(unittest.TestCase):
             state.container_counts,
             {"主控背包": 0, "storage_908": 1, "storage_909": 1},
         )
+
+    def test_agent_config_is_used_when_bag_config_is_not_storage(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "BagFurnitureConfigId": 9998,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos06",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            }
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物家具"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.storage_containers[0].config_id, 215)
+
+    def test_same_named_storage_is_filtered_by_home_location(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos04",
+                            "SaveInstanceId": 1001,
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos04",
+                            "SaveInstanceId": 1002,
+                            "ItemList": [self._item(2528)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1004,
+                            "SlotPosPoint": "NEWMaket01_after_29",
+                            "SaveInstanceId": 1003,
+                            "ItemList": [self._item(2529)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "UnknownBuildingPos04",
+                            "SaveInstanceId": 1004,
+                            "ItemList": [self._item(2530)],
+                        },
+                    ]
+                },
+            }
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "同名储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.container_counts["storage_215"], 1)
+        self.assertEqual(
+            [(container.instance_id, container.is_home, container.location) for container in state.storage_containers],
+            [
+                (1001, True, "home"),
+                (1002, False, "other"),
+                (1003, False, "other"),
+                (1004, None, "unknown"),
+            ],
+        )
+        self.assertTrue(any("位置无法确认" in diagnostic for diagnostic in state.diagnostics))
+
+    def test_door_box_flag_is_read_without_a_name_mapping(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 1000,
+                            "BagFurnitureConfigId": 9999,
+                            "IsDoorBox": True,
+                            "MapConfigId": 1,
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            }
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.container_counts["storage_9999"], 1)
+        self.assertEqual(state.storage_containers[0].name, "ID:9999")
+
+    def test_workbench_drawer_is_included_as_home_storage(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {},
+                "WorkbenchDrawerItems": [self._item(2527, 2)],
+            }
+        }
+        state = _inventory_from_game_save(root, self.file_info, storage_furniture={})
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.container_counts["workbench_drawer"], 1)
+        self.assertEqual(state.storage_containers[0].name, "工作台抽屉")
 
 
 if __name__ == "__main__":

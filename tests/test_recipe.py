@@ -383,64 +383,28 @@ class CookingTierTests(unittest.TestCase):
 
 
 class RecipeConfigTests(unittest.TestCase):
-    def test_storage_furniture_is_selected_by_localized_name(self) -> None:
+    def test_storage_furniture_is_selected_by_storage_behavior(self) -> None:
         specs = storage_furniture_specs_from_rows(
             [
                 ConfigRow(
                     "Config_Furniture",
-                    {"ID": 102, "Name_Local": "冷冻柜"},
+                    {"ID": 204, "Name_Local": "任意置物架", "FurnitureFunc": [215]},
                 ),
                 ConfigRow(
                     "Config_Furniture",
-                    {"ID": 106, "Name_Local": "大型冷冻柜"},
+                    {"ID": 10000, "Name_Local": "无关名称", "ShowStorage": 100},
                 ),
                 ConfigRow(
                     "Config_Furniture",
-                    {"ID": 107, "Name_Local": "巨型冷冻柜（非卖品）"},
+                    {"ID": 215, "Name_Local": "双门冰箱", "FurnitureFunc": [215]},
                 ),
                 ConfigRow(
                     "Config_Furniture",
-                    {"ID": 15000, "Name": "Fridge_Double", "Name_Local": "双开门冰箱"},
+                    {"ID": 431, "Name_Local": "冰箱", "FurnitureFunc": [1]},
                 ),
                 ConfigRow(
                     "Config_Furniture",
-                    {"ID": 15001, "Name_Local": "冰柜"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 215, "Name_Local": "双门冰箱"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 80062, "Name_Local": "豪华版双门冰箱"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 908, "Name_Local": "冰柜"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 909, "Name_Local": "冰柜"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 431, "Name_Local": "冰箱"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 66114, "Name_Local": "医用冷藏柜"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 67024, "Name_Local": "食堂冰箱"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 9999, "Name_Local": "普通储物柜"},
-                ),
-                ConfigRow(
-                    "Config_Furniture",
-                    {"ID": 9998, "Name": "冰柜", "Name_Local": "普通储物柜"},
+                    {"ID": 102, "Name_Local": "冷冻柜", "FurnitureFunc": [1744]},
                 ),
             ]
         )
@@ -448,33 +412,41 @@ class RecipeConfigTests(unittest.TestCase):
         self.assertEqual(
             specs,
             (
+                StorageFurnitureSpec(204, "任意置物架"),
                 StorageFurnitureSpec(215, "双门冰箱"),
-                StorageFurnitureSpec(908, "冰柜"),
-                StorageFurnitureSpec(909, "冰柜"),
-                StorageFurnitureSpec(15000, "双开门冰箱"),
-                StorageFurnitureSpec(15001, "冰柜"),
-                StorageFurnitureSpec(80062, "豪华版双门冰箱"),
+                StorageFurnitureSpec(10000, "无关名称"),
             ),
         )
 
-    def test_database_storage_mapping_rechecks_strict_names(self) -> None:
+    def test_database_storage_mapping_reads_current_storage_behavior(self) -> None:
         connection = sqlite3.connect(":memory:")
-        connection.row_factory = sqlite3.Row
         try:
             connection.execute(
-                "CREATE TABLE storage_furniture (config_id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
+                """
+                CREATE TABLE codex_entries (
+                    source_table TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    raw_json TEXT NOT NULL,
+                    is_current INTEGER NOT NULL
+                )
+                """
             )
             connection.executemany(
-                "INSERT INTO storage_furniture(config_id, name) VALUES (?, ?)",
+                """
+                INSERT INTO codex_entries(source_table, source_id, name, raw_json, is_current)
+                VALUES ('Config_Furniture', ?, ?, ?, ?)
+                """,
                 [
-                    (102, "冷冻柜"),
-                    (215, "双门冰箱"),
-                    (107, "巨型冷冻柜（非卖品）"),
+                    (102, "冷冻柜", '{"FurnitureFunc":[1744],"ShowStorage":0}', 1),
+                    (215, "任意容器", '{"FurnitureFunc":[215],"ShowStorage":0}', 1),
+                    (107, "架子", '{"FurnitureFunc":[],"ShowStorage":100}', 1),
+                    (900, "旧容器", '{"FurnitureFunc":[215],"ShowStorage":0}', 0),
                 ],
             )
             self.assertEqual(
                 _load_storage_furniture_from_database(connection),
-                {215: "双门冰箱"},
+                {107: "架子", 215: "任意容器"},
             )
         finally:
             connection.close()

@@ -37,7 +37,12 @@ from codex_database import (
 )
 from codex_save import SaveParseError, default_save_file
 from codex_parser import FIELD_LABELS, format_scalar
-from codex_recipe import RecipeConfigError, build_recipe_error, build_recipe_plan
+from codex_recipe import (
+    RECIPE_PLAN_CACHE_VERSION,
+    RecipeConfigError,
+    build_recipe_error,
+    build_recipe_plan,
+)
 
 
 POLL_INTERVAL_SECONDS = 5
@@ -471,6 +476,7 @@ class CodexService:
             metadata = get_metadata(self.connection)
             cache_signature = json.dumps(
                 {
+                    "recipe_plan_cache_version": RECIPE_PLAN_CACHE_VERSION,
                     "save_signature": signature,
                     "game_version": metadata.get("game_version", ""),
                     "database_schema_version": metadata.get("database_schema_version", ""),

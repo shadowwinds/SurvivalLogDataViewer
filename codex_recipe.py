@@ -13,11 +13,13 @@ from typing import Any, Collection, Iterable, Mapping
 
 from codex_parser import ConfigRow, Reader, config_row_name, load_text_asset
 from codex_save import (
-    ALLOWED_STORAGE_FURNITURE_NAMES,
     InventoryItem,
     SaveHistoryRecord,
     SaveParseError,
     SaveInventoryState,
+    STORAGE_FURNITURE_FUNC_ID,
+    STORAGE_LOCATION_LABELS,
+    StorageContainer,
     read_game_save_inventory,
     read_history_save,
 )
@@ -51,6 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
+RECIPE_PLAN_CACHE_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,22 @@ class TierRule:
 class StorageFurnitureSpec:
     config_id: int
     name: str
+
+
+def _has_storage_behavior(values: Mapping[str, object]) -> bool:
+    functions = values.get("FurnitureFunc")
+    has_storage_function = isinstance(functions, (list, tuple)) and any(
+        value == STORAGE_FURNITURE_FUNC_ID
+        for value in functions
+        if isinstance(value, int) and not isinstance(value, bool)
+    )
+    show_storage = values.get("ShowStorage")
+    has_storage_capacity = (
+        isinstance(show_storage, (int, float))
+        and not isinstance(show_storage, bool)
+        and show_storage > 0
+    )
+    return has_storage_function or has_storage_capacity
 
 
 def _as_int(value: object, default: int = 0) -> int:
@@ -165,17 +184,11 @@ def item_specs_from_rows(
 def storage_furniture_specs_from_rows(
     rows: Iterable[ConfigRow],
 ) -> tuple[StorageFurnitureSpec, ...]:
-    """Identify furniture configs with one of the four supported storage names."""
+    """Identify furniture configs by storage behavior instead of display names."""
 
-    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
     result: list[StorageFurnitureSpec] = []
     for row in rows:
-        values = row.values
-        names = {
-            str(values.get(field) or "").strip().casefold()
-            for field in ("Name_Local", "FurnitureName_Local")
-        }
-        if not names.intersection(allowed_names):
+        if not _has_storage_behavior(row.values):
             continue
         result.append(StorageFurnitureSpec(config_id=row.row_id, name=config_row_name(row)))
     return tuple(sorted(result, key=lambda item: item.config_id))
@@ -349,6 +362,29 @@ def _load_items_from_database(connection: sqlite3.Connection) -> dict[int, Recip
 
 def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dict[int, str]:
     try:
+        config_rows = connection.execute(
+            """
+            SELECT source_id, name, raw_json
+            FROM codex_entries
+            WHERE source_table = 'Config_Furniture' AND is_current = 1
+            ORDER BY source_id
+            """
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc).lower():
+            raise
+        config_rows = []
+    if config_rows:
+        result: dict[int, str] = {}
+        for row in config_rows:
+            raw = json.loads(str(row[2]))
+            if _has_storage_behavior(raw):
+                config_id = int(row[0])
+                result[config_id] = str(row[1]).strip() or f"ID:{config_id}"
+        if result:
+            return result
+
+    try:
         rows = connection.execute(
             "SELECT config_id, name FROM storage_furniture ORDER BY config_id"
         ).fetchall()
@@ -356,11 +392,10 @@ def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dic
         if "no such table" not in str(exc).lower():
             raise
         return dict(LEGACY_STORAGE_FURNITURE)
-    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
     result = {
-        int(row["config_id"]): str(row["name"]).strip()
+        int(row[0]): str(row[1]).strip()
         for row in rows
-        if str(row["name"]).strip().casefold() in allowed_names
+        if int(row[0]) > 0 and str(row[1]).strip()
     }
     return result or dict(LEGACY_STORAGE_FURNITURE)
 
@@ -943,6 +978,23 @@ def _inventory_payload(
     return result, sorted(set(diagnostics))
 
 
+def _storage_container_payload(container: StorageContainer) -> dict[str, object]:
+    return {
+        "config_id": container.config_id,
+        "name": container.name,
+        "instance_id": container.instance_id,
+        "map_config_id": container.map_config_id,
+        "home_map_config_id": container.home_map_config_id,
+        "chapter_map_key": container.chapter_map_key,
+        "chapter_id": container.chapter_id,
+        "slot_pos_point": container.slot_pos_point,
+        "location": container.location,
+        "location_label": STORAGE_LOCATION_LABELS.get(container.location, "位置未知"),
+        "is_home": container.is_home,
+        "item_stack_count": container.item_stack_count,
+    }
+
+
 def _matchable_inventory(
     inventory: SaveInventoryState,
     *,
@@ -1048,13 +1100,13 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
         try:
             _validate_save_filename(record.file_name)
         except RecipeConfigError as exc:
-            payload.update({"status": "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [str(exc)]})
+            payload.update({"status": "error", "container_counts": {}, "storage_containers": [], "inventory": [], "matches": [], "near_matches": [], "diagnostics": [str(exc)]})
             saves.append(payload)
             all_diagnostics.append(str(exc))
             continue
         if record.file_name in seen_names:
             message = f"HistorySave 重复列出子存档：{record.file_name}"
-            payload.update({"status": "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
+            payload.update({"status": "error", "container_counts": {}, "storage_containers": [], "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
             saves.append(payload)
             all_diagnostics.append(message)
             continue
@@ -1067,7 +1119,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             )
         except SaveParseError as exc:
             message = str(exc)
-            payload.update({"status": "missing" if not requested.exists() else "error", "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
+            payload.update({"status": "missing" if not requested.exists() else "error", "container_counts": {}, "storage_containers": [], "inventory": [], "matches": [], "near_matches": [], "diagnostics": [message]})
             saves.append(payload)
             all_diagnostics.append(message)
             continue
@@ -1094,6 +1146,10 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
                 "status": "ok",
                 "source_file": _file_info_payload(inventory.file_info),
                 "container_counts": inventory.container_counts,
+                "storage_containers": [
+                    _storage_container_payload(container)
+                    for container in inventory.storage_containers
+                ],
                 "inventory": inventory_payload,
                 "matches": matches,
                 "near_matches": near_matches,
@@ -1127,6 +1183,7 @@ def build_recipe_error(message: str, *, diagnostics: Collection[str] = ()) -> di
         "pending_dishes": [],
         "thresholds": [],
         "saves": [],
+        "storage_containers": [],
         "default_save_file": None,
         "selected_save_file": None,
         "diagnostics": sorted(set([message, *diagnostics])),
@@ -1137,6 +1194,7 @@ __all__ = [
     "RecipeConfigError",
     "RecipeItemSpec",
     "RecipeSpec",
+    "RECIPE_PLAN_CACHE_VERSION",
     "StorageFurnitureSpec",
     "SUPPORTED_TIER_SUBCATEGORIES",
     "TIER_LABELS",

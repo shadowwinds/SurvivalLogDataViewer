@@ -246,6 +246,79 @@
     return recipeDisplayName(item && item.name, "未命名食材");
   }
 
+  function recipeContainerLocationLabel(container) {
+    const explicitLabel = typeof (container && container.location_label) === "string"
+      ? container.location_label.trim()
+      : "";
+    if (explicitLabel) return explicitLabel;
+    if (container && container.is_home === true) return "家中";
+    if (container && container.is_home === false) return "其他位置";
+    return "位置未知";
+  }
+
+  function recipeContainerLocationClass(container) {
+    if (container && container.is_home === true) return "home";
+    if (container && container.is_home === false) return "other";
+    return "unknown";
+  }
+
+  function recipeContainerMeta(container) {
+    const details = [];
+    if (container && container.config_id !== null && container.config_id !== undefined) {
+      details.push(`配置 ID ${container.config_id}`);
+    }
+    if (container && container.instance_id !== null && container.instance_id !== undefined) {
+      details.push(`实例 ID ${container.instance_id}`);
+    }
+    if (container && container.map_config_id !== null && container.map_config_id !== undefined) {
+      details.push(`地图 ID ${container.map_config_id}`);
+    }
+    const slot = typeof (container && container.slot_pos_point) === "string"
+      ? container.slot_pos_point.trim()
+      : "";
+    if (slot) details.push(`槽位 ${slot}`);
+    if (container && container.item_stack_count !== null && container.item_stack_count !== undefined) {
+      details.push(`${container.item_stack_count} 个物品堆`);
+    }
+    return details.join(" · ") || "未提供实例定位";
+  }
+
+  function renderRecipeContainers(save) {
+    const section = makeElement("section", "recipe-section recipe-storage-section");
+    const containers = Array.isArray(save && save.storage_containers)
+      ? save.storage_containers
+      : [];
+    const homeCount = containers.filter((container) => container && container.is_home === true).length;
+    section.append(
+      makeElement("h5", "recipe-section-title", "储物容器"),
+      makeElement("span", "recipe-match-count", `${homeCount}/${containers.length} 个在家中`),
+    );
+    if (!containers.length) {
+      section.append(makeElement("div", "empty-state compact", "未发现储物容器"));
+      return section;
+    }
+    const list = makeElement("div", "recipe-storage-list");
+    containers.forEach((container) => {
+      const row = makeElement("div", "recipe-storage-row");
+      const main = makeElement("div", "recipe-storage-main");
+      const name = typeof (container && container.name) === "string"
+        ? container.name.trim() || "未命名储物容器"
+        : "未命名储物容器";
+      const locationClass = recipeContainerLocationClass(container);
+      const location = recipeContainerLocationLabel(container);
+      main.append(
+        makeElement("span", "recipe-storage-name", name),
+        makeElement("span", `recipe-storage-location recipe-storage-location-${locationClass}`, location),
+      );
+      const meta = makeElement("div", "recipe-storage-meta", recipeContainerMeta(container));
+      row.title = `${name} · ${location} · ${meta.textContent}`;
+      row.append(main, meta);
+      list.append(row);
+    });
+    section.append(list);
+    return section;
+  }
+
   function recipeSaveFileLabel(save) {
     const fileName = typeof (save && save.file_name) === "string"
       ? save.file_name.split(/[\\/]/).pop()
@@ -379,6 +452,7 @@
   function renderRecipeSave(save) {
     const panel = makeElement("article", "recipe-save-panel");
     const inventoryColumn = makeElement("div", "recipe-column recipe-inventory-column");
+    inventoryColumn.append(renderRecipeContainers(save));
     const inventorySection = makeElement("section", "recipe-section");
     const inventory = Array.isArray(save.inventory) ? save.inventory : [];
     inventorySection.append(makeElement("h5", "recipe-section-title", "拥有食材"));

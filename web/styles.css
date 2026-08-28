@@ -1068,6 +1068,61 @@ button {
   white-space: nowrap;
 }
 
+.recipe-storage-list {
+  border-top: 1px solid var(--border);
+}
+
+.recipe-storage-row {
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1f3;
+}
+
+.recipe-storage-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.recipe-storage-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipe-storage-location {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.recipe-storage-location-home {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.recipe-storage-location-other {
+  background: var(--pending-soft);
+  color: var(--pending);
+}
+
+.recipe-storage-location-unknown {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.recipe-storage-meta {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--subtle);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .recipe-match-list {
   border-top: 1px solid var(--border);
 }

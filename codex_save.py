@@ -41,6 +41,7 @@ CODEX_CATEGORY_SOURCE_TABLES = {
     "craft": "Config_ProductionList",
     "furniture": "Config_Furniture",
 }
+# Kept as a public compatibility symbol; storage detection uses config behavior.
 ALLOWED_STORAGE_FURNITURE_NAMES = frozenset(
     {
         "双门冰箱",
@@ -49,6 +50,17 @@ ALLOWED_STORAGE_FURNITURE_NAMES = frozenset(
         "冰柜",
     }
 )
+STORAGE_FURNITURE_FUNC_ID = 215
+HOME_STORAGE_SLOT_PREFIXES = ("homebuildingpos", "home_")
+NON_HOME_STORAGE_SLOT_PREFIXES = ("neighborgirlbuildingpos",)
+STORAGE_LOCATION_HOME = "home"
+STORAGE_LOCATION_OTHER = "other"
+STORAGE_LOCATION_UNKNOWN = "unknown"
+STORAGE_LOCATION_LABELS = {
+    STORAGE_LOCATION_HOME: "家中",
+    STORAGE_LOCATION_OTHER: "其他位置",
+    STORAGE_LOCATION_UNKNOWN: "位置未知",
+}
 
 
 class SaveParseError(ValueError):
@@ -100,6 +112,23 @@ class SaveHistoryRecord:
 
 
 @dataclass(frozen=True)
+class StorageContainer:
+    """One placed storage container and the location inferred from its save fields."""
+
+    config_id: int | None
+    name: str
+    instance_id: int | None
+    map_config_id: int | None
+    home_map_config_id: int | None
+    chapter_map_key: int | None
+    chapter_id: int | None
+    slot_pos_point: str
+    location: str
+    is_home: bool | None
+    item_stack_count: int = 0
+
+
+@dataclass(frozen=True)
 class InventoryItem:
     """One ItemSave stack with its original storage location."""
 
@@ -115,6 +144,7 @@ class SaveInventoryState:
     items: tuple[InventoryItem, ...]
     diagnostics: tuple[str, ...] = ()
     container_counts: dict[str, int] = field(default_factory=dict)
+    storage_containers: tuple[StorageContainer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -777,6 +807,7 @@ _SAVE_CAPTURE_FIELDS = {
     "AgentSave": frozenset({
         "NewInstanceId", "SaveInstanceId", "AgentConfigId", "ItemList",
         "IsBagFurniture", "BagFurnitureConfigId", "IsDoorBox", "DoorBoxIndex",
+        "MapConfigId", "MapConfigIdHome", "ChapterId", "SlotPosPoint",
     }),
     "ItemSave": frozenset({"ItemConfigId", "ItemCount"}),
 }
@@ -1102,16 +1133,128 @@ def _append_inventory_items(
     return count
 
 
-def _allowed_storage_furniture_names(storage_furniture: Mapping[int, str]) -> dict[int, str]:
-    allowed_names = {name.casefold() for name in ALLOWED_STORAGE_FURNITURE_NAMES}
+def _normalize_storage_furniture(storage_furniture: Mapping[int, str]) -> dict[int, str]:
     return {
-        int(config_id): str(name).strip()
+        int(config_id): str(name).strip() or f"ID:{int(config_id)}"
         for config_id, name in storage_furniture.items()
         if isinstance(config_id, int)
         and not isinstance(config_id, bool)
         and config_id > 0
-        and str(name).strip().casefold() in allowed_names
     }
+
+
+def _optional_positive_int(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
+
+
+def _effective_agent_config_id(
+    agent: Mapping[str, object],
+    storage_config_ids: Collection[int],
+) -> int | None:
+    bag_config_id = _optional_positive_int(agent.get("BagFurnitureConfigId"))
+    agent_config_id = _optional_positive_int(agent.get("AgentConfigId"))
+    if bag_config_id is not None and (
+        bag_config_id in storage_config_ids
+        or agent_config_id is None
+        or agent.get("IsDoorBox") is True
+    ):
+        return bag_config_id
+    return agent_config_id or bag_config_id
+
+
+def _agent_instance_id(agent: Mapping[str, object]) -> int | None:
+    for field_name in ("SaveInstanceId", "NewInstanceId"):
+        instance_id = _optional_positive_int(agent.get(field_name))
+        if instance_id is not None:
+            return instance_id
+    return None
+
+
+def _storage_location(
+    agent: Mapping[str, object],
+    *,
+    home_map_config_id: int | None,
+) -> tuple[str, bool | None]:
+    map_config_id = _optional_positive_int(agent.get("MapConfigId"))
+    slot_pos_point = str(agent.get("SlotPosPoint") or "").strip().casefold()
+
+    if (
+        map_config_id is not None
+        and home_map_config_id is not None
+        and map_config_id != home_map_config_id
+    ):
+        return STORAGE_LOCATION_OTHER, False
+
+    if slot_pos_point.startswith(NON_HOME_STORAGE_SLOT_PREFIXES):
+        return STORAGE_LOCATION_OTHER, False
+
+    if slot_pos_point.startswith(HOME_STORAGE_SLOT_PREFIXES):
+        if (
+            home_map_config_id is None
+            or map_config_id is None
+            or map_config_id == home_map_config_id
+        ):
+            return STORAGE_LOCATION_HOME, True
+        return STORAGE_LOCATION_OTHER, False
+
+    if (
+        not slot_pos_point
+        and map_config_id is not None
+        and home_map_config_id is not None
+        and map_config_id == home_map_config_id
+    ):
+        return STORAGE_LOCATION_HOME, True
+
+    return STORAGE_LOCATION_UNKNOWN, None
+
+
+def _storage_container_key(config_id: int | None) -> str:
+    if config_id == 15000:
+        return "fridge_15000"
+    if config_id == 15001:
+        return "freezer_15001"
+    if config_id is None:
+        return "storage_unknown"
+    return f"storage_{config_id}"
+
+
+def _storage_container_name(
+    config_id: int | None,
+    storage_furniture: Mapping[int, str],
+) -> str:
+    if config_id is None:
+        return "未知储物容器"
+    return str(storage_furniture.get(config_id) or f"ID:{config_id}").strip()
+
+
+def _storage_container_from_agent(
+    agent: Mapping[str, object],
+    *,
+    config_id: int | None,
+    name: str,
+    chapter_map_key: int | None,
+    home_map_config_id: int | None,
+    item_stack_count: int,
+) -> StorageContainer:
+    location, is_home = _storage_location(
+        agent,
+        home_map_config_id=home_map_config_id,
+    )
+    return StorageContainer(
+        config_id=config_id,
+        name=name,
+        instance_id=_agent_instance_id(agent),
+        map_config_id=_optional_positive_int(agent.get("MapConfigId")),
+        home_map_config_id=home_map_config_id,
+        chapter_map_key=_optional_positive_int(chapter_map_key),
+        chapter_id=agent.get("ChapterId") if isinstance(agent.get("ChapterId"), int) else None,
+        slot_pos_point=str(agent.get("SlotPosPoint") or "").strip(),
+        location=location,
+        is_home=is_home,
+        item_stack_count=item_stack_count,
+    )
 
 
 def _inventory_from_game_save(
@@ -1132,6 +1275,7 @@ def _inventory_from_game_save(
     raw_items: list[InventoryItem] = []
     container_counts: dict[str, int] = {}
     leading_role = child.get("LeadingRole")
+    home_map_config_id: int | None = None
     if isinstance(leading_role, dict):
         container_counts["主控背包"] = _append_inventory_items(
             raw_items,
@@ -1140,79 +1284,142 @@ def _inventory_from_game_save(
             container="leading_role",
             diagnostics=diagnostics,
         )
+        home_map_config_id = _optional_positive_int(leading_role.get("MapConfigIdHome"))
     else:
         diagnostics.append("CurSave.LeadingRole 缺失或为 null")
 
     legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
-    storage_names = _allowed_storage_furniture_names(
+    storage_names = _normalize_storage_furniture(
         legacy_storage if storage_furniture is None else storage_furniture
     )
-    marked_agents: dict[int, list[dict[str, object]]] = {
-        config_id: [] for config_id in storage_names
+    container_keys = {
+        config_id: _storage_container_key(config_id)
+        for config_id in storage_names
     }
+    for container_key in container_keys.values():
+        container_counts[container_key] = 0
+
+    storage_agents: list[tuple[int | None, int | None, dict[str, object]]] = []
+    actual_storage_config_ids: set[int] = set()
     chapter_agents = child.get("ChapterAgentMap")
     if isinstance(chapter_agents, dict):
-        for agents in chapter_agents.values():
+        for chapter_map_key, agents in chapter_agents.items():
             for agent in _item_dicts(agents):
-                bag_config_id = agent.get("BagFurnitureConfigId")
-                config_id = (
-                    bag_config_id
-                    if isinstance(bag_config_id, int)
-                    and not isinstance(bag_config_id, bool)
-                    and bag_config_id in storage_names
-                    else agent.get("AgentConfigId")
+                config_id = _effective_agent_config_id(agent, storage_names)
+                if config_id not in storage_names and agent.get("IsDoorBox") is not True:
+                    continue
+                chapter_key = (
+                    chapter_map_key
+                    if isinstance(chapter_map_key, int) and not isinstance(chapter_map_key, bool)
+                    else None
                 )
-                if isinstance(config_id, int) and not isinstance(config_id, bool) and config_id in marked_agents:
-                    marked_agents[config_id].append(agent)
+                storage_agents.append((config_id, chapter_key, agent))
+                if config_id in {15000, 15001}:
+                    actual_storage_config_ids.add(config_id)
     else:
         diagnostics.append("CurSave.ChapterAgentMap 缺失或为 null")
 
-    fallback_fields = {15000: "DoorBoxItems", 15001: "DoorBoxItems2"}
-    container_keys = {
-        config_id: (
-            "fridge_15000"
-            if config_id == 15000
-            else "freezer_15001"
-            if config_id == 15001
-            else f"storage_{config_id}"
+    storage_agents.sort(
+        key=lambda value: (
+            int(value[0]) if value[0] is not None else 2_147_483_647,
+            int(_agent_instance_id(value[2]) or 0),
+            int(value[1]) if value[1] is not None else 0,
+            str(value[2].get("SlotPosPoint") or ""),
         )
-        for config_id in storage_names
-    }
-    for config_id in sorted(storage_names):
-        source_name = storage_names[config_id]
-        container_key = container_keys[config_id]
-        marked_count = 0
-        for agent in sorted(
-            marked_agents[config_id],
-            key=lambda value: (
-                int(value.get("NewInstanceId") or 0),
-                int(value.get("SaveInstanceId") or 0),
-            ),
-        ):
-            marked_count += _append_inventory_items(
+    )
+    storage_containers: list[StorageContainer] = []
+    for config_id, chapter_map_key, agent in storage_agents:
+        item_values = agent.get("ItemList")
+        item_stack_count = len(_item_dicts(item_values))
+        name = _storage_container_name(config_id, storage_names)
+        container = _storage_container_from_agent(
+            agent,
+            config_id=config_id,
+            name=name,
+            chapter_map_key=chapter_map_key,
+            home_map_config_id=home_map_config_id,
+            item_stack_count=item_stack_count,
+        )
+        storage_containers.append(container)
+        if container.is_home is True:
+            container_key = _storage_container_key(config_id)
+            container_counts[container_key] = container_counts.get(container_key, 0) + _append_inventory_items(
                 raw_items,
-                agent.get("ItemList"),
-                source=source_name,
+                item_values,
+                source=name,
                 container=container_key,
                 diagnostics=diagnostics,
             )
+        elif container.is_home is None:
+            instance_label = (
+                f"实例 ID {container.instance_id}"
+                if container.instance_id is not None
+                else "无实例 ID"
+            )
+            diagnostics.append(
+                f"储物容器 {name}（{instance_label}）的位置无法确认，已跳过其库存"
+            )
+
+    fallback_fields = {15000: "DoorBoxItems", 15001: "DoorBoxItems2"}
+    for config_id in sorted(storage_names):
+        source_name = _storage_container_name(config_id, storage_names)
+        container_key = container_keys[config_id]
         fallback_field = fallback_fields.get(config_id)
         direct_items = child.get(fallback_field) if fallback_field else None
         direct_count = len(_item_dicts(direct_items))
-        if marked_agents[config_id]:
-            container_counts[container_key] = marked_count
+        if config_id in actual_storage_config_ids:
             if direct_count and fallback_field:
                 diagnostics.append(
                     f"{source_name}同时存在标记家具和兼容字段 {fallback_field}；已保留标记家具结果"
                 )
-        elif fallback_field:
-            container_counts[container_keys[config_id]] = _append_inventory_items(
+        elif fallback_field and direct_items is not None:
+            container = StorageContainer(
+                config_id=config_id,
+                name=source_name,
+                instance_id=None,
+                map_config_id=home_map_config_id,
+                home_map_config_id=home_map_config_id,
+                chapter_map_key=None,
+                chapter_id=None,
+                slot_pos_point="",
+                location=STORAGE_LOCATION_HOME,
+                is_home=True,
+                item_stack_count=direct_count,
+            )
+            storage_containers.append(container)
+            container_counts[container_key] = _append_inventory_items(
                 raw_items,
                 direct_items,
                 source=f"{source_name}（兼容字段）",
                 container=container_key,
                 diagnostics=diagnostics,
             )
+
+    if "WorkbenchDrawerItems" in child:
+        direct_items = child.get("WorkbenchDrawerItems")
+        direct_count = len(_item_dicts(direct_items))
+        storage_containers.append(
+            StorageContainer(
+                config_id=None,
+                name="工作台抽屉",
+                instance_id=None,
+                map_config_id=home_map_config_id,
+                home_map_config_id=home_map_config_id,
+                chapter_map_key=None,
+                chapter_id=None,
+                slot_pos_point="",
+                location=STORAGE_LOCATION_HOME,
+                is_home=True,
+                item_stack_count=direct_count,
+            )
+        )
+        container_counts["workbench_drawer"] = _append_inventory_items(
+            raw_items,
+            direct_items,
+            source="工作台抽屉",
+            container="workbench_drawer",
+            diagnostics=diagnostics,
+        )
 
     if cookable_item_ids is not None:
         allowed = frozenset(int(item_id) for item_id in cookable_item_ids)
@@ -1222,6 +1429,7 @@ def _inventory_from_game_save(
         items=tuple(raw_items),
         diagnostics=tuple(diagnostics),
         container_counts=container_counts,
+        storage_containers=tuple(storage_containers),
     )
 
 
@@ -1900,6 +2108,7 @@ __all__ = [
     "SaveHistoryRecord",
     "SaveInventoryState",
     "SaveParseError",
+    "StorageContainer",
     "build_save_diagnostic",
     "default_save_file",
     "parse_codex_save_bytes",

@@ -53,7 +53,7 @@
 
 食品和猎物允许重叠，不得照搬参考网页的物品分类。六个主图鉴分类均严格使用配置中的 `InCodex == true`，只有没有该字段的菜肴表保留全部行。家具中的功能 ID 对应 `Config_FurnitureFunc`，种植、烹饪和电力 ID 对应各自关联表，包裹、材料、产物、种子和燃料 ID 对应 `Config_Item`，允许菜肴 ID 对应 `Config_CookingRecipe`，伙伴触发家具和伙伴配置 ID 对应 `Config_Furniture`；没有独立配置表的条件组、奖励组、动作、房间和掉落组保留原始 ID。
 
-菜肴库存只读取主控背包，以及本地化名称严格等于 `双门冰箱`、`豪华版双门冰箱`、`双开门冰箱` 或 `冰柜` 的所有家具。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`；同名的多个家具配置均允许读取。`冷冻柜`、大型或巨型冷冻柜、医用冷藏柜、食堂冰箱、普通冰箱、其他储物柜、车辆后备箱、工作台抽屉和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 仅保留 15000/15001 的兼容回退，且只在没有对应实际家具时使用。
+菜肴库存读取主控背包、工作台抽屉，以及 `ChapterAgentMap` 中按配置语义识别为储物容器且位置属于玩家家中的全部容器。`Config_Furniture` 的 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 时视为储物家具，不依赖本地化名称；家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具实例均保留。容器位置结合主控 `MapConfigIdHome`、实例 `MapConfigId` 和 `SlotPosPoint` 判断：家中槽位进入库存，邻居槽位、其他地图和无法确认的位置不进入库存；每个实例仍输出位置、实例 ID 和槽位诊断。单独的 `IsDoorBox == true` 可作为无配置映射时的存档兼容识别。车辆后备箱和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 仅保留 15000/15001 的兼容回退，且只在没有对应实际家具时使用。
 
 当前版本的全量配置数量和实际图鉴展示数量只在 `parser_notes.md` 维护，其他文档不得复制固定数字。
 
