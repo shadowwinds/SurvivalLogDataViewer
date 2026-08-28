@@ -249,6 +249,278 @@ class SaveInventorySourceTests(unittest.TestCase):
         )
         self.assertTrue(any("位置无法确认" in diagnostic for diagnostic in state.diagnostics))
 
+    def test_home_storage_slot_prefix_is_selected_by_player_role(self) -> None:
+        cases = (
+            (1, 1, "HomeBuildingPos01", "NeighborGirlBuildingPos01"),
+            (2, 1002, "NeighborGirlBuildingPos01", "HomeBuildingPos01"),
+            (3, 1003, "WarehousePos01", "HomeBuildingPos01"),
+        )
+        for player_select_id, agent_config_id, home_slot, other_slot in cases:
+            with self.subTest(player_select_id=player_select_id):
+                root = {
+                    "PlayerSelectId": player_select_id,
+                    "CurSave": {
+                        "LeadingRole": {
+                            "AgentConfigId": agent_config_id,
+                            "ItemList": [],
+                            "MapConfigIdHome": 1,
+                        },
+                        "ChapterAgentMap": {
+                            1: [
+                                {
+                                    "AgentConfigId": 215,
+                                    "MapConfigId": 1,
+                                    "SlotPosPoint": home_slot,
+                                    "ItemList": [self._item(2527)],
+                                },
+                                {
+                                    "AgentConfigId": 215,
+                                    "MapConfigId": 1,
+                                    "SlotPosPoint": other_slot,
+                                    "ItemList": [self._item(2528)],
+                                },
+                            ]
+                        },
+                    },
+                }
+                state = _inventory_from_game_save(
+                    root,
+                    self.file_info,
+                    storage_furniture={215: "储物容器"},
+                )
+
+                self.assertEqual([item.item_config_id for item in state.items], [2527])
+                self.assertEqual(
+                    {
+                        container.slot_pos_point: container.is_home
+                        for container in state.storage_containers
+                    },
+                    {home_slot: True, other_slot: False},
+                )
+
+    def test_save_player_select_id_overrides_leading_role_and_fallback_uses_leading_role(self) -> None:
+        root = {
+            "PlayerSelectId": 2,
+            "CurSave": {
+                "LeadingRole": {
+                    "AgentConfigId": 1,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2528)],
+                        },
+                    ]
+                },
+            },
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+        self.assertEqual([item.item_config_id for item in state.items], [2528])
+
+        fallback_root = {
+            "CurSave": {
+                "LeadingRole": {
+                    "AgentConfigId": 1003,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "WarehousePos01",
+                            "ItemList": [self._item(2529)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2530)],
+                        },
+                    ]
+                },
+            },
+        }
+        fallback_state = _inventory_from_game_save(
+            fallback_root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+        self.assertEqual([item.item_config_id for item in fallback_state.items], [2529])
+
+    def test_legacy_storage_mapping_reads_role_two_fridge_and_freezer(self) -> None:
+        root = {
+            "PlayerSelectId": 2,
+            "CurSave": {
+                "LeadingRole": {"AgentConfigId": 1002, "ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 80062,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos40",
+                            "SaveInstanceId": 8006201,
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 15001,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos37",
+                            "SaveInstanceId": 1500101,
+                            "ItemList": [self._item(2528)],
+                        },
+                    ]
+                },
+            },
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={80062: "豪华版双门冰箱", 15001: "冰柜"},
+        )
+
+        self.assertEqual(
+            sorted(item.item_config_id for item in state.items),
+            [2527, 2528],
+        )
+        self.assertEqual(
+            [container.config_id for container in state.storage_containers],
+            [15001, 80062],
+        )
+        self.assertEqual(
+            [container.location for container in state.storage_containers],
+            ["home", "home"],
+        )
+
+    def test_chapter_map_key_mismatch_is_other_even_when_agent_map_matches(self) -> None:
+        root = {
+            "PlayerSelectId": 2,
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ],
+                    2: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2528)],
+                        }
+                    ],
+                },
+            },
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(
+            {
+                container.chapter_map_key: container.is_home
+                for container in state.storage_containers
+            },
+            {1: True, 2: False},
+        )
+
+    def test_explicit_player_select_id_is_used_when_save_field_is_missing(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {
+                    "AgentConfigId": 1,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "WarehousePos01",
+                            "ItemList": [self._item(2529)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "ItemList": [self._item(2530)],
+                        },
+                    ]
+                },
+            },
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+            player_select_id=3,
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2529])
+
+    def test_unknown_player_role_does_not_treat_same_map_or_home_prefix_as_home(self) -> None:
+        root = {
+            "PlayerSelectId": 99,
+            "CurSave": {
+                "LeadingRole": {"ItemList": [], "MapConfigIdHome": 1},
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "",
+                            "ItemList": [self._item(2528)],
+                        },
+                    ]
+                },
+            },
+        }
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual(state.items, ())
+        self.assertEqual(
+            {
+                container.slot_pos_point: container.is_home
+                for container in state.storage_containers
+            },
+            {"": None, "HomeBuildingPos01": False},
+        )
+
     def test_door_box_flag_is_read_without_a_name_mapping(self) -> None:
         root = {
             "CurSave": {

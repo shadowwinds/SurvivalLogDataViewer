@@ -28,13 +28,14 @@ def item(
     sub_category: int,
     price: float,
     can_cook: bool = True,
+    category: int = 1,
     in_codex: bool = True,
 ) -> RecipeItemSpec:
     return RecipeItemSpec(
         item_id=item_id,
         name=f"Item {item_id}",
         can_cook=can_cook,
-        category=1,
+        category=category,
         sub_category=sub_category,
         sub_category_name=f"Subcategory {sub_category}",
         price=price,
@@ -308,6 +309,83 @@ class CookingTierTests(unittest.TestCase):
         self.assertEqual([match["recipe_id"] for match in matches], [4202])
         self.assertEqual(near_matches, [])
 
+    def test_specific_and_generic_results_do_not_reserve_shared_ingredients(self) -> None:
+        recipes = [
+            recipe(4401, specific_items=(2527,)),
+            recipe(4402, tier=3, tag_combo=(4, 5, 5)),
+        ]
+        inventory = [
+            InventoryItem(2527, 1, "backpack", "backpack"),
+            InventoryItem(2901, 1, "backpack", "backpack"),
+        ]
+
+        matches, diagnostics = match_inventory(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+        )
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+        )
+
+        self.assertEqual(diagnostics, [])
+        self.assertEqual([match["recipe_id"] for match in matches], [4401])
+        self.assertEqual([match["recipe_id"] for match in near_matches], [4402])
+        self.assertEqual(
+            [item["item_id"] for item in near_matches[0]["missing_item_candidates"]],
+            [2527, 2528, 2529],
+        )
+
+    def test_non_food_category_is_not_a_cookable_ingredient(self) -> None:
+        items = dict(self.items)
+        items[9600] = item(9600, sub_category=5, price=20, category=2)
+        recipes = [
+            recipe(4501, specific_items=(9600,)),
+            recipe(4502, tier=2, tag_combo=(4, 5)),
+        ]
+        inventory = [InventoryItem(9600, 1, "backpack", "backpack")]
+
+        matches, diagnostics = match_inventory(
+            inventory,
+            recipes,
+            items,
+            self.rules,
+        )
+        near_matches = find_near_matches(inventory, recipes, items, self.rules)
+
+        self.assertEqual(matches, [])
+        self.assertEqual(near_matches, [])
+        self.assertEqual(diagnostics, [])
+
+    def test_exact_generic_tier_suppresses_same_tier_near_recipe(self) -> None:
+        recipes = [
+            recipe(4601, tier=3, tag_combo=(5,)),
+            recipe(4602, tier=3, tag_combo=(5,)),
+        ]
+        inventory = [InventoryItem(2527, 1, "backpack", "backpack")]
+        matches, diagnostics = match_inventory(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+        )
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+        )
+
+        self.assertEqual(diagnostics, [])
+        self.assertEqual([match["recipe_id"] for match in matches], [4601])
+        self.assertEqual(near_matches, [])
+
     def test_recipe_inventory_display_requires_in_codex_but_matching_does_not(self) -> None:
         hidden_item = RecipeItemSpec(
             **{
@@ -448,6 +526,45 @@ class RecipeConfigTests(unittest.TestCase):
                 _load_storage_furniture_from_database(connection),
                 {107: "架子", 215: "任意容器"},
             )
+        finally:
+            connection.close()
+
+    def test_database_storage_mapping_merges_legacy_storage_table(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            connection.execute(
+                """
+                CREATE TABLE codex_entries (
+                    source_table TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    raw_json TEXT NOT NULL,
+                    is_current INTEGER NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO codex_entries(source_table, source_id, name, raw_json, is_current)
+                VALUES ('Config_Furniture', 215, 'Current storage',
+                        '{"FurnitureFunc":[215],"ShowStorage":0}', 1)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE storage_furniture (
+                    config_id INTEGER NOT NULL,
+                    name TEXT NOT NULL
+                )
+                """
+            )
+            connection.executemany(
+                "INSERT INTO storage_furniture(config_id, name) VALUES (?, ?)",
+                [(215, "Legacy storage"), (80062, "Legacy fridge")],
+            )
+
+            mapping = _load_storage_furniture_from_database(connection)
+            self.assertEqual(mapping, {215: "Current storage", 80062: "Legacy fridge"})
         finally:
             connection.close()
 

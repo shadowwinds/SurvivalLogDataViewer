@@ -51,8 +51,24 @@ ALLOWED_STORAGE_FURNITURE_NAMES = frozenset(
     }
 )
 STORAGE_FURNITURE_FUNC_ID = 215
-HOME_STORAGE_SLOT_PREFIXES = ("homebuildingpos", "home_")
-NON_HOME_STORAGE_SLOT_PREFIXES = ("neighborgirlbuildingpos",)
+# These prefixes are role-specific.  A save's PlayerSelectId is the source of
+# truth; the leading-role config is only a compatibility fallback for older
+# fixtures that do not capture PlayerSelectId.
+PLAYER_HOME_STORAGE_SLOT_PREFIXES = {
+    1: ("homebuildingpos", "home_"),
+    2: ("neighborgirlbuildingpos",),
+    3: ("warehousepos",),
+}
+PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID = {1: 1, 1002: 2, 1003: 3}
+KNOWN_HOME_STORAGE_SLOT_PREFIXES = frozenset(
+    prefix
+    for prefixes in PLAYER_HOME_STORAGE_SLOT_PREFIXES.values()
+    for prefix in prefixes
+)
+# Public compatibility symbols retained for callers that imported the old
+# role-1 defaults.  Location inference below is role-aware.
+HOME_STORAGE_SLOT_PREFIXES = PLAYER_HOME_STORAGE_SLOT_PREFIXES[1]
+NON_HOME_STORAGE_SLOT_PREFIXES = ()
 STORAGE_LOCATION_HOME = "home"
 STORAGE_LOCATION_OTHER = "other"
 STORAGE_LOCATION_UNKNOWN = "unknown"
@@ -1149,6 +1165,39 @@ def _optional_positive_int(value: object) -> int | None:
     return None
 
 
+def _resolve_player_select_id(
+    root: Mapping[str, object],
+    leading_role: Mapping[str, object] | None,
+    fallback_player_select_id: int | None,
+) -> int | None:
+    """Resolve the active character without inferring it from a slot name."""
+
+    save_player_select_id = _optional_positive_int(root.get("PlayerSelectId"))
+    if save_player_select_id is not None:
+        return save_player_select_id
+
+    explicit_player_select_id = _optional_positive_int(fallback_player_select_id)
+    if explicit_player_select_id is not None:
+        return explicit_player_select_id
+
+    if leading_role is not None:
+        leading_role_config_id = _optional_positive_int(leading_role.get("AgentConfigId"))
+        return PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID.get(leading_role_config_id)
+    return None
+
+
+def _home_storage_slot_prefixes(player_select_id: int | None) -> tuple[str, ...]:
+    if player_select_id is None:
+        # Older hand-built fixtures predate PlayerSelectId.  Keep their
+        # historical role-1 behavior while real saves use an explicit role.
+        return HOME_STORAGE_SLOT_PREFIXES
+    return PLAYER_HOME_STORAGE_SLOT_PREFIXES.get(player_select_id, ())
+
+
+def _known_player_select_id(player_select_id: int | None) -> bool:
+    return player_select_id is None or player_select_id in PLAYER_HOME_STORAGE_SLOT_PREFIXES
+
+
 def _effective_agent_config_id(
     agent: Mapping[str, object],
     storage_config_ids: Collection[int],
@@ -1175,10 +1224,19 @@ def _agent_instance_id(agent: Mapping[str, object]) -> int | None:
 def _storage_location(
     agent: Mapping[str, object],
     *,
+    chapter_map_key: int | None,
     home_map_config_id: int | None,
+    player_select_id: int | None,
 ) -> tuple[str, bool | None]:
     map_config_id = _optional_positive_int(agent.get("MapConfigId"))
     slot_pos_point = str(agent.get("SlotPosPoint") or "").strip().casefold()
+
+    if (
+        chapter_map_key is not None
+        and home_map_config_id is not None
+        and chapter_map_key != home_map_config_id
+    ):
+        return STORAGE_LOCATION_OTHER, False
 
     if (
         map_config_id is not None
@@ -1187,10 +1245,8 @@ def _storage_location(
     ):
         return STORAGE_LOCATION_OTHER, False
 
-    if slot_pos_point.startswith(NON_HOME_STORAGE_SLOT_PREFIXES):
-        return STORAGE_LOCATION_OTHER, False
-
-    if slot_pos_point.startswith(HOME_STORAGE_SLOT_PREFIXES):
+    home_prefixes = _home_storage_slot_prefixes(player_select_id)
+    if slot_pos_point.startswith(home_prefixes):
         if (
             home_map_config_id is None
             or map_config_id is None
@@ -1199,8 +1255,12 @@ def _storage_location(
             return STORAGE_LOCATION_HOME, True
         return STORAGE_LOCATION_OTHER, False
 
+    if slot_pos_point.startswith(tuple(KNOWN_HOME_STORAGE_SLOT_PREFIXES)):
+        return STORAGE_LOCATION_OTHER, False
+
     if (
-        not slot_pos_point
+        _known_player_select_id(player_select_id)
+        and not slot_pos_point
         and map_config_id is not None
         and home_map_config_id is not None
         and map_config_id == home_map_config_id
@@ -1236,11 +1296,14 @@ def _storage_container_from_agent(
     name: str,
     chapter_map_key: int | None,
     home_map_config_id: int | None,
+    player_select_id: int | None,
     item_stack_count: int,
 ) -> StorageContainer:
     location, is_home = _storage_location(
         agent,
+        chapter_map_key=chapter_map_key,
         home_map_config_id=home_map_config_id,
+        player_select_id=player_select_id,
     )
     return StorageContainer(
         config_id=config_id,
@@ -1263,6 +1326,7 @@ def _inventory_from_game_save(
     *,
     cookable_item_ids: Collection[int] | None = None,
     storage_furniture: Mapping[int, str] | None = None,
+    player_select_id: int | None = None,
 ) -> SaveInventoryState:
     child = root.get("CurSave")
     if not isinstance(child, dict):
@@ -1289,6 +1353,11 @@ def _inventory_from_game_save(
         diagnostics.append("CurSave.LeadingRole 缺失或为 null")
 
     legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
+    resolved_player_select_id = _resolve_player_select_id(
+        root,
+        leading_role if isinstance(leading_role, dict) else None,
+        player_select_id,
+    )
     storage_names = _normalize_storage_furniture(
         legacy_storage if storage_furniture is None else storage_furniture
     )
@@ -1338,6 +1407,7 @@ def _inventory_from_game_save(
             name=name,
             chapter_map_key=chapter_map_key,
             home_map_config_id=home_map_config_id,
+            player_select_id=resolved_player_select_id,
             item_stack_count=item_stack_count,
         )
         storage_containers.append(container)
@@ -1440,6 +1510,7 @@ def read_game_save_inventory_bytes(
     file_info: SaveFileInfo | None = None,
     cookable_item_ids: Collection[int] | None = None,
     storage_furniture: Mapping[int, str] | None = None,
+    player_select_id: int | None = None,
 ) -> SaveInventoryState:
     """Read only the current save's player inventory from GameSaveData bytes."""
 
@@ -1450,6 +1521,7 @@ def read_game_save_inventory_bytes(
         info,
         cookable_item_ids=cookable_item_ids,
         storage_furniture=storage_furniture,
+        player_select_id=player_select_id,
     )
 
 
@@ -1459,6 +1531,7 @@ def _read_stable_game_save_file(
     used_backup: bool,
     cookable_item_ids: Collection[int] | None,
     storage_furniture: Mapping[int, str] | None,
+    player_select_id: int | None,
 ) -> SaveInventoryState:
     try:
         before = path.stat()
@@ -1476,6 +1549,7 @@ def _read_stable_game_save_file(
         file_info=info,
         cookable_item_ids=cookable_item_ids,
         storage_furniture=storage_furniture,
+        player_select_id=player_select_id,
     )
 
 
@@ -1485,6 +1559,7 @@ def read_game_save_inventory(
     allow_backup: bool = True,
     cookable_item_ids: Collection[int] | None = None,
     storage_furniture: Mapping[int, str] | None = None,
+    player_select_id: int | None = None,
 ) -> SaveInventoryState:
     """Read a child save, preferring its active bytes and then its .bak copy."""
 
@@ -1505,6 +1580,7 @@ def read_game_save_inventory(
                 used_backup=used_backup,
                 cookable_item_ids=cookable_item_ids,
                 storage_furniture=storage_furniture,
+                player_select_id=player_select_id,
             )
         except SaveParseError as exc:
             errors.append(str(exc))

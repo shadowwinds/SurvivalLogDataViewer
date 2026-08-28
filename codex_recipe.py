@@ -53,7 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 2
+RECIPE_PLAN_CACHE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -94,6 +94,12 @@ class TierRule:
 class StorageFurnitureSpec:
     config_id: int
     name: str
+
+
+def _is_cookable_ingredient(spec: RecipeItemSpec | None) -> bool:
+    """Mirror the game's ingredient gate: food-category and explicitly cookable."""
+
+    return spec is not None and spec.category == 1 and spec.can_cook
 
 
 def _has_storage_behavior(values: Mapping[str, object]) -> bool:
@@ -361,6 +367,7 @@ def _load_items_from_database(connection: sqlite3.Connection) -> dict[int, Recip
 
 
 def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dict[int, str]:
+    result: dict[int, str] = {}
     try:
         config_rows = connection.execute(
             """
@@ -375,14 +382,11 @@ def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dic
             raise
         config_rows = []
     if config_rows:
-        result: dict[int, str] = {}
         for row in config_rows:
             raw = json.loads(str(row[2]))
             if _has_storage_behavior(raw):
                 config_id = int(row[0])
                 result[config_id] = str(row[1]).strip() or f"ID:{config_id}"
-        if result:
-            return result
 
     try:
         rows = connection.execute(
@@ -391,12 +395,12 @@ def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dic
     except sqlite3.OperationalError as exc:
         if "no such table" not in str(exc).lower():
             raise
-        return dict(LEGACY_STORAGE_FURNITURE)
-    result = {
-        int(row[0]): str(row[1]).strip()
-        for row in rows
-        if int(row[0]) > 0 and str(row[1]).strip()
-    }
+        rows = ()
+    for row in rows:
+        config_id = int(row[0])
+        name = str(row[1]).strip()
+        if config_id > 0 and name and config_id not in result:
+            result[config_id] = name
     return result or dict(LEGACY_STORAGE_FURNITURE)
 
 
@@ -474,7 +478,7 @@ def resolve_cooking_tier(
     tiers: list[int] = []
     for item_id in item_ids:
         item = items.get(item_id)
-        if item is None:
+        if not _is_cookable_ingredient(item):
             return None
         rule = rules.get(item.sub_category)
         if rule is not None:
@@ -491,7 +495,7 @@ def _available_item_ids(
     lots: dict[int, list[InventoryItem]] = defaultdict(list)
     for item in inventory:
         spec = items.get(item.item_config_id)
-        if spec is None or not spec.can_cook:
+        if not _is_cookable_ingredient(spec) or item.item_count <= 0:
             continue
         counts[item.item_config_id] += item.item_count
         lots[item.item_config_id].append(item)
@@ -509,7 +513,9 @@ def _enumerate_tag_combinations(
             sorted(
                 item_id
                 for item_id, spec in items.items()
-                if spec.can_cook and spec.sub_category == tag and available_counts.get(item_id, 0) > 0
+                if _is_cookable_ingredient(spec)
+                and spec.sub_category == tag
+                and available_counts.get(item_id, 0) > 0
             )
         )
         for tag in set(ordered_tags)
@@ -539,6 +545,24 @@ def _enumerate_tag_combinations(
 
     visit(0, dict(available_counts))
     return result
+
+
+def _recipes_by_tier(
+    recipes: Collection[RecipeSpec],
+    *,
+    excluded_recipe_ids: Collection[int] = (),
+) -> dict[int, list[RecipeSpec]]:
+    """Index generic recipes by the tier selected by the game resolver."""
+
+    excluded = frozenset(int(recipe_id) for recipe_id in excluded_recipe_ids)
+    result: dict[int, list[RecipeSpec]] = defaultdict(list)
+    for recipe in recipes:
+        if recipe.recipe_id in excluded or recipe.tier not in TIER_LABELS:
+            continue
+        result[recipe.tier].append(recipe)
+    for tier in result:
+        result[tier].sort(key=lambda recipe: recipe.recipe_id)
+    return dict(result)
 
 
 def _representative_items(
@@ -614,7 +638,12 @@ def match_inventory(
     *,
     completed_recipe_ids: Collection[int] = (),
 ) -> tuple[list[dict[str, object]], list[str]]:
-    """Return pending recipes that are actually cookable from one inventory."""
+    """Return pending recipes that are actually cookable from one inventory.
+
+    SpecificItems and TagCombo recipes are evaluated independently, matching
+    the web cooking reducer's availability model rather than reserving shared
+    ingredients between result groups.
+    """
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
     diagnostics: list[str] = []
@@ -637,7 +666,7 @@ def match_inventory(
         required = Counter(recipe.specific_items)
         if any(counts.get(item_id, 0) < count for item_id, count in required.items()):
             continue
-        if any(item_id not in items or not items[item_id].can_cook for item_id in required):
+        if any(not _is_cookable_ingredient(items.get(item_id)) for item_id in required):
             continue
         combo = tuple(recipe.specific_items)
         tier = resolve_cooking_tier(combo, items=items, rules=rules)
@@ -657,10 +686,10 @@ def match_inventory(
         combinations = _enumerate_tag_combinations(tag_combo, counts, items)
         if not combinations:
             continue
-        candidate_by_tier: dict[int, list[RecipeSpec]] = defaultdict(list)
-        for recipe in group:
-            if recipe.tier in (1, 2, 3) and recipe.recipe_id not in completed:
-                candidate_by_tier[recipe.tier].append(recipe)
+        candidate_by_tier = _recipes_by_tier(
+            group,
+            excluded_recipe_ids=completed,
+        )
         combinations_by_recipe: dict[int, list[tuple[int, ...]]] = defaultdict(list)
         for combo in combinations:
             tier = resolve_cooking_tier(combo, items=items, rules=rules)
@@ -798,7 +827,7 @@ def find_near_matches(
     completed_recipe_ids: Collection[int] = (),
     excluded_recipe_ids: Collection[int] = (),
 ) -> list[dict[str, object]]:
-    """Find pending recipes that need exactly one more item or category slot."""
+    """Find pending recipes needing one slot, independently of exact matches."""
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
     excluded = completed | frozenset(int(recipe_id) for recipe_id in excluded_recipe_ids)
@@ -822,7 +851,7 @@ def find_near_matches(
     for recipe in specific_recipes:
         required = Counter(recipe.specific_items)
         if any(
-            item_id not in items or not items[item_id].can_cook
+            not _is_cookable_ingredient(items.get(item_id))
             for item_id in required
         ):
             continue
@@ -850,12 +879,18 @@ def find_near_matches(
         )
 
     for tag_combo, group in sorted(tag_groups.items()):
-        candidate_by_tier: dict[int, list[RecipeSpec]] = defaultdict(list)
-        for recipe in group:
-            if recipe.tier in (1, 2, 3):
-                candidate_by_tier[recipe.tier].append(recipe)
+        candidate_by_tier = _recipes_by_tier(group)
         if not candidate_by_tier:
             continue
+
+        # An exact generic combination already proves that its resolved tier
+        # is available.  Do not report another pending recipe in that same
+        # tier as a one-slot near match.
+        matched_tiers: set[int] = set()
+        for available_combo in _enumerate_tag_combinations(tag_combo, counts, items):
+            tier = resolve_cooking_tier(available_combo, items=items, rules=rules)
+            if tier in candidate_by_tier:
+                matched_tiers.add(tier)
 
         pending_candidate_ids = [recipe.recipe_id for recipe in group]
         by_recipe_id: dict[int, dict[str, object]] = {}
@@ -872,7 +907,8 @@ def find_near_matches(
                     (
                         spec
                         for spec in items.values()
-                        if spec.can_cook and spec.sub_category == missing_tag
+                        if _is_cookable_ingredient(spec)
+                        and spec.sub_category == missing_tag
                     ),
                     key=lambda spec: spec.item_id,
                 )
@@ -889,6 +925,8 @@ def find_near_matches(
                         continue
                     tier = resolve_cooking_tier(full_combo, items=items, rules=rules)
                     if tier is None:
+                        continue
+                    if tier in matched_tiers:
                         continue
                     tier_candidates = candidate_by_tier.get(tier, ())
                     if not tier_candidates:
@@ -941,7 +979,7 @@ def _inventory_payload(
         if spec is None:
             diagnostics.append(f"库存中的未知物品 ID {item.item_config_id} 已排除")
             continue
-        if not spec.can_cook or not spec.in_codex:
+        if not _is_cookable_ingredient(spec) or not spec.in_codex:
             continue
         item_id = int(item.item_config_id)
         current = merged.get(item_id)
@@ -1003,7 +1041,8 @@ def _matchable_inventory(
     return tuple(
         item
         for item in inventory.items
-        if (spec := items.get(item.item_config_id)) is not None and spec.can_cook
+        if _is_cookable_ingredient(spec := items.get(item.item_config_id))
+        and item.item_count > 0
     )
 
 
@@ -1116,6 +1155,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             inventory = read_game_save_inventory(
                 requested,
                 storage_furniture=storage_furniture,
+                player_select_id=record.player_select_id,
             )
         except SaveParseError as exc:
             message = str(exc)
