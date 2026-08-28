@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import sys
+import unicodedata
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -51,15 +52,20 @@ ALLOWED_STORAGE_FURNITURE_NAMES = frozenset(
     }
 )
 STORAGE_FURNITURE_FUNC_ID = 215
-# These prefixes are role-specific.  A save's PlayerSelectId is the source of
-# truth; the leading-role config is only a compatibility fallback for older
-# fixtures that do not capture PlayerSelectId.
+# These prefixes are role-specific.  LeadingRole.Name is the primary identity;
+# numeric save fields are retained as compatibility fallbacks.
 PLAYER_HOME_STORAGE_SLOT_PREFIXES = {
     1: ("homebuildingpos", "home_"),
     2: ("neighborgirlbuildingpos",),
     3: ("warehousepos",),
 }
 PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID = {1: 1, 1002: 2, 1003: 3}
+# These are the character names observed in the current local save format.
+# Unknown names deliberately use the numeric compatibility fallback below.
+PLAYER_SELECT_ID_BY_ROLE_NAME = {
+    "玩家-打工仔": 1,
+    "玩家-大学生": 2,
+}
 KNOWN_HOME_STORAGE_SLOT_PREFIXES = frozenset(
     prefix
     for prefixes in PLAYER_HOME_STORAGE_SLOT_PREFIXES.values()
@@ -128,6 +134,18 @@ class SaveHistoryRecord:
 
 
 @dataclass(frozen=True)
+class SaveRoleContext:
+    """Character identity resolved from one child save."""
+
+    role_name: str | None
+    resolved_player_select_id: int | None
+    leading_role_config_id: int | None
+    home_map_config_id: int | None
+    resolution_source: str
+    diagnostics: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class StorageContainer:
     """One placed storage container and the location inferred from its save fields."""
 
@@ -161,6 +179,7 @@ class SaveInventoryState:
     diagnostics: tuple[str, ...] = ()
     container_counts: dict[str, int] = field(default_factory=dict)
     storage_containers: tuple[StorageContainer, ...] = ()
+    role_context: SaveRoleContext | None = None
 
 
 @dataclass(frozen=True)
@@ -822,6 +841,7 @@ _SAVE_CAPTURE_FIELDS = {
     }),
     "AgentSave": frozenset({
         "NewInstanceId", "SaveInstanceId", "AgentConfigId", "ItemList",
+        "Name",
         "IsBagFurniture", "BagFurnitureConfigId", "IsDoorBox", "DoorBoxIndex",
         "MapConfigId", "MapConfigIdHome", "ChapterId", "SlotPosPoint",
     }),
@@ -1165,37 +1185,133 @@ def _optional_positive_int(value: object) -> int | None:
     return None
 
 
+def _normalize_role_name(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return unicodedata.normalize("NFKC", value).strip().casefold()
+
+
+def _role_name_player_select_id(role_name: str | None) -> int | None:
+    normalized = _normalize_role_name(role_name)
+    if not normalized:
+        return None
+    for known_name, player_select_id in PLAYER_SELECT_ID_BY_ROLE_NAME.items():
+        if _normalize_role_name(known_name) == normalized:
+            return player_select_id
+    return None
+
+
+def _resolve_role_context(
+    root: Mapping[str, object],
+    leading_role: Mapping[str, object] | None,
+    fallback_player_select_id: int | None,
+) -> tuple[SaveRoleContext, tuple[str, ...]]:
+    diagnostics: list[str] = []
+    role_name: str | None = None
+    leading_role_config_id: int | None = None
+    home_map_config_id: int | None = None
+    if leading_role is not None:
+        raw_role_name = leading_role.get("Name")
+        if isinstance(raw_role_name, str):
+            role_name = unicodedata.normalize("NFKC", raw_role_name).strip() or None
+        leading_role_config_id = _optional_positive_int(leading_role.get("AgentConfigId"))
+        home_map_config_id = _optional_positive_int(leading_role.get("MapConfigIdHome"))
+
+    if not role_name:
+        diagnostics.append("LeadingRole.Name 缺失或为空，无法直接确认当前角色")
+    role_name_player_select_id = _role_name_player_select_id(role_name)
+    if role_name and role_name_player_select_id is None:
+        diagnostics.append(f"LeadingRole.Name 未匹配已知角色：{role_name!r}")
+
+    root_player_select_id = _optional_positive_int(root.get("PlayerSelectId"))
+    history_player_select_id = _optional_positive_int(fallback_player_select_id)
+    leading_player_select_id = PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID.get(leading_role_config_id)
+    numeric_sources = tuple(
+        (source, player_select_id)
+        for source, player_select_id in (
+            ("GameSaveData.PlayerSelectId", root_player_select_id),
+            ("HistoryList.PlayerSelectId", history_player_select_id),
+            ("LeadingRole.AgentConfigId", leading_player_select_id),
+        )
+        if player_select_id is not None
+    )
+    numeric_ids = {player_select_id for _source, player_select_id in numeric_sources}
+    if len(numeric_ids) > 1:
+        details = ", ".join(f"{source}={player_select_id}" for source, player_select_id in numeric_sources)
+        diagnostics.append(f"子存档角色数字身份不一致：{details}")
+
+    if role_name_player_select_id is not None:
+        conflicts = tuple(
+            (source, player_select_id)
+            for source, player_select_id in numeric_sources
+            if player_select_id != role_name_player_select_id
+        )
+        if not conflicts:
+            context = SaveRoleContext(
+                role_name=role_name,
+                resolved_player_select_id=role_name_player_select_id,
+                leading_role_config_id=leading_role_config_id,
+                home_map_config_id=home_map_config_id,
+                resolution_source="leading_role_name",
+                diagnostics=tuple(diagnostics),
+            )
+            return context, context.diagnostics
+        details = ", ".join(f"{source}={player_select_id}" for source, player_select_id in conflicts)
+        diagnostics.append(
+            f"角色名 {role_name!r} 对应角色 ID {role_name_player_select_id}，但数字身份不一致：{details}"
+        )
+
+    fallback_candidates = (
+        ("game_save_player_select_id", root_player_select_id),
+        ("history_player_select_id", history_player_select_id),
+        ("leading_role_agent_config_id", leading_player_select_id),
+    )
+    for source, player_select_id in fallback_candidates:
+        if player_select_id is not None:
+            diagnostics.append(f"已使用 {source} 作为角色身份兼容回退")
+            context = SaveRoleContext(
+                role_name=role_name,
+                resolved_player_select_id=player_select_id,
+                leading_role_config_id=leading_role_config_id,
+                home_map_config_id=home_map_config_id,
+                resolution_source=source,
+                diagnostics=tuple(diagnostics),
+            )
+            return context, context.diagnostics
+
+    diagnostics.append("无法解析当前角色身份，已跳过依赖角色槽位的储物容器")
+    context = SaveRoleContext(
+        role_name=role_name,
+        resolved_player_select_id=None,
+        leading_role_config_id=leading_role_config_id,
+        home_map_config_id=home_map_config_id,
+        resolution_source="unresolved",
+        diagnostics=tuple(diagnostics),
+    )
+    return context, context.diagnostics
+
+
 def _resolve_player_select_id(
     root: Mapping[str, object],
     leading_role: Mapping[str, object] | None,
     fallback_player_select_id: int | None,
 ) -> int | None:
-    """Resolve the active character without inferring it from a slot name."""
+    """Return the resolved character ID while preserving the old helper API."""
 
-    save_player_select_id = _optional_positive_int(root.get("PlayerSelectId"))
-    if save_player_select_id is not None:
-        return save_player_select_id
-
-    explicit_player_select_id = _optional_positive_int(fallback_player_select_id)
-    if explicit_player_select_id is not None:
-        return explicit_player_select_id
-
-    if leading_role is not None:
-        leading_role_config_id = _optional_positive_int(leading_role.get("AgentConfigId"))
-        return PLAYER_SELECT_ID_BY_AGENT_CONFIG_ID.get(leading_role_config_id)
-    return None
+    context, _diagnostics = _resolve_role_context(
+        root,
+        leading_role,
+        fallback_player_select_id,
+    )
+    return context.resolved_player_select_id
 
 
 def _home_storage_slot_prefixes(player_select_id: int | None) -> tuple[str, ...]:
-    if player_select_id is None:
-        # Older hand-built fixtures predate PlayerSelectId.  Keep their
-        # historical role-1 behavior while real saves use an explicit role.
-        return HOME_STORAGE_SLOT_PREFIXES
     return PLAYER_HOME_STORAGE_SLOT_PREFIXES.get(player_select_id, ())
 
 
 def _known_player_select_id(player_select_id: int | None) -> bool:
-    return player_select_id is None or player_select_id in PLAYER_HOME_STORAGE_SLOT_PREFIXES
+    return player_select_id in PLAYER_HOME_STORAGE_SLOT_PREFIXES
 
 
 def _effective_agent_config_id(
@@ -1245,15 +1361,15 @@ def _storage_location(
     ):
         return STORAGE_LOCATION_OTHER, False
 
+    if chapter_map_key is None or home_map_config_id is None or map_config_id is None:
+        return STORAGE_LOCATION_UNKNOWN, None
+
+    if player_select_id is None:
+        return STORAGE_LOCATION_UNKNOWN, None
+
     home_prefixes = _home_storage_slot_prefixes(player_select_id)
     if slot_pos_point.startswith(home_prefixes):
-        if (
-            home_map_config_id is None
-            or map_config_id is None
-            or map_config_id == home_map_config_id
-        ):
-            return STORAGE_LOCATION_HOME, True
-        return STORAGE_LOCATION_OTHER, False
+        return STORAGE_LOCATION_HOME, True
 
     if slot_pos_point.startswith(tuple(KNOWN_HOME_STORAGE_SLOT_PREFIXES)):
         return STORAGE_LOCATION_OTHER, False
@@ -1261,9 +1377,9 @@ def _storage_location(
     if (
         _known_player_select_id(player_select_id)
         and not slot_pos_point
-        and map_config_id is not None
-        and home_map_config_id is not None
         and map_config_id == home_map_config_id
+        and chapter_map_key == home_map_config_id
+        and agent.get("IsDoorBox") is True
     ):
         return STORAGE_LOCATION_HOME, True
 
@@ -1339,7 +1455,6 @@ def _inventory_from_game_save(
     raw_items: list[InventoryItem] = []
     container_counts: dict[str, int] = {}
     leading_role = child.get("LeadingRole")
-    home_map_config_id: int | None = None
     if isinstance(leading_role, dict):
         container_counts["主控背包"] = _append_inventory_items(
             raw_items,
@@ -1348,16 +1463,17 @@ def _inventory_from_game_save(
             container="leading_role",
             diagnostics=diagnostics,
         )
-        home_map_config_id = _optional_positive_int(leading_role.get("MapConfigIdHome"))
     else:
         diagnostics.append("CurSave.LeadingRole 缺失或为 null")
 
-    legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
-    resolved_player_select_id = _resolve_player_select_id(
+    role_context, role_diagnostics = _resolve_role_context(
         root,
         leading_role if isinstance(leading_role, dict) else None,
         player_select_id,
     )
+    diagnostics.extend(role_diagnostics)
+    home_map_config_id = role_context.home_map_config_id
+    legacy_storage = {15000: "双开门冰箱", 15001: "冰柜"}
     storage_names = _normalize_storage_furniture(
         legacy_storage if storage_furniture is None else storage_furniture
     )
@@ -1407,7 +1523,7 @@ def _inventory_from_game_save(
             name=name,
             chapter_map_key=chapter_map_key,
             home_map_config_id=home_map_config_id,
-            player_select_id=resolved_player_select_id,
+            player_select_id=role_context.resolved_player_select_id,
             item_stack_count=item_stack_count,
         )
         storage_containers.append(container)
@@ -1442,7 +1558,11 @@ def _inventory_from_game_save(
                 diagnostics.append(
                     f"{source_name}同时存在标记家具和兼容字段 {fallback_field}；已保留标记家具结果"
                 )
-        elif fallback_field and direct_items is not None:
+        elif (
+            fallback_field
+            and direct_items is not None
+            and _known_player_select_id(role_context.resolved_player_select_id)
+        ):
             container = StorageContainer(
                 config_id=config_id,
                 name=source_name,
@@ -1500,6 +1620,7 @@ def _inventory_from_game_save(
         diagnostics=tuple(diagnostics),
         container_counts=container_counts,
         storage_containers=tuple(storage_containers),
+        role_context=role_context,
     )
 
 
@@ -2184,6 +2305,7 @@ __all__ = [
     "SaveHistoryRecord",
     "SaveInventoryState",
     "SaveParseError",
+    "SaveRoleContext",
     "StorageContainer",
     "build_save_diagnostic",
     "default_save_file",

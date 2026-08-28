@@ -319,6 +319,40 @@
     return section;
   }
 
+  function renderRecipeDiagnostics(save) {
+    const diagnostics = [
+      ...(Array.isArray(save && save.role_diagnostics) ? save.role_diagnostics : []),
+      ...(Array.isArray(save && save.diagnostics) ? save.diagnostics : []),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter((value, index, values) => value && values.indexOf(value) === index);
+    if (!diagnostics.length) return null;
+    const section = makeElement("section", "recipe-section recipe-diagnostics");
+    section.append(
+      makeElement("h5", "recipe-section-title", "读取诊断"),
+      makeElement("span", "recipe-match-count", `${diagnostics.length} 条`),
+    );
+    const list = makeElement("ul", "recipe-diagnostics-list");
+    diagnostics.forEach((diagnostic) => {
+      list.append(makeElement("li", "recipe-diagnostic", diagnostic));
+    });
+    section.append(list);
+    return section;
+  }
+
+  function recipeRoleResolutionLabel(save) {
+    const labels = {
+      leading_role_name: "角色名解析",
+      game_save_player_select_id: "GameSaveData ID兼容回退",
+      history_player_select_id: "HistoryList ID兼容回退",
+      leading_role_agent_config_id: "主控配置 ID兼容回退",
+      unresolved: "角色身份未解析",
+    };
+    const source = labels[save && save.role_resolution_source] || "角色来源未知";
+    const resolved = Number(save && save.resolved_player_select_id);
+    return Number.isInteger(resolved) && resolved > 0 ? `${source} · ID ${resolved}` : source;
+  }
+
   function recipeSaveFileLabel(save) {
     const fileName = typeof (save && save.file_name) === "string"
       ? save.file_name.split(/[\\/]/).pop()
@@ -404,7 +438,8 @@
     }
     const mode = save.mode || "未知模式";
     const day = `第 ${Number(save.max_day || 0)} 天`;
-    context.textContent = `${mode} ${day}`;
+    const roleName = recipeDisplayName(save.role_name, "角色未知");
+    context.textContent = `${roleName} · ${recipeRoleResolutionLabel(save)} · ${mode} ${day}`;
     const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
     status.className = `recipe-status ${save.status || "error"}`;
     status.dataset.status = save.status || "error";
@@ -453,6 +488,8 @@
     const panel = makeElement("article", "recipe-save-panel");
     const inventoryColumn = makeElement("div", "recipe-column recipe-inventory-column");
     inventoryColumn.append(renderRecipeContainers(save));
+    const diagnosticsSection = renderRecipeDiagnostics(save);
+    if (diagnosticsSection) inventoryColumn.append(diagnosticsSection);
     const inventorySection = makeElement("section", "recipe-section");
     const inventory = Array.isArray(save.inventory) ? save.inventory : [];
     inventorySection.append(makeElement("h5", "recipe-section-title", "拥有食材"));

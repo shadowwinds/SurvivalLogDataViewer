@@ -53,7 +53,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 4
+RECIPE_PLAN_CACHE_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -374,7 +374,27 @@ def _load_items_from_database(connection: sqlite3.Connection) -> dict[int, Recip
 
 
 def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dict[int, str]:
-    result: dict[int, str] = {}
+    storage_table_exists = True
+    try:
+        rows = connection.execute(
+            "SELECT config_id, name FROM storage_furniture ORDER BY config_id"
+        ).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc).lower():
+            raise
+        storage_table_exists = False
+        rows = ()
+
+    if storage_table_exists:
+        result = {
+            int(row[0]): str(row[1]).strip() or f"ID:{int(row[0])}"
+            for row in rows
+            if int(row[0]) > 0
+        }
+        return result
+
+    # Databases created before storage_furniture existed can still recover
+    # current visible furniture rows as a compatibility fallback.
     try:
         config_rows = connection.execute(
             """
@@ -387,27 +407,13 @@ def _load_storage_furniture_from_database(connection: sqlite3.Connection) -> dic
     except sqlite3.OperationalError as exc:
         if "no such table" not in str(exc).lower():
             raise
-        config_rows = []
-    if config_rows:
-        for row in config_rows:
-            raw = json.loads(str(row[2]))
-            if _has_storage_behavior(raw):
-                config_id = int(row[0])
-                result[config_id] = str(row[1]).strip() or f"ID:{config_id}"
-
-    try:
-        rows = connection.execute(
-            "SELECT config_id, name FROM storage_furniture ORDER BY config_id"
-        ).fetchall()
-    except sqlite3.OperationalError as exc:
-        if "no such table" not in str(exc).lower():
-            raise
-        rows = ()
-    for row in rows:
-        config_id = int(row[0])
-        name = str(row[1]).strip()
-        if config_id > 0 and name and config_id not in result:
-            result[config_id] = name
+        config_rows = ()
+    result = {}
+    for row in config_rows:
+        raw = json.loads(str(row[2]))
+        if _has_storage_behavior(raw):
+            config_id = int(row[0])
+            result[config_id] = str(row[1]).strip() or f"ID:{config_id}"
     return result or dict(LEGACY_STORAGE_FURNITURE)
 
 
@@ -1177,6 +1183,12 @@ def _save_payload_base(record: SaveHistoryRecord) -> dict[str, object]:
         "file_name": record.file_name,
         "name": _history_save_name(record),
         "player_select_id": record.player_select_id,
+        "role_name": None,
+        "resolved_player_select_id": None,
+        "leading_role_config_id": None,
+        "home_map_config_id": None,
+        "role_resolution_source": "unresolved",
+        "role_diagnostics": [],
         "max_day": record.max_day,
         "turn": record.turn,
         "is_finished": record.is_finished,
@@ -1280,10 +1292,37 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
         )
         diagnostics = sorted(set(inventory_diagnostics + match_diagnostics))
+        role_context = inventory.role_context
         payload.update(
             {
                 "status": "ok",
                 "source_file": _file_info_payload(inventory.file_info),
+                "role_name": role_context.role_name if role_context is not None else None,
+                "resolved_player_select_id": (
+                    role_context.resolved_player_select_id
+                    if role_context is not None
+                    else None
+                ),
+                "leading_role_config_id": (
+                    role_context.leading_role_config_id
+                    if role_context is not None
+                    else None
+                ),
+                "home_map_config_id": (
+                    role_context.home_map_config_id
+                    if role_context is not None
+                    else None
+                ),
+                "role_resolution_source": (
+                    role_context.resolution_source
+                    if role_context is not None
+                    else "unresolved"
+                ),
+                "role_diagnostics": (
+                    list(role_context.diagnostics)
+                    if role_context is not None
+                    else []
+                ),
                 "container_counts": inventory.container_counts,
                 "storage_containers": [
                     _storage_container_payload(container)

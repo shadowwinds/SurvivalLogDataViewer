@@ -18,6 +18,43 @@ class SaveInventorySourceTests(unittest.TestCase):
     def _item(item_id: int, count: int = 1) -> dict[str, int]:
         return {"ItemConfigId": item_id, "ItemCount": count}
 
+    def _read_inventory(
+        self,
+        root: dict[str, object],
+        file_info: SaveFileInfo | None = None,
+        **kwargs: object,
+    ):
+        """Give legacy in-memory fixtures an explicit character identity."""
+
+        leading_role = (root.get("CurSave") or {}).get("LeadingRole")
+        if isinstance(leading_role, dict) and "Name" not in leading_role:
+            leading_config_id = leading_role.get("AgentConfigId")
+            role_names = {
+                1: "玩家-打工仔",
+                2: "玩家-大学生",
+            }
+            role_ids = {1: 1, 2: 1002, 3: 1003}
+            player_select_id = root.get("PlayerSelectId")
+            if not isinstance(player_select_id, int):
+                player_select_id = kwargs.get("player_select_id")
+            if (
+                not isinstance(leading_config_id, int)
+                and not isinstance(player_select_id, int)
+                and "PlayerSelectId" not in root
+            ):
+                root["PlayerSelectId"] = 1
+                player_select_id = 1
+            if not isinstance(leading_config_id, int) and isinstance(player_select_id, int):
+                leading_role["AgentConfigId"] = role_ids.get(player_select_id, 1)
+                leading_config_id = leading_role["AgentConfigId"]
+            if isinstance(leading_config_id, int):
+                resolved_id = {1: 1, 1002: 2, 1003: 3}.get(leading_config_id)
+                if resolved_id in role_names:
+                    leading_role["Name"] = role_names[resolved_id]
+        if "PlayerSelectId" not in root and isinstance(kwargs.get("player_select_id"), int):
+            root["PlayerSelectId"] = kwargs["player_select_id"]
+        return _inventory_from_game_save(root, file_info or self.file_info, **kwargs)
+
     def test_marked_furniture_uses_config_id_and_wins_over_fallback(self) -> None:
         root = {
             "CurSave": {
@@ -37,7 +74,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 "DoorBoxItems2": [],
             }
         }
-        state = _inventory_from_game_save(root, self.file_info)
+        state = self._read_inventory(root)
 
         self.assertEqual([item.item_config_id for item in state.items], [2527, 2528])
         self.assertTrue(any("标记家具" in diagnostic for diagnostic in state.diagnostics))
@@ -52,7 +89,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 "DoorBoxItems2": [self._item(2528)],
             }
         }
-        state = _inventory_from_game_save(root, self.file_info)
+        state = self._read_inventory(root)
 
         self.assertEqual(
             [(item.item_config_id, item.item_count, item.source) for item in state.items],
@@ -109,7 +146,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 "DoorBoxItems2": [self._item(2531)],
             }
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={
@@ -153,7 +190,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             }
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={908: "冰柜", 909: "冰柜"},
@@ -183,7 +220,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             }
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "储物家具"},
@@ -230,7 +267,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             }
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "同名储物容器"},
@@ -283,7 +320,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                         },
                     },
                 }
-                state = _inventory_from_game_save(
+                state = self._read_inventory(
                     root,
                     self.file_info,
                     storage_furniture={215: "储物容器"},
@@ -297,6 +334,216 @@ class SaveInventorySourceTests(unittest.TestCase):
                     },
                     {home_slot: True, other_slot: False},
                 )
+
+    def test_leading_role_name_is_the_primary_identity(self) -> None:
+        root = {
+            "PlayerSelectId": 2,
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-大学生",
+                    "AgentConfigId": 1002,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            },
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.role_context.role_name, "玩家-大学生")
+        self.assertEqual(state.role_context.resolved_player_select_id, 2)
+        self.assertEqual(state.role_context.resolution_source, "leading_role_name")
+
+    def test_unknown_role_name_falls_back_to_numeric_identity(self) -> None:
+        root = {
+            "PlayerSelectId": 2,
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-新角色",
+                    "AgentConfigId": 1002,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            },
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.role_context.resolved_player_select_id, 2)
+        self.assertEqual(state.role_context.resolution_source, "game_save_player_select_id")
+        self.assertTrue(any("未匹配已知角色" in diagnostic for diagnostic in state.role_context.diagnostics))
+        self.assertTrue(any("兼容回退" in diagnostic for diagnostic in state.diagnostics))
+
+    def test_missing_role_name_falls_back_to_history_identity(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {
+                    "AgentConfigId": 1002,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            }
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+            player_select_id=2,
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertIsNone(state.role_context.role_name)
+        self.assertEqual(state.role_context.resolved_player_select_id, 2)
+        self.assertEqual(state.role_context.resolution_source, "history_player_select_id")
+        self.assertTrue(any("Name 缺失" in diagnostic for diagnostic in state.role_context.diagnostics))
+        self.assertTrue(any("Name 缺失" in diagnostic for diagnostic in state.diagnostics))
+        self.assertTrue(any("history_player_select_id" in diagnostic for diagnostic in state.diagnostics))
+
+    def test_role_name_conflict_falls_back_to_root_identity(self) -> None:
+        root = {
+            "PlayerSelectId": 1,
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-大学生",
+                    "AgentConfigId": 1002,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        },
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "NeighborGirlBuildingPos01",
+                            "ItemList": [self._item(2528)],
+                        },
+                    ]
+                },
+            },
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual([item.item_config_id for item in state.items], [2527])
+        self.assertEqual(state.role_context.resolved_player_select_id, 1)
+        self.assertEqual(state.role_context.resolution_source, "game_save_player_select_id")
+        self.assertTrue(any("数字身份不一致" in diagnostic for diagnostic in state.diagnostics))
+
+    def test_unresolved_role_skips_chapter_storage(self) -> None:
+        root = {
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-未知角色",
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "HomeBuildingPos01",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            }
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual(state.items, ())
+        self.assertIsNone(state.role_context.resolved_player_select_id)
+        self.assertEqual(state.role_context.resolution_source, "unresolved")
+        self.assertIsNone(state.storage_containers[0].is_home)
+        self.assertTrue(any("跳过" in diagnostic for diagnostic in state.diagnostics))
+
+    def test_empty_storage_slot_is_not_assumed_to_be_home(self) -> None:
+        root = {
+            "PlayerSelectId": 1,
+            "CurSave": {
+                "LeadingRole": {
+                    "Name": "玩家-打工仔",
+                    "AgentConfigId": 1,
+                    "ItemList": [],
+                    "MapConfigIdHome": 1,
+                },
+                "ChapterAgentMap": {
+                    1: [
+                        {
+                            "AgentConfigId": 215,
+                            "MapConfigId": 1,
+                            "SlotPosPoint": "",
+                            "ItemList": [self._item(2527)],
+                        }
+                    ]
+                },
+            },
+        }
+
+        state = _inventory_from_game_save(
+            root,
+            self.file_info,
+            storage_furniture={215: "储物容器"},
+        )
+
+        self.assertEqual(state.items, ())
+        self.assertIsNone(state.storage_containers[0].is_home)
 
     def test_save_player_select_id_overrides_leading_role_and_fallback_uses_leading_role(self) -> None:
         root = {
@@ -325,7 +572,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "储物容器"},
@@ -357,7 +604,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        fallback_state = _inventory_from_game_save(
+        fallback_state = self._read_inventory(
             fallback_root,
             self.file_info,
             storage_furniture={215: "储物容器"},
@@ -389,7 +636,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={80062: "豪华版双门冰箱", 15001: "冰柜"},
@@ -433,7 +680,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "储物容器"},
@@ -474,7 +721,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "储物容器"},
@@ -506,7 +753,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             },
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={215: "储物容器"},
@@ -538,7 +785,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 },
             }
         }
-        state = _inventory_from_game_save(
+        state = self._read_inventory(
             root,
             self.file_info,
             storage_furniture={},
@@ -556,7 +803,7 @@ class SaveInventorySourceTests(unittest.TestCase):
                 "WorkbenchDrawerItems": [self._item(2527, 2)],
             }
         }
-        state = _inventory_from_game_save(root, self.file_info, storage_furniture={})
+        state = self._read_inventory(root, storage_furniture={})
 
         self.assertEqual([item.item_config_id for item in state.items], [2527])
         self.assertEqual(state.container_counts["workbench_drawer"], 1)

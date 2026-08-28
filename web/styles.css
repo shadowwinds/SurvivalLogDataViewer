@@ -1113,6 +1113,23 @@ button {
   color: var(--error);
 }
 
+.recipe-diagnostics {
+  padding: 10px 12px;
+  border: 1px solid var(--error-soft);
+  background: color-mix(in srgb, var(--error-soft) 42%, var(--surface));
+}
+
+.recipe-diagnostics-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.recipe-diagnostic {
+  overflow-wrap: anywhere;
+}
+
 .recipe-storage-meta {
   margin-top: 4px;
   overflow: hidden;

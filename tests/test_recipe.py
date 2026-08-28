@@ -668,7 +668,7 @@ class RecipeConfigTests(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_database_storage_mapping_merges_legacy_storage_table(self) -> None:
+    def test_database_storage_mapping_uses_dedicated_table_as_authority(self) -> None:
         connection = sqlite3.connect(":memory:")
         try:
             connection.execute(
@@ -703,7 +703,56 @@ class RecipeConfigTests(unittest.TestCase):
             )
 
             mapping = _load_storage_furniture_from_database(connection)
-            self.assertEqual(mapping, {215: "Current storage", 80062: "Legacy fridge"})
+            self.assertEqual(mapping, {215: "Legacy storage", 80062: "Legacy fridge"})
+        finally:
+            connection.close()
+
+    def test_database_storage_mapping_keeps_non_current_dedicated_rows(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            connection.execute(
+                """
+                CREATE TABLE codex_entries (
+                    source_table TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    raw_json TEXT NOT NULL,
+                    is_current INTEGER NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE storage_furniture (
+                    config_id INTEGER NOT NULL,
+                    name TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO codex_entries(source_table, source_id, name, raw_json, is_current)
+                VALUES ('Config_Furniture', 900, 'Old storage',
+                        '{"FurnitureFunc":[215],"ShowStorage":0}', 0)
+                """
+            )
+            connection.execute(
+                "INSERT INTO storage_furniture(config_id, name) VALUES (?, ?)",
+                (900, "Old storage"),
+            )
+
+            self.assertEqual(_load_storage_furniture_from_database(connection), {900: "Old storage"})
+        finally:
+            connection.close()
+
+    def test_empty_dedicated_storage_table_does_not_reintroduce_legacy_rows(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        try:
+            connection.execute(
+                "CREATE TABLE storage_furniture (config_id INTEGER NOT NULL, name TEXT NOT NULL)"
+            )
+
+            self.assertEqual(_load_storage_furniture_from_database(connection), {})
         finally:
             connection.close()
 
