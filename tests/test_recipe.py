@@ -3,14 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from codex_recipe import (
     RecipeConfigError,
     RecipeItemSpec,
     RecipeSpec,
+    SUPPORTED_TIER_SUBCATEGORIES,
     StorageFurnitureSpec,
     _inventory_payload,
     _load_storage_furniture_from_database,
+    build_recipe_plan,
     TierRule,
     find_near_matches,
     match_inventory,
@@ -20,7 +23,13 @@ from codex_recipe import (
     storage_furniture_specs_from_rows,
 )
 from codex_parser import ConfigRow
-from codex_save import InventoryItem, SaveFileInfo, SaveInventoryState
+from codex_save import (
+    CodexSaveState,
+    InventoryItem,
+    SaveFileInfo,
+    SaveHistoryRecord,
+    SaveInventoryState,
+)
 
 
 def item(
@@ -712,6 +721,103 @@ class CookingTierTests(unittest.TestCase):
                 },
             ],
         )
+
+
+class RecipePlanTests(unittest.TestCase):
+    def test_targeted_refresh_reads_only_requested_child_save(self) -> None:
+        history_path = Path("HistorySave.bytes")
+
+        def history_record(file_name: str, player_select_id: int) -> SaveHistoryRecord:
+            return SaveHistoryRecord(
+                file_name=file_name,
+                name=file_name,
+                player_select_id=player_select_id,
+                max_day=3,
+                turn=4,
+                is_finished=False,
+                finish_result=0,
+                difficulty_preset_id=0,
+                difficulty_levels=(),
+                is_pure_endless=False,
+                endless_start_day=0,
+                is_story_endless=False,
+                story_endless_origin_ending=0,
+            )
+
+        history = CodexSaveState(
+            file_info=SaveFileInfo(history_path, "h" * 64, 1, 1, "test"),
+            category_ids={"dish": ()},
+            raw_category_ids={},
+            codex_offset=0,
+            trailing_offset=0,
+            history_records=(
+                history_record("Save_one.bytes", 1),
+                history_record("Save_two.bytes", 2),
+            ),
+            last_play_file_name="Save_one.bytes",
+        )
+        items = {2527: item(2527, sub_category=5, price=7)}
+        rules = {
+            sub_category: TierRule(
+                sub_category,
+                f"Subcategory {sub_category}",
+                30,
+                16,
+                "high",
+                "mid",
+            )
+            for sub_category in SUPPORTED_TIER_SUBCATEGORIES
+        }
+        recipes = tuple(
+            recipe(10000 + index, specific_items=(2527,))
+            for index in range(496)
+        )
+        existing_saves = {
+            "Save_one.bytes": {
+                "file_name": "Save_one.bytes",
+                "status": "ok",
+                "inventory": [{"item_id": 1}],
+                "diagnostics": [],
+            },
+            "Save_two.bytes": {
+                "file_name": "Save_two.bytes",
+                "status": "ok",
+                "inventory": [{"item_id": 2}],
+                "diagnostics": [],
+            },
+        }
+        read_paths: list[Path] = []
+
+        def read_inventory(path: Path, **_kwargs: object) -> SaveInventoryState:
+            read_paths.append(path)
+            return SaveInventoryState(
+                SaveFileInfo(path, "s" * 64, 0, 0, "test"),
+                (),
+            )
+
+        connection = sqlite3.connect(":memory:")
+        try:
+            with (
+                patch("codex_recipe.read_history_save", return_value=history),
+                patch("codex_recipe._load_items_from_database", return_value=items),
+                patch("codex_recipe._load_rules_from_database", return_value=rules),
+                patch("codex_recipe._load_recipes_from_database", return_value=recipes),
+                patch("codex_recipe._load_storage_furniture_from_database", return_value={}),
+                patch("codex_recipe.read_game_save_inventory", side_effect=read_inventory),
+            ):
+                payload = build_recipe_plan(
+                    connection,
+                    history_path,
+                    refresh_file_name="Save_one.bytes",
+                    existing_saves=existing_saves,
+                )
+        finally:
+            connection.close()
+
+        self.assertEqual([path.name for path in read_paths], ["Save_one.bytes"])
+        result_by_name = {save["file_name"]: save for save in payload["saves"]}
+        self.assertEqual(result_by_name["Save_two.bytes"], existing_saves["Save_two.bytes"])
+        self.assertEqual(result_by_name["Save_one.bytes"]["status"], "ok")
 
 
 class RecipeConfigTests(unittest.TestCase):

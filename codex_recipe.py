@@ -1233,8 +1233,19 @@ def _save_payload_base(record: SaveHistoryRecord) -> dict[str, object]:
     }
 
 
-def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dict[str, object]:
-    """Build the complete global-and-per-save recipe plan without persisting inventory."""
+def build_recipe_plan(
+    connection: sqlite3.Connection,
+    history_path: Path,
+    *,
+    refresh_file_name: str | None = None,
+    existing_saves: Mapping[str, Mapping[str, object]] | None = None,
+) -> dict[str, object]:
+    """Build the recipe plan, optionally rereading only one child save."""
+
+    if refresh_file_name is not None:
+        _validate_save_filename(refresh_file_name)
+        if existing_saves is None:
+            raise RecipeConfigError("定向刷新菜谱存档时缺少现有存档计划")
 
     history = read_history_save(history_path)
     items = _load_items_from_database(connection)
@@ -1269,6 +1280,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
     all_diagnostics: list[str] = []
     saves: list[dict[str, object]] = []
     seen_names: set[str] = set()
+    refresh_target_found = False
     root = Path(history.file_info.path).parent
     history_file_names = {record.file_name for record in history.history_records}
     selected_save_file = (
@@ -1292,6 +1304,20 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             all_diagnostics.append(message)
             continue
         seen_names.add(record.file_name)
+        if refresh_file_name is not None and record.file_name != refresh_file_name:
+            previous = existing_saves.get(record.file_name) if existing_saves is not None else None
+            if previous is None:
+                raise RecipeConfigError(f"定向刷新缺少现有子存档结果：{record.file_name}")
+            preserved = dict(previous)
+            saves.append(preserved)
+            all_diagnostics.extend(
+                str(value)
+                for value in preserved.get("diagnostics", [])
+                if str(value).strip()
+            )
+            continue
+        if refresh_file_name is not None:
+            refresh_target_found = True
         requested = root / record.file_name
         try:
             inventory = read_game_save_inventory(
@@ -1384,6 +1410,8 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
         )
         saves.append(payload)
         all_diagnostics.extend(diagnostics)
+    if refresh_file_name is not None and not refresh_target_found:
+        raise RecipeConfigError(f"HistorySave 中不存在子存档：{refresh_file_name}")
     return {
         "status": "partial" if all_diagnostics else "ok",
         "history_source": _file_info_payload(history.file_info),

@@ -12,6 +12,9 @@ import codex_server
 
 
 class TestService:
+    def __init__(self) -> None:
+        self.refresh_calls: list[str] = []
+
     def state(self) -> dict[str, object]:
         return {
             "categories": [],
@@ -27,6 +30,10 @@ class TestService:
 
     def entries(self, *_args: object) -> dict[str, object]:
         return {"entries": []}
+
+    def refresh_recipe_save(self, file_name: str) -> dict[str, object]:
+        self.refresh_calls.append(file_name)
+        return {"status": "ok", "file_name": file_name, "saves": []}
 
 
 class ServerLifecycleTests(unittest.TestCase):
@@ -99,6 +106,20 @@ class ServerLifecycleTests(unittest.TestCase):
         )
         with urllib.request.urlopen(request, timeout=1) as response:
             self.assertEqual(response.status, 200)
+
+    def test_recipe_refresh_endpoint_forwards_selected_save(self) -> None:
+        request = urllib.request.Request(
+            f"{self.url}api/recipe-plans/refresh?file_name=Save_selected.bytes",
+            data=b"",
+            method="POST",
+            headers={"X-SurvivalLog-Client": "recipe-refresh"},
+        )
+        with urllib.request.urlopen(request, timeout=1) as response:
+            self.assertEqual(response.status, 200)
+            body = response.read().decode("utf-8")
+
+        self.assertIn('"file_name":"Save_selected.bytes"', body)
+        self.assertEqual(self.server.service.refresh_calls, ["Save_selected.bytes"])
 
     def test_background_idle_does_not_stop_server(self) -> None:
         self.server.note_client_activity("background-page")

@@ -949,6 +949,33 @@ button {
   white-space: nowrap;
 }
 
+.recipe-save-refresh-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  margin-left: auto;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.recipe-save-refresh-button:hover,
+.recipe-save-refresh-button:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.recipe-save-refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .recipe-save-panels {
   display: flex;
   flex: 1 1 auto;
@@ -1000,27 +1027,6 @@ button {
 .recipe-column + .recipe-column {
   padding-left: 20px;
   border-left: 1px solid var(--border);
-}
-
-.recipe-status {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 4px 7px;
-  border-radius: 5px;
-  background: var(--pending-soft);
-  color: var(--pending);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.recipe-status.ok {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.recipe-status.error {
-  background: var(--error-soft);
-  color: var(--error);
 }
 
 .recipe-section {
@@ -1220,11 +1226,6 @@ button {
   color: var(--accent);
   font-size: 11px;
   white-space: nowrap;
-}
-
-.recipe-kind-generic {
-  background: var(--success-soft);
-  color: var(--success);
 }
 
 .recipe-near-section {

@@ -23,6 +23,8 @@
     entriesRequest: 0,
     detailRequest: 0,
     recipeRequest: 0,
+    recipeRefreshRequest: 0,
+    recipeRefreshing: false,
     recipePlan: null,
     recipeSaveSelection: "",
   };
@@ -36,12 +38,14 @@
     return node;
   }
 
-  async function requestJson(path) {
+  async function requestJson(path, options = {}) {
     const response = await fetch(path, {
+      ...options,
       cache: "no-store",
       headers: {
         Accept: "application/json",
         "X-SurvivalLog-Client": CLIENT_ID,
+        ...(options.headers || {}),
       },
     });
     let payload = null;
@@ -396,6 +400,8 @@
       select.append(option);
     });
     select.disabled = !selected;
+    const refreshButton = byId("recipeSaveRefresh");
+    if (refreshButton) refreshButton.disabled = !selected || state.recipeRefreshing;
   }
 
   function recipeKindLabel(result) {
@@ -403,6 +409,19 @@
       return String(result.recipe_kind_label_zh);
     }
     return Array.isArray(result && result.candidate_group) ? "通用菜肴" : "特色菜肴";
+  }
+
+  function visibleRecipeResults(results) {
+    return (Array.isArray(results) ? results : []).filter((result) => {
+      return !(
+        result
+        && (
+          result.recipe_kind === "generic"
+          || Array.isArray(result.candidate_group)
+          || result.recipe_kind_label_zh === "通用菜肴"
+        )
+      );
+    });
   }
 
   function uniqueRecipeNames(items) {
@@ -439,25 +458,15 @@
 
   function renderRecipeHeader(save) {
     const context = byId("recipeSaveContext");
-    const status = byId("recipeSaveStatus");
-    if (!context || !status) return;
+    if (!context) return;
     if (!save) {
       context.textContent = "";
-      status.textContent = "";
-      status.className = "recipe-status";
-      status.dataset.status = "";
-      status.hidden = true;
       return;
     }
     const mode = save.mode || "未知模式";
     const day = `第 ${Number(save.max_day || 0)} 天`;
     const roleName = recipeDisplayName(save.role_name, "角色未知");
     context.textContent = `${roleName} · ${recipeRoleResolutionLabel(save)} · ${recipeChapterResolutionLabel(save)} · ${mode} ${day}`;
-    const statusText = save.status === "ok" ? "已读取" : save.status === "missing" ? "存档缺失" : "读取失败";
-    status.className = `recipe-status ${save.status || "error"}`;
-    status.dataset.status = save.status || "error";
-    status.textContent = statusText;
-    status.hidden = false;
   }
 
   function renderRecipeResult(result, { near = false } = {}) {
@@ -521,7 +530,7 @@
 
     const dishesColumn = makeElement("div", "recipe-column recipe-dishes-column");
     const matchSection = makeElement("section", "recipe-section");
-    const matches = Array.isArray(save.matches) ? save.matches : [];
+    const matches = visibleRecipeResults(save.matches);
     matchSection.append(
       makeElement("h5", "recipe-section-title", "可烹饪菜肴"),
       makeElement("span", "recipe-match-count", `${matches.length} 道`),
@@ -536,7 +545,7 @@
       matchSection.append(list);
     }
     const nearSection = makeElement("section", "recipe-section recipe-near-section");
-    const nearMatches = Array.isArray(save.near_matches) ? save.near_matches : [];
+    const nearMatches = visibleRecipeResults(save.near_matches);
     nearSection.append(
       makeElement("h5", "recipe-section-title", "仅差一个食材"),
       makeElement("span", "recipe-match-count", `${nearMatches.length} 道`),
@@ -596,11 +605,17 @@
   }
 
   async function loadRecipePlans() {
+    if (state.recipeRefreshing) return;
     const requestId = ++state.recipeRequest;
+    const refreshVersion = state.recipeRefreshRequest;
     byId("recipeView").classList.add("is-loading");
     try {
       const payload = await requestJson("/api/recipe-plans");
-      if (requestId !== state.recipeRequest) return;
+      if (
+        requestId !== state.recipeRequest
+        || refreshVersion !== state.recipeRefreshRequest
+        || state.recipeRefreshing
+      ) return;
       if (
         state.recipePlan
         && payload
@@ -621,6 +636,38 @@
       renderRecipePlan({ status: "error", saves: [], diagnostics: [error.message] });
     } finally {
       if (requestId === state.recipeRequest) byId("recipeView").classList.remove("is-loading");
+    }
+  }
+
+  async function refreshSelectedRecipeSave() {
+    const button = byId("recipeSaveRefresh");
+    const fileName = state.recipeSaveSelection || byId("recipeSaveSelect").value || "";
+    if (!button || !fileName || state.recipeRefreshing) return;
+
+    const requestId = ++state.recipeRefreshRequest;
+    const previousSelection = state.recipeSaveSelection;
+    const scrollPositions = captureRecipeScrollPositions();
+    state.recipeRefreshing = true;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.classList.add("is-loading");
+    try {
+      const query = new URLSearchParams({ file_name: fileName });
+      const payload = await requestJson(`/api/recipe-plans/refresh?${query}`, { method: "POST" });
+      if (requestId !== state.recipeRefreshRequest) return;
+      renderRecipePlan(payload);
+      if (state.recipeSaveSelection === previousSelection) {
+        restoreRecipeScrollPositions(scrollPositions);
+      }
+      showToast("存档已更新");
+    } catch (error) {
+      if (requestId === state.recipeRefreshRequest) showToast(error.message);
+    } finally {
+      if (requestId !== state.recipeRefreshRequest) return;
+      state.recipeRefreshing = false;
+      button.disabled = !state.recipeSaveSelection;
+      button.removeAttribute("aria-busy");
+      button.classList.remove("is-loading");
     }
   }
 
@@ -878,6 +925,8 @@
       resetRecipeScrollPositions();
       renderRecipeSaves(state.recipePlan);
     });
+
+    byId("recipeSaveRefresh").addEventListener("click", refreshSelectedRecipeSave);
 
     function selectEntry(target) {
       if (!target) return;

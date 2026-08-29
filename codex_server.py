@@ -365,6 +365,81 @@ class CodexService:
             children.append(self._file_signature(Path(f"{path}.bak")))
         return self._save_signature() + tuple(children)
 
+    @staticmethod
+    def _recipe_cache_signature(
+        signature: tuple[Any, ...],
+        metadata: dict[str, str],
+    ) -> str:
+        return json.dumps(
+            {
+                "recipe_plan_cache_version": RECIPE_PLAN_CACHE_VERSION,
+                "save_signature": signature,
+                "game_version": metadata.get("game_version", ""),
+                "database_schema_version": metadata.get("database_schema_version", ""),
+                "imported_at": metadata.get("imported_at", ""),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+
+    def _store_recipe_plan(
+        self,
+        payload: dict[str, Any],
+        signature: tuple[Any, ...],
+        metadata: dict[str, str],
+    ) -> dict[str, Any]:
+        cache_signature = self._recipe_cache_signature(signature, metadata)
+        payload["revision"] = json.dumps(
+            {
+                "cache_signature": cache_signature,
+                "history_source": payload.get("history_source"),
+                "status": payload.get("status"),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        self._last_recipe_signature = signature
+        self._last_recipe_plan = payload
+        if payload.get("status") != "error":
+            set_runtime_cache(
+                self.connection,
+                "recipe_plans",
+                cache_signature,
+                payload,
+            )
+        return payload
+
+    def _targeted_recipe_signature(
+        self,
+        previous: tuple[Any, ...] | None,
+        current: tuple[Any, ...],
+        file_name: str,
+    ) -> tuple[Any, ...]:
+        if previous is None:
+            return current
+        target = self.save_file.parent / file_name
+        target_paths = {str(target), str(Path(f"{target}.bak"))}
+        current_by_path = {
+            item[0]: item
+            for item in current
+            if isinstance(item, tuple) and item and isinstance(item[0], str)
+        }
+        if not any(
+            isinstance(item, tuple) and item and item[0] in target_paths
+            for item in previous
+        ):
+            return current
+        return tuple(
+            current_by_path.get(item[0], item)
+            if isinstance(item, tuple) and item and item[0] in target_paths
+            else item
+            for item in previous
+        )
+
     def _ensure_sync(self) -> CompletionSyncResult:
         signature = self._save_signature()
         with self._lock:
@@ -474,19 +549,7 @@ class CodexService:
             if self._last_recipe_plan is not None and self._last_recipe_signature == signature:
                 return self._last_recipe_plan
             metadata = get_metadata(self.connection)
-            cache_signature = json.dumps(
-                {
-                    "recipe_plan_cache_version": RECIPE_PLAN_CACHE_VERSION,
-                    "save_signature": signature,
-                    "game_version": metadata.get("game_version", ""),
-                    "database_schema_version": metadata.get("database_schema_version", ""),
-                    "imported_at": metadata.get("imported_at", ""),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-                default=str,
-            )
+            cache_signature = self._recipe_cache_signature(signature, metadata)
             cached = get_runtime_cache(
                 self.connection,
                 "recipe_plans",
@@ -500,27 +563,57 @@ class CodexService:
                 payload = build_recipe_plan(self.connection, self.save_file)
             except (OSError, RecipeConfigError, SaveParseError, sqlite3.Error) as exc:
                 payload = build_recipe_error(str(exc))
-            payload["revision"] = json.dumps(
-                {
-                    "cache_signature": cache_signature,
-                    "history_source": payload.get("history_source"),
-                    "status": payload.get("status"),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-                default=str,
-            )
-            self._last_recipe_signature = signature
-            self._last_recipe_plan = payload
-            if payload.get("status") != "error":
-                set_runtime_cache(
+            return self._store_recipe_plan(payload, signature, metadata)
+
+    def refresh_recipe_save(self, file_name: str) -> dict[str, Any]:
+        with self._lock:
+            current_plan = self._last_recipe_plan
+            if current_plan is None:
+                current_plan = self.recipe_plans()
+            current_saves = {
+                str(save.get("file_name")): save
+                for save in current_plan.get("saves", [])
+                if isinstance(save, dict) and save.get("file_name")
+            }
+            if file_name not in current_saves:
+                raise ValueError(f"当前智能菜谱不存在选中的存档：{file_name}")
+
+            previous_signature = self._last_recipe_signature
+            try:
+                payload = build_recipe_plan(
                     self.connection,
-                    "recipe_plans",
-                    cache_signature,
-                    payload,
+                    self.save_file,
+                    refresh_file_name=file_name,
+                    existing_saves=current_saves,
                 )
-            return payload
+            except (OSError, RecipeConfigError, SaveParseError, sqlite3.Error) as exc:
+                raise ValueError(f"存档更新失败：{exc}") from exc
+
+            refreshed = next(
+                (
+                    save
+                    for save in payload.get("saves", [])
+                    if isinstance(save, dict) and save.get("file_name") == file_name
+                ),
+                None,
+            )
+            if not isinstance(refreshed, dict) or refreshed.get("status") != "ok":
+                diagnostics = [
+                    str(value).strip()
+                    for value in (refreshed or {}).get("diagnostics", [])
+                    if str(value).strip()
+                ]
+                message = diagnostics[0] if diagnostics else "当前存档读取失败"
+                raise ValueError(f"存档更新失败：{message}")
+
+            metadata = get_metadata(self.connection)
+            current_signature = self._recipe_signature()
+            signature = self._targeted_recipe_signature(
+                previous_signature,
+                current_signature,
+                file_name,
+            )
+            return self._store_recipe_plan(payload, signature, metadata)
 
     def entries(
         self,
@@ -767,7 +860,14 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
                 self.server.note_client_closed(_client_id(_first_query_value(query, "client_id")))
                 self._send_json(HTTPStatus.OK, {"status": "accepted"})
                 return
+            if parsed.path == "/api/recipe-plans/refresh":
+                self.server.note_client_activity(_client_id(self.headers.get("X-SurvivalLog-Client", "")))
+                file_name = _first_query_value(query, "file_name")
+                self._send_json(HTTPStatus.OK, self.server.service.refresh_recipe_save(file_name))
+                return
             self._send_error_json(HTTPStatus.NOT_FOUND, "找不到 API 接口")
+        except ValueError as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
         except Exception as exc:  # Keep API failures visible without exposing a traceback in the browser.
             print(f"本地网页请求失败：{exc}", file=sys.stderr)
             self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"本地服务处理失败：{exc}")

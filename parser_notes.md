@@ -50,7 +50,7 @@
 
 子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；先读取 `LeadingRole.Name` 并按已验证名称映射确定角色，再按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 的顺序兼容回退，名称未知、缺失或与数字身份冲突时会保留角色上下文和诊断。储物家具以静态库 `storage_furniture` 表为权威来源，覆盖当前 `Config_Furniture` 中 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的全部配置，不受图鉴 `is_current` 可见性影响，也不按本地化名称筛选；旧数据库缺少专用表时才回退到旧的当前图鉴行。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具实例均单独保留。容器必须同时有储物行为配置、当前角色槽位和地图证据：先比较主控 `MapConfigIdHome`、`ChapterAgentMap` 地图键与实例 `MapConfigId`，任一地图 ID 不一致始终判定为其他位置；再按当前角色选择槽位，角色 1 使用 `HomeBuildingPos`/`Home_`，角色 2 使用 `NeighborGirlBuildingPos`，角色 3 使用 `WarehousePos`。空槽位不再因地图相同而视为家中，其他角色的已知槽位判定为其他位置，未知槽位判定为未知并跳过库存；位置、实例和角色解析诊断仍保留在后端 `storage_containers`/存档 JSON。`IsDoorBox == true` 仅在地图明确属于当前家中时作为兼容储物容器读取；工作台抽屉 `WorkbenchDrawerItems` 作为家中直接容器读取，车辆后备箱和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 只对 15000/15001 保留兼容回退，且仅在没有对应实际家具并已解析出已知角色时使用。
 
-数据库 schema v8 额外保存全部 `Config_Item` 的烹饪相关字段、按储物功能生成的家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建，旧 v6 源码库会拆分为静态库和 runtime 库。菜肴匹配拆分为两个独立指令：`SpecificItems` 按 `Config_Item.Category == 1 && CanCook == true` 和实际物品 ID 多重集合精确匹配；`TagCombo` 按子分类数量枚举库存组合、读取主控 `AgentSave.CookingLevel` 映射到目标 `Tier` 并选择同档位配方。两类结果仍互不预留或扣除共享食材，但每个完整食材组合先执行 `SpecificItems` 特色菜肴优先判断，只有未命中特色菜肴时才允许显示 `TagCombo` 通用菜肴；因此菠菜只有在补入后的完整组合没有命中特色菜肴时，才可作为通用菜肴候选。近匹配只在其他槽位和数量全部满足、加入候选食材后确实能得到有效目标通用菜肴且未命中特色菜肴时返回；候选可来自配置上可烹饪但当前尚未拥有的食材，并统一放在 `missing_item_candidates`。
+数据库 schema v8 额外保存全部 `Config_Item` 的烹饪相关字段、按储物功能生成的家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建，旧 v6 源码库会拆分为静态库和 runtime 库。菜肴匹配拆分为两个独立指令：`SpecificItems` 按 `Config_Item.Category == 1 && CanCook == true` 和实际物品 ID 多重集合精确匹配；`TagCombo` 按子分类数量枚举库存组合、读取主控 `AgentSave.CookingLevel` 映射到目标 `Tier` 并选择同档位配方。两类结果仍互不预留或扣除共享食材，但每个完整食材组合先执行 `SpecificItems` 特色菜肴优先判断，只有未命中特色菜肴时才允许将 `TagCombo` 通用菜肴作为匹配候选；因此菠菜只有在补入后的完整组合没有命中特色菜肴时，才可作为通用菜肴候选。近匹配只在其他槽位和数量全部满足、加入候选食材后确实能得到有效目标通用菜肴且未命中特色菜肴时返回；候选可来自配置上可烹饪但当前尚未拥有的食材，并统一放在 `missing_item_candidates`。智能菜谱页面随后只展示特色菜肴结果。
 
 ### ChapterAgentMap 外层键判定（当前实现）
 
@@ -139,7 +139,7 @@ python "codex_database.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v8 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v8 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断；`POST /api/recipe-plans/refresh?file_name=...` 只重读指定的当前子存档，并将结果合并回现有计划。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
 源码默认数据库为根目录的 `survival_log_codex.sqlite3`，runtime 文件固定为根目录的 `survival_log_codex_runtime.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的 `data/survival_log_codex.sqlite3` 时，工具会先执行 `PRAGMA integrity_check`，校验通过后在临时文件中原子拆分静态和 runtime 数据库，并保留完成状态、存档哈希和已有缓存；存在 WAL/SHM 旁车文件、锁定或目标冲突时会保留旧文件。显式 `--database` 路径不会触发默认迁移。
 
@@ -156,7 +156,7 @@ python "codex_server.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-前端提供六类主图鉴分类和“智能菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，下拉切换后只展示该存档；页面采用固定视口高度，左侧拥有食材、右侧可烹饪菜肴和仅差一个食材结果分别滚动。菜肴轮询比较 payload revision，内容未变化时不重建列表，变化时恢复两个滚动列的位置，切换存档则回到顶部。结果卡片严格保持单行，限定食材和大类食材分别显示“特色菜肴”和“通用菜肴”，每个食材使用独立高亮标签；近匹配把“缺少：”和“当前：”放在同一行，通用缺口的全部明确候选名称在同一个高亮标签内用“|”分隔。存档下拉菜单、文件名、模式/天数和状态合并在同一行，前端不会写回存档。
+前端提供六类主图鉴分类和“智能菜肴”栏目、成品名称检索、材料检索、完成状态筛选、全量条目列表、关联数据和配置字段详情。菜肴栏目按 `HistoryData.LastPlayFileName` 默认选中存档，下拉切换后只展示该存档；页面采用固定视口高度，左侧拥有食材、右侧可烹饪菜肴和仅差一个食材结果分别滚动。菜肴轮询比较 payload revision，内容未变化时不重建列表，变化时恢复两个滚动列的位置，切换存档则回到顶部。结果卡片严格保持单行，只显示“特色菜肴”，每个食材使用独立高亮标签；近匹配把“缺少：”和“当前：”放在同一行。存档下拉菜单、文件名、模式/天数和【存档更新】按钮合并在同一行，按钮只刷新当前选中的子存档，前端不会写回存档。
 
 ## 6. 独立版运行和打包
 
