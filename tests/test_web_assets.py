@@ -19,12 +19,12 @@ class WebAssetTests(unittest.TestCase):
         self.assertNotIn("已读取", index + app + styles)
         self.assertIn("/api/recipe-plans/refresh", app)
 
-    def test_recipe_lists_filter_generic_results_before_rendering(self) -> None:
+    def test_recipe_lists_render_generic_results_before_rendering(self) -> None:
         app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-        self.assertIn("function visibleRecipeResults", app)
-        self.assertIn("const matches = visibleRecipeResults(save.matches);", app)
-        self.assertIn("const nearMatches = visibleRecipeResults(save.near_matches);", app)
+        self.assertNotIn("function visibleRecipeResults", app)
+        self.assertIn("const matches = Array.isArray(save.matches) ? save.matches : [];", app)
+        self.assertIn("const nearMatches = Array.isArray(save.near_matches) ? save.near_matches : [];", app)
 
 
 if __name__ == "__main__":

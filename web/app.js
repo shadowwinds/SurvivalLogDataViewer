@@ -411,19 +411,6 @@
     return Array.isArray(result && result.candidate_group) ? "通用菜肴" : "特色菜肴";
   }
 
-  function visibleRecipeResults(results) {
-    return (Array.isArray(results) ? results : []).filter((result) => {
-      return !(
-        result
-        && (
-          result.recipe_kind === "generic"
-          || Array.isArray(result.candidate_group)
-          || result.recipe_kind_label_zh === "通用菜肴"
-        )
-      );
-    });
-  }
-
   function uniqueRecipeNames(items) {
     const names = [];
     const seen = new Set();
@@ -530,7 +517,7 @@
 
     const dishesColumn = makeElement("div", "recipe-column recipe-dishes-column");
     const matchSection = makeElement("section", "recipe-section");
-    const matches = visibleRecipeResults(save.matches);
+    const matches = Array.isArray(save.matches) ? save.matches : [];
     matchSection.append(
       makeElement("h5", "recipe-section-title", "可烹饪菜肴"),
       makeElement("span", "recipe-match-count", `${matches.length} 道`),
@@ -545,7 +532,7 @@
       matchSection.append(list);
     }
     const nearSection = makeElement("section", "recipe-section recipe-near-section");
-    const nearMatches = visibleRecipeResults(save.near_matches);
+    const nearMatches = Array.isArray(save.near_matches) ? save.near_matches : [];
     nearSection.append(
       makeElement("h5", "recipe-section-title", "仅差一个食材"),
       makeElement("span", "recipe-match-count", `${nearMatches.length} 道`),
