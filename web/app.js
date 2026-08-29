@@ -500,9 +500,6 @@
   function renderRecipeSave(save) {
     const panel = makeElement("article", "recipe-save-panel");
     const inventoryColumn = makeElement("div", "recipe-column recipe-inventory-column");
-    inventoryColumn.append(renderRecipeContainers(save));
-    const diagnosticsSection = renderRecipeDiagnostics(save);
-    if (diagnosticsSection) inventoryColumn.append(diagnosticsSection);
     const inventorySection = makeElement("section", "recipe-section");
     const inventory = Array.isArray(save.inventory) ? save.inventory : [];
     inventorySection.append(makeElement("h5", "recipe-section-title", "拥有食材"));
