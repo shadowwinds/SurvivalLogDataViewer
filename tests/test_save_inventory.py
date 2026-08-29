@@ -112,6 +112,25 @@ class SaveInventorySourceTests(unittest.TestCase):
             root["PlayerSelectId"] = kwargs["player_select_id"]
         return _inventory_from_game_save(root, file_info or self.file_info, **kwargs)
 
+    def test_leading_role_cooking_level_is_carried_with_inventory_state(self) -> None:
+        state = self._read_inventory(
+            {
+                "PlayerSelectId": 2,
+                "CurSave": {
+                    "LeadingRole": {
+                        "AgentConfigId": 1002,
+                        "Name": "玩家-大学生",
+                        "CookingLevel": 4,
+                        "ItemList": [],
+                        "MapConfigIdHome": 1,
+                    },
+                    "ChapterAgentMap": {},
+                },
+            }
+        )
+
+        self.assertEqual(state.cooking_level, 4)
+
     def test_marked_furniture_uses_config_id_and_wins_over_fallback(self) -> None:
         root = {
             "CurSave": {

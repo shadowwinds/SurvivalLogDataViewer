@@ -184,6 +184,7 @@ class SaveInventoryState:
     container_counts: dict[str, int] = field(default_factory=dict)
     storage_containers: tuple[StorageContainer, ...] = ()
     role_context: SaveRoleContext | None = None
+    cooking_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -852,6 +853,7 @@ _SAVE_CAPTURE_FIELDS = {
     "AgentSave": frozenset({
         "NewInstanceId", "SaveInstanceId", "AgentConfigId", "ItemList",
         "Name",
+        "CookingLevel",
         "IsBagFurniture", "BagFurnitureConfigId", "IsDoorBox", "DoorBoxIndex",
         "MapConfigId", "MapConfigIdHome", "ChapterId", "SlotPosPoint",
     }),
@@ -1569,7 +1571,11 @@ def _inventory_from_game_save(
     raw_items: list[InventoryItem] = []
     container_counts: dict[str, int] = {}
     leading_role = child.get("LeadingRole")
+    cooking_level = None
     if isinstance(leading_role, dict):
+        raw_cooking_level = leading_role.get("CookingLevel")
+        if isinstance(raw_cooking_level, int) and not isinstance(raw_cooking_level, bool):
+            cooking_level = raw_cooking_level
         container_counts["主控背包"] = _append_inventory_items(
             raw_items,
             leading_role.get("ItemList"),
@@ -1761,6 +1767,7 @@ def _inventory_from_game_save(
         container_counts=container_counts,
         storage_containers=tuple(storage_containers),
         role_context=role_context,
+        cooking_level=cooking_level,
     )
 
 

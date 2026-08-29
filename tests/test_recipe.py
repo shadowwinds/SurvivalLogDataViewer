@@ -16,6 +16,7 @@ from codex_recipe import (
     match_inventory,
     recipe_specs_from_rows,
     resolve_cooking_tier,
+    resolve_generic_recipe_tier,
     storage_furniture_specs_from_rows,
 )
 from codex_parser import ConfigRow
@@ -82,28 +83,114 @@ class CookingTierTests(unittest.TestCase):
             3,
         )
 
-    def test_tag_combo_selects_recipe_after_tier_resolution(self) -> None:
+    def test_cooking_level_selects_generic_recipe_tier(self) -> None:
+        self.assertEqual(resolve_generic_recipe_tier(1), 3)
+        self.assertEqual(resolve_generic_recipe_tier(2), 3)
+        self.assertEqual(resolve_generic_recipe_tier(3), 2)
+        self.assertEqual(resolve_generic_recipe_tier(4), 2)
+        self.assertEqual(resolve_generic_recipe_tier(5), 1)
+        self.assertIsNone(resolve_generic_recipe_tier(None))
+        self.assertIsNone(resolve_generic_recipe_tier(0))
+        self.assertIsNone(resolve_generic_recipe_tier(6))
+        self.assertIsNone(resolve_generic_recipe_tier(True))
+
+    def test_tag_combo_selects_recipe_by_cooking_level(self) -> None:
         recipes = [
             recipe(1001, tier=1, tag_combo=(5,)),
             recipe(1002, tier=2, tag_combo=(5,)),
             recipe(1003, tier=3, tag_combo=(5,)),
         ]
-        for item_id, expected_recipe_id, expected_tier in (
-            (2529, 1001, 1),
-            (2528, 1002, 2),
-            (2527, 1003, 3),
+        for cooking_level, expected_recipe_id, expected_tier in (
+            (5, 1001, 1),
+            (3, 1002, 2),
+            (1, 1003, 3),
         ):
             matches, diagnostics = match_inventory(
-                [InventoryItem(item_id, 1, "主控背包", "backpack")],
+                [InventoryItem(2527, 1, "主控背包", "backpack")],
                 recipes,
                 self.items,
                 self.rules,
+                cooking_level=cooking_level,
             )
             self.assertEqual(diagnostics, [])
             self.assertEqual([match["recipe_id"] for match in matches], [expected_recipe_id])
             self.assertEqual(matches[0]["tier"], expected_tier)
             self.assertEqual(matches[0]["recipe_kind_label_zh"], "通用菜肴")
             self.assertEqual(matches[0]["candidate_recipe_ids"], [1001, 1002, 1003])
+
+    def test_known_generic_recipe_groups_follow_cooking_level(self) -> None:
+        items = dict(self.items)
+        items[1001] = item(1001, sub_category=1, price=1)
+        items[1002] = item(1002, sub_category=2, price=1)
+        items[1003] = item(1003, sub_category=3, price=1)
+        recipes = [
+            recipe(5010, tier=2, tag_combo=(1, 2, 5)),
+            recipe(6010, tier=1, tag_combo=(1, 2, 5)),
+            recipe(7010, tier=3, tag_combo=(1, 2, 5)),
+            recipe(5021, tier=2, tag_combo=(3, 5)),
+            recipe(6021, tier=1, tag_combo=(3, 5)),
+            recipe(7021, tier=3, tag_combo=(3, 5)),
+        ]
+        cases = (
+            (1, 7010, 7021),
+            (2, 7010, 7021),
+            (3, 5010, 5021),
+            (4, 5010, 5021),
+            (5, 6010, 6021),
+        )
+        for cooking_level, expected_rice, expected_egg in cases:
+            with self.subTest(cooking_level=cooking_level):
+                rice_matches, rice_diagnostics = match_inventory(
+                    [
+                        InventoryItem(1001, 1, "主控背包", "backpack"),
+                        InventoryItem(1002, 1, "主控背包", "backpack"),
+                        InventoryItem(2527, 1, "主控背包", "backpack"),
+                    ],
+                    recipes,
+                    items,
+                    self.rules,
+                    cooking_level=cooking_level,
+                )
+                egg_matches, egg_diagnostics = match_inventory(
+                    [
+                        InventoryItem(1003, 1, "主控背包", "backpack"),
+                        InventoryItem(2527, 1, "主控背包", "backpack"),
+                    ],
+                    recipes,
+                    items,
+                    self.rules,
+                    cooking_level=cooking_level,
+                )
+                self.assertEqual(rice_diagnostics, [])
+                self.assertEqual(egg_diagnostics, [])
+                self.assertEqual([match["recipe_id"] for match in rice_matches], [expected_rice])
+                self.assertEqual([match["recipe_id"] for match in egg_matches], [expected_egg])
+
+    def test_invalid_cooking_level_keeps_specific_and_skips_generic(self) -> None:
+        recipes = [
+            recipe(9001, specific_items=(2527,)),
+            recipe(9002, tier=2, tag_combo=(5,)),
+        ]
+        inventory = [InventoryItem(2527, 1, "主控背包", "backpack")]
+        matches, diagnostics = match_inventory(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            cooking_level=0,
+        )
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            self.items,
+            self.rules,
+            cooking_level=None,
+        )
+
+        self.assertEqual([match["recipe_id"] for match in matches], [9001])
+        self.assertEqual(near_matches, [])
+        self.assertEqual(len(diagnostics), 1)
+        self.assertIn("AgentSave.CookingLevel", diagnostics[0])
 
     def test_tag_combo_combination_count_is_for_selected_recipe(self) -> None:
         recipes = [
@@ -119,6 +206,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             self.items,
             self.rules,
+            cooking_level=3,
         )
         self.assertEqual(diagnostics, [])
         self.assertEqual(
@@ -126,7 +214,7 @@ class CookingTierTests(unittest.TestCase):
                 (match["recipe_id"], match["other_combination_count"])
                 for match in matches
             },
-            {(1002, 0), (1003, 0)},
+            {(1002, 1)},
         )
 
     def test_specific_items_are_a_multiset_and_uncookable_items_are_ignored(self) -> None:
@@ -164,6 +252,7 @@ class CookingTierTests(unittest.TestCase):
             self.items,
             self.rules,
             completed_recipe_ids={3001},
+            cooking_level=1,
         )
         self.assertEqual([match["recipe_id"] for match in matches], [3002])
         self.assertEqual(diagnostics, [])
@@ -178,6 +267,7 @@ class CookingTierTests(unittest.TestCase):
             self.items,
             self.rules,
             completed_recipe_ids={3010},
+            cooking_level=1,
         )
         self.assertEqual(diagnostics, [])
         self.assertEqual([match["recipe_id"] for match in matches], [3011])
@@ -221,6 +311,7 @@ class CookingTierTests(unittest.TestCase):
             ],
             self.items,
             self.rules,
+            cooking_level=1,
         )
 
         self.assertEqual([match["recipe_id"] for match in near_matches], [4103])
@@ -244,6 +335,7 @@ class CookingTierTests(unittest.TestCase):
             [recipe(4104, tier=3, tag_combo=(4, 5))],
             items,
             self.rules,
+            cooking_level=1,
         )
         self.assertEqual(
             [item["name"] for item in generic_near_matches[0]["missing_item_candidates"]],
@@ -265,6 +357,7 @@ class CookingTierTests(unittest.TestCase):
                 [recipe(4110, tier=3, tag_combo=(4, 5, 5))],
                 self.items,
                 self.rules,
+                cooking_level=1,
             ),
             [],
         )
@@ -274,13 +367,14 @@ class CookingTierTests(unittest.TestCase):
             [recipe(4111, tier=3, tag_combo=(5, 5))],
             self.items,
             self.rules,
+            cooking_level=1,
         )
         self.assertEqual([match["recipe_id"] for match in near_matches], [4111])
         self.assertEqual(near_matches[0]["missing_items"], [])
         self.assertEqual(near_matches[0]["missing_sub_category"]["count"], 1)
         self.assertEqual(
             [item["item_id"] for item in near_matches[0]["missing_item_candidates"]],
-            [2527],
+            [2527, 2528, 2529],
         )
 
     def test_near_matches_exclude_completed_and_already_cookable_recipes(self) -> None:
@@ -296,6 +390,7 @@ class CookingTierTests(unittest.TestCase):
             self.items,
             self.rules,
             completed_recipe_ids={4201},
+            cooking_level=3,
         )
         near_matches = find_near_matches(
             inventory,
@@ -304,6 +399,7 @@ class CookingTierTests(unittest.TestCase):
             self.rules,
             completed_recipe_ids={4201},
             excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+            cooking_level=3,
         )
 
         self.assertEqual([match["recipe_id"] for match in matches], [4202])
@@ -324,6 +420,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             self.items,
             self.rules,
+            cooking_level=1,
         )
         near_matches = find_near_matches(
             inventory,
@@ -331,6 +428,7 @@ class CookingTierTests(unittest.TestCase):
             self.items,
             self.rules,
             excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+            cooking_level=1,
         )
 
         self.assertEqual(diagnostics, [])
@@ -377,12 +475,14 @@ class CookingTierTests(unittest.TestCase):
                     recipes,
                     items,
                     rules,
+                    cooking_level=1,
                 )
                 near_matches = find_near_matches(
                     inventory,
                     recipes,
                     items,
                     rules,
+                    cooking_level=1,
                 )
 
                 self.assertEqual(diagnostics, [])
@@ -414,6 +514,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             self.items,
             self.rules,
+            cooking_level=5,
         )
         self.assertEqual(diagnostics, [])
         self.assertEqual([match["recipe_id"] for match in exact_matches], [4701])
@@ -423,6 +524,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             self.items,
             self.rules,
+            cooking_level=5,
         )
         candidates = {
             candidate["item_id"]
@@ -438,6 +540,7 @@ class CookingTierTests(unittest.TestCase):
             [recipe(4705, specific_items=(2527, 2527)), recipe(4706, tier=3, tag_combo=(5,))],
             self.items,
             self.rules,
+            cooking_level=1,
         )
         self.assertEqual(diagnostics, [])
         self.assertEqual([match["recipe_id"] for match in different_length_matches], [4706])
@@ -457,6 +560,7 @@ class CookingTierTests(unittest.TestCase):
             items,
             self.rules,
             completed_recipe_ids={4801},
+            cooking_level=1,
         )
         near_matches = find_near_matches(
             inventory,
@@ -464,6 +568,7 @@ class CookingTierTests(unittest.TestCase):
             items,
             self.rules,
             completed_recipe_ids={4801},
+            cooking_level=1,
         )
 
         self.assertEqual(diagnostics, [])
@@ -494,8 +599,15 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             items,
             self.rules,
+            cooking_level=3,
         )
-        near_matches = find_near_matches(inventory, recipes, items, self.rules)
+        near_matches = find_near_matches(
+            inventory,
+            recipes,
+            items,
+            self.rules,
+            cooking_level=3,
+        )
 
         self.assertEqual(matches, [])
         self.assertEqual(near_matches, [])
@@ -512,6 +624,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             self.items,
             self.rules,
+            cooking_level=1,
         )
         near_matches = find_near_matches(
             inventory,
@@ -519,6 +632,7 @@ class CookingTierTests(unittest.TestCase):
             self.items,
             self.rules,
             excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+            cooking_level=1,
         )
 
         self.assertEqual(diagnostics, [])
@@ -540,6 +654,7 @@ class CookingTierTests(unittest.TestCase):
             recipes,
             visible_items,
             self.rules,
+            cooking_level=1,
         )
 
         self.assertEqual([match["recipe_id"] for match in matches], [4301])

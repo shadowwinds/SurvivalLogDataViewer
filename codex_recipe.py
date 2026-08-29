@@ -36,6 +36,13 @@ SUPPORTED_TIER_SUBCATEGORIES = {
 }
 TIER_LABELS = {1: "High", 2: "Mid", 3: "Low"}
 TIER_LABELS_ZH = {1: "高档", 2: "中档", 3: "低档"}
+COOKING_LEVEL_TO_RECIPE_TIER = {
+    1: 3,
+    2: 3,
+    3: 2,
+    4: 2,
+    5: 1,
+}
 TIER_RULE_KEYS = {
     2: ("CookingTier_Price_Meat_High", "CookingTier_Price_Meat_Mid_Low"),
     3: ("CookingTier_Price_Custard_High", "CookingTier_Price_Custard_Mid_Low"),
@@ -53,7 +60,7 @@ class RecipeConfigError(ValueError):
 
 
 LEGACY_STORAGE_FURNITURE = {15000: "双开门冰箱", 15001: "冰柜"}
-RECIPE_PLAN_CACHE_VERSION = 7
+RECIPE_PLAN_CACHE_VERSION = 8
 
 
 @dataclass(frozen=True)
@@ -480,6 +487,14 @@ def _item_tier(item: RecipeItemSpec, rule: TierRule) -> int:
     return 3
 
 
+def resolve_generic_recipe_tier(cooking_level: object) -> int | None:
+    """Return the generic-recipe tier selected by the leading role's cooking level."""
+
+    if isinstance(cooking_level, bool) or not isinstance(cooking_level, int):
+        return None
+    return COOKING_LEVEL_TO_RECIPE_TIER.get(cooking_level)
+
+
 def resolve_cooking_tier(
     item_ids: Collection[int],
     *,
@@ -607,8 +622,9 @@ def _resolve_actual_recipe_outcome(
     specific_by_combo: Mapping[tuple[int, ...], Collection[RecipeSpec]],
     items: Mapping[int, RecipeItemSpec],
     rules: Mapping[int, TierRule],
+    cooking_level: int | None,
 ) -> _RecipeOutcome | None:
-    """Resolve one complete input using the game's specific-then-generic order."""
+    """Resolve one complete input using specific precedence and level-based generic tiers."""
 
     if not combo or any(
         not _is_cookable_ingredient(items.get(item_id)) for item_id in combo
@@ -628,7 +644,7 @@ def _resolve_actual_recipe_outcome(
     if tag_combo is None:
         return None
 
-    tier = resolve_cooking_tier(combo, items=items, rules=rules)
+    tier = resolve_generic_recipe_tier(cooking_level)
     if tier is None:
         return None
     tier_candidates = generic_by_tier.get(tier, ())
@@ -714,6 +730,7 @@ def match_inventory(
     rules: Mapping[int, TierRule],
     *,
     completed_recipe_ids: Collection[int] = (),
+    cooking_level: int | None = None,
 ) -> tuple[list[dict[str, object]], list[str]]:
     """Return pending recipes that are actually cookable from one inventory.
 
@@ -724,6 +741,11 @@ def match_inventory(
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
     diagnostics: list[str] = []
+    generic_tier = resolve_generic_recipe_tier(cooking_level)
+    if generic_tier is None and any(recipe.tag_combo for recipe in recipes):
+        diagnostics.append(
+            f"主控角色 AgentSave.CookingLevel 无效：{cooking_level!r}；已跳过通用菜肴匹配"
+        )
     counts, lots = _available_item_ids(inventory, items=items)
     tag_groups: dict[tuple[int, ...], list[RecipeSpec]] = defaultdict(list)
     specific_recipes: list[RecipeSpec] = []
@@ -761,13 +783,23 @@ def match_inventory(
         ) if recipe.recipe_id not in completed else None
 
     for tag_combo, group in sorted(tag_groups.items()):
+        if generic_tier is None:
+            continue
         combinations = _enumerate_tag_combinations(tag_combo, counts, items)
         if not combinations:
             continue
+        configured_by_tier = _recipes_by_tier(group)
         candidate_by_tier = _recipes_by_tier(
             group,
             excluded_recipe_ids=completed,
         )
+        if not configured_by_tier.get(generic_tier):
+            diagnostics.append(
+                f"候选组 {tag_combo!r} 缺少 CookingLevel={cooking_level} 对应的 Tier={generic_tier} 菜谱；已跳过"
+            )
+            continue
+        if not candidate_by_tier.get(generic_tier):
+            continue
         combinations_by_recipe: dict[int, list[tuple[int, ...]]] = defaultdict(list)
         for combo in combinations:
             outcome = _resolve_actual_recipe_outcome(
@@ -777,17 +809,9 @@ def match_inventory(
                 specific_by_combo=specific_by_combo,
                 items=items,
                 rules=rules,
+                cooking_level=cooking_level,
             )
             if outcome is None:
-                tier = resolve_cooking_tier(combo, items=items, rules=rules)
-                if tier is None:
-                    diagnostics.append(
-                        f"食材组合 {combo!r} 无法计算 CookingTierResolver 档位；已跳过候选组 {tag_combo!r}"
-                    )
-                elif not candidate_by_tier.get(tier):
-                    diagnostics.append(
-                        f"候选组 {tag_combo!r} 缺少 Tier={tier} 菜谱；已保留配置诊断"
-                    )
                 continue
             if outcome.kind != "generic" or outcome.generic_recipe is None:
                 continue
@@ -797,9 +821,7 @@ def match_inventory(
             selected = recipes_by_id[recipe_id]
             recipe_combinations = combinations_by_recipe[recipe_id]
             representative = min(recipe_combinations)
-            selected_tier = resolve_cooking_tier(representative, items=items, rules=rules)
-            if selected_tier is None:
-                continue
+            selected_tier = generic_tier
             matches.append(
                 _match_payload(
                     selected,
@@ -912,11 +934,13 @@ def find_near_matches(
     *,
     completed_recipe_ids: Collection[int] = (),
     excluded_recipe_ids: Collection[int] = (),
+    cooking_level: int | None = None,
 ) -> list[dict[str, object]]:
     """Find pending one-slot recipes using the same complete-input precedence."""
 
     completed = frozenset(int(recipe_id) for recipe_id in completed_recipe_ids)
     excluded = completed | frozenset(int(recipe_id) for recipe_id in excluded_recipe_ids)
+    generic_tier = resolve_generic_recipe_tier(cooking_level)
     counts, lots = _available_item_ids(inventory, items=items)
     tag_groups: dict[tuple[int, ...], list[RecipeSpec]] = defaultdict(list)
     all_specific_recipes: list[RecipeSpec] = []
@@ -970,8 +994,10 @@ def find_near_matches(
         )
 
     for tag_combo, group in sorted(tag_groups.items()):
+        if generic_tier is None:
+            continue
         candidate_by_tier = _recipes_by_tier(group)
-        if not candidate_by_tier:
+        if not candidate_by_tier.get(generic_tier):
             continue
 
         # An exact generic combination already proves that its resolved tier
@@ -986,6 +1012,7 @@ def find_near_matches(
                 specific_by_combo=specific_by_combo,
                 items=items,
                 rules=rules,
+                cooking_level=cooking_level,
             )
             if outcome is not None and outcome.kind == "generic" and outcome.tier is not None:
                 matched_tiers.add(outcome.tier)
@@ -1028,6 +1055,7 @@ def find_near_matches(
                         specific_by_combo=specific_by_combo,
                         items=items,
                         rules=rules,
+                        cooking_level=cooking_level,
                     )
                     if outcome is None or outcome.kind != "generic":
                         continue
@@ -1285,6 +1313,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             items,
             rules,
             completed_recipe_ids=completed,
+            cooking_level=inventory.cooking_level,
         )
         near_matches = find_near_matches(
             eligible_inventory,
@@ -1293,6 +1322,7 @@ def build_recipe_plan(connection: sqlite3.Connection, history_path: Path) -> dic
             rules,
             completed_recipe_ids=completed,
             excluded_recipe_ids={int(match["recipe_id"]) for match in matches},
+            cooking_level=inventory.cooking_level,
         )
         diagnostics = sorted(set(inventory_diagnostics + match_diagnostics))
         role_context = inventory.role_context
@@ -1405,6 +1435,7 @@ __all__ = [
     "populate_recipe_tables",
     "recipe_specs_from_rows",
     "resolve_cooking_tier",
+    "resolve_generic_recipe_tier",
     "storage_furniture_specs_from_rows",
     "tier_rules_from_settings",
 ]
