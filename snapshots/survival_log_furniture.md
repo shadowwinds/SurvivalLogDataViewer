@@ -1,9 +1,9 @@
 # Survival Log 家具（离线解析）
 
-- 生成时间：2026-08-27T22:19:27+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:48+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
 - 条目数量：87
 - 配置表：`Config_Furniture`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -5022,7 +5022,7 @@
 - 可损坏：否
 - 损坏提示键：
 - 损坏提示：
-- 家具功能：`[80012, 80014, 80016, 80017, 80018, 80019, 80020, 80021, 80022, 80023, 80024]`；解析：选择曲目（ID 80012）、暂停播放（ID 80014）、放上唱片《废墟之上》（ID 80016）、放上唱片《长夜》（ID 80017）、放上唱片《归途》（ID 80018）、放上唱片《荒芜倾城》（ID 80019）、放上唱片《屋檐下的日常》（ID 80020）、放上唱片《一盏灯》（ID 80021）、放上唱片《废墟深处》（ID 80022）、放上唱片《逼近》（ID 80023）、放上唱片《100天以后》（ID 80024）
+- 家具功能：`[80012, 80035, 80036, 80014, 80016, 80017, 80018, 80019, 80020, 80021, 80022, 80023, 80024]`；解析：选择曲目（ID 80012）、自动换碟（ID 80035）、关闭自动换碟（ID 80036）、暂停播放（ID 80014）、放上唱片《废墟之上》（ID 80016）、放上唱片《长夜》（ID 80017）、放上唱片《归途》（ID 80018）、放上唱片《荒芜倾城》（ID 80019）、放上唱片《屋檐下的日常》（ID 80020）、放上唱片《一盏灯》（ID 80021）、放上唱片《废墟深处》（ID 80022）、放上唱片《逼近》（ID 80023）、放上唱片《100天以后》（ID 80024）
 - 移除功能：`[299]`；解析：拆除（ID 299）
 - 移动功能：`[1608]`；解析：移动（ID 1608）
 - 移除获得：`[20004, 20104, 20106, 20210]`；解析：铁皮（ID 20004）、铁丝（ID 20104）、木板（ID 20106）、电器元件（ID 20210）

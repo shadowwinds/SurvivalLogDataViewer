@@ -1,9 +1,9 @@
 # Survival Log 制造（离线解析）
 
-- 生成时间：2026-08-27T22:19:26+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:48+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
 - 条目数量：125
 - 配置表：`Config_ProductionList`、`Config_ProductionLv`、`Config_Item`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -693,15 +693,15 @@
 - 笔记分类：1
 - 防御经验：0
 
-### 加热设备包裹（ID 314）
+### 电暖器包裹（ID 314）
 
 - ID：314
 - 制造名称键：ProductionList_ShopName_314
-- 制造名称：加热设备包裹
+- 制造名称：电暖器包裹
 - Demo 模式：0
 - 可使用：是
 - 材料：`[20004, 20004, 20004, 20210, 20210]`；解析：铁皮（ID 20004）、铁皮（ID 20004）、铁皮（ID 20004）、电器元件（ID 20210）、电器元件（ID 20210）
-- 产物：`[14014]`；解析：加热设备包裹（ID 14014）
+- 产物：`[14014]`；解析：电暖器包裹（ID 14014）
 - 失败产物：`[]`；解析：无
 - 要求等级：3
 - 折扣率：1

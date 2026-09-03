@@ -217,6 +217,8 @@ class CodexSaveState:
     unknown_ids: dict[str, tuple[int, ...]] = field(default_factory=dict)
     history_records: tuple[SaveHistoryRecord, ...] = ()
     last_play_file_name: str = ""
+    achievement_ids: tuple[int, ...] = ()
+    achievement_status_available: bool = False
 
     @property
     def category_counts(self) -> dict[str, int]:
@@ -513,7 +515,8 @@ def _parse_history_data_strict(
             history_records.append(_read_history_child(reader, index))
 
     last_play_file_name = reader.memorypack_string("LastPlayFileName") or ""
-    reader.int_list("UnlockedAchievementIds")
+    achievement_ids = reader.int_list("UnlockedAchievementIds") or ()
+    _validate_achievement_ids(achievement_ids, "UnlockedAchievementIds")
     reader.int_list("UnlockedPlayerSelectIds")
     _read_history_int_list_map(reader, "ClearedEndings")
     _read_history_string_bool_map(reader, "GlobalEasterEggFlags")
@@ -585,6 +588,8 @@ def _parse_history_data_strict(
         candidate_offsets=(codex_offset,),
         history_records=tuple(history_records),
         last_play_file_name=last_play_file_name,
+        achievement_ids=achievement_ids,
+        achievement_status_available=True,
     )
 
 
@@ -1892,7 +1897,14 @@ def _read_codex_map(
     return raw_categories, codex_offset
 
 
-def _read_common_prefix(reader: _Reader) -> int:
+def _validate_achievement_ids(ids: tuple[int, ...], field: str) -> None:
+    if any(achievement_id <= 0 for achievement_id in ids):
+        raise SaveParseError(f"存档字段 {field} 包含非法成就 ID：{ids!r}")
+    if len(set(ids)) != len(ids):
+        raise SaveParseError(f"存档字段 {field} 包含重复成就 ID")
+
+
+def _read_common_prefix(reader: _Reader) -> tuple[int, tuple[int, ...]]:
     """Read fields whose order is shared before the variable codex region."""
 
     reader.object_member_count(HISTORY_DATA_MEMBER_COUNT, "HistoryData")
@@ -1903,10 +1915,11 @@ def _read_common_prefix(reader: _Reader) -> int:
             _skip_history_child(reader, index)
 
     reader.memorypack_string("LastPlayFileName")
-    reader.int_list("UnlockedAchievementIds")
+    achievement_ids = reader.int_list("UnlockedAchievementIds") or ()
+    _validate_achievement_ids(achievement_ids, "UnlockedAchievementIds")
     reader.int_list("UnlockedPlayerSelectIds")
     reader.int_list("ClearedEndings")
-    return reader.pos
+    return reader.pos, achievement_ids
 
 
 def _normalize_known_category_ids(
@@ -2093,8 +2106,9 @@ def parse_codex_save_bytes(
         prefix_error: SaveParseError | None = strict_error
 
     reader = _Reader(data)
+    prefix_achievement_ids: tuple[int, ...] | None = None
     try:
-        search_start = _read_common_prefix(reader)
+        search_start, prefix_achievement_ids = _read_common_prefix(reader)
     except SaveParseError as exc:
         prefix_error = exc
         search_start = 1
@@ -2148,6 +2162,8 @@ def parse_codex_save_bytes(
         candidate_offsets=tuple(candidate.offset for candidate in candidates),
         unknown_ids=selected.unknown_ids,
         history_records=(),
+        achievement_ids=prefix_achievement_ids or (),
+        achievement_status_available=prefix_achievement_ids is not None,
     )
 
 
@@ -2343,6 +2359,8 @@ def build_save_diagnostic(
                 "candidate_score": list(state.candidate_score),
                 "candidate_offsets": list(state.candidate_offsets),
                 "category_counts": state.category_counts,
+                "achievement_count": len(state.achievement_ids),
+                "achievement_status_available": state.achievement_status_available,
                 "unknown_ids": {
                     category: list(values)
                     for category, values in state.unknown_ids.items()

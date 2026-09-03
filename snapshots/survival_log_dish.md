@@ -1,9 +1,9 @@
 # Survival Log 菜肴（离线解析）
 
-- 生成时间：2026-08-27T22:19:25+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:46+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
 - 条目数量：496
 - 配置表：`Config_CookingRecipe`、`Config_Item`、`Config_ItemSubCategory`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -1604,7 +1604,7 @@
 - 菜肴名称键：CookingRecipe_RecipeName_4018
 - 菜肴名称：巨型火鸡盛宴
 - 食材分类：`[]`；解析：无
-- 具体食材：`[2324]`；解析：巨型火鸡（ID 2324）
+- 具体食材：`[2331]`；解析：巨型火鸡肉块（ID 2331）
 - 完美产物 ID：巨型火鸡盛宴(完美)（ID 12101）
 - 良好产物 ID：巨型火鸡盛宴(优良)（ID 12102）
 - 普通产物 ID：巨型火鸡盛宴(普通)（ID 12103）
@@ -3201,7 +3201,7 @@
 - ID：5006
 - 菜肴名称键：CookingRecipe_RecipeName_5006
 - 菜肴名称：清炒菌菇
-- 食材分类：`[11]`；解析：菌菇（ID 11）
+- 食材分类：`[11, 8]`；解析：菌菇（ID 11）、调味品（ID 8）
 - 具体食材：`[]`；解析：无
 - 完美产物 ID：清炒菌菇(完美)（ID 12568）
 - 良好产物 ID：清炒菌菇(优良)（ID 12569）
@@ -3938,7 +3938,7 @@
 - ID：6003
 - 菜肴名称键：CookingRecipe_RecipeName_6003
 - 菜肴名称：鲜蔬沙拉
-- 食材分类：`[5]`；解析：蔬菜（ID 5）
+- 食材分类：`[5, 8]`；解析：蔬菜（ID 5）、调味品（ID 8）
 - 具体食材：`[]`；解析：无
 - 完美产物 ID：鲜蔬沙拉(完美)（ID 60009）
 - 良好产物 ID：鲜蔬沙拉(优良)（ID 60010）
@@ -4001,7 +4001,7 @@
 - ID：6006
 - 菜肴名称键：CookingRecipe_RecipeName_6006
 - 菜肴名称：山珍鲜菇
-- 食材分类：`[11]`；解析：菌菇（ID 11）
+- 食材分类：`[11, 8]`；解析：菌菇（ID 11）、调味品（ID 8）
 - 具体食材：`[]`；解析：无
 - 完美产物 ID：山珍鲜菇(完美)（ID 60021）
 - 良好产物 ID：山珍鲜菇(优良)（ID 60022）
@@ -4738,7 +4738,7 @@
 - ID：7003
 - 菜肴名称键：CookingRecipe_RecipeName_7003
 - 菜肴名称：蔫菜沙拉
-- 食材分类：`[5]`；解析：蔬菜（ID 5）
+- 食材分类：`[5, 8]`；解析：蔬菜（ID 5）、调味品（ID 8）
 - 具体食材：`[]`；解析：无
 - 完美产物 ID：蔫菜沙拉(完美)（ID 70009）
 - 良好产物 ID：蔫菜沙拉(优良)（ID 70010）
@@ -4801,7 +4801,7 @@
 - ID：7006
 - 菜肴名称键：CookingRecipe_RecipeName_7006
 - 菜肴名称：老菇炒盘
-- 食材分类：`[11]`；解析：菌菇（ID 11）
+- 食材分类：`[11, 8]`；解析：菌菇（ID 11）、调味品（ID 8）
 - 具体食材：`[]`；解析：无
 - 完美产物 ID：老菇炒盘(完美)（ID 70021）
 - 良好产物 ID：老菇炒盘(优良)（ID 70022）

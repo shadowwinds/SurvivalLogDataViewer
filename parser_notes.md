@@ -1,10 +1,18 @@
 # Survival Log 图鉴离线解析说明
 
+## 成就模块（当前实现）
+
+当前资源中的 `Config_Achievement` 已按 21 字段 MemoryPack schema 读取，并以配置 ID 为主键写入静态库 `achievements` 表；`achievement_conditions.json` 保存全部成就的分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项。条件文件的 `source_version`、ID 集合、名称和隐藏标记必须与当前资源一致，数据库更新会在校验失败时保留旧库。
+
+成就完成状态只读取 `HistorySave.bytes` 的全局 `HistoryData.UnlockedAchievementIds`，不按 `Save_*.bytes` 子存档区分。当前配置中未出现的已解锁 ID 只写入诊断；旧存档无法确认该字段时，以及主存档和 `.bak` 都无法读取时，保留上一次有效成就状态。成就使用 runtime 的 `achievement_completion` 表和独立的 `已完成/总数`统计，不计入六类图鉴总进度；网页侧边栏显示全部成就，包括隐藏成就，约每 5 秒轮询一次。
+
+条件整理的边界包括：制造图鉴成就是图鉴解锁数，不是累计制造次数；社区群成就是成功发送表态/回复次数，取消、普通私聊和独立八卦选项不计；纪念品成就要求 9300-9307 各至少有一个实例实际摆放，仅拥有或放在背包中不计；3003 的预算使用灾变前配置预算，储蓄能力提高可用资金额度不会改变原始预算门槛；结局成就 1102-1108 仍要求实际触发对应结局事件，并遵守公共的承诺消耗、单存档单路线和最终尸潮边界。
+
 ## 1. 项目结论
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机 `HistorySave.bytes` 中的图鉴完成状态。不启动游戏，不修改存档、mod DLL、游戏资源或 Steam Cloud。
 
-当前本地游戏资源版本为 `1.0.15218`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置：
+当前本地游戏资源版本为 `1.0.15511`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -14,7 +22,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前版本主图鉴配置总量为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87，六类分类映射合计 `935`。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
+当前版本主图鉴配置总量为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87，六类分类映射合计 `935`；当前 `Config_Achievement` 读取 93 行、21 个字段。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
 
 ## 2. 游戏图鉴和存档
 
@@ -36,11 +44,21 @@
 
 `codex_save.py` 先校验 `HistoryData` 根对象、历史条目和公共前缀，再从公共前缀之后扫描所有字节 offset 寻找图鉴分类映射，不假设图鉴字段位于固定位置或全局 4 字节对齐。候选必须通过分类 ID、集合边界、正数且不重复的条目 ID，以及后续整数列表链校验；数据库同步时还使用当前六类配置的源 ID 集合参与评分。评分相同但映射相同的候选可以合并，评分相同但映射不同则报告歧义并保留上一次状态。
 
+当前严格 `HistoryData-v16` schema 的第 4 个字段为全局 `UnlockedAchievementIds`；它与 `CodexUnlocked` 同属 HistorySave，不属于任意 `Save_*.bytes` 子存档。旧版结构扫描只有在能通过公共前缀确认该整数列表时才标记成就状态可用；无法确认时只保留旧状态，不把候选字节猜成成就。同步时当前配置 ID 之外的存档 ID 进入诊断，不显示为虚假成就。
+
 解析器校验 `HistoryData` 成员数、历史条目成员数、分类 ID、集合长度、重复 ID 和文件读取稳定性。存档正在写入或主文件解析失败时，只读尝试同名 `.bak`；两者均失败则数据库保留上一次有效完成状态。未识别的存档条目 ID 会保留在诊断结果中，不会静默转换为其他条目。
 
 独立版首次实际使用、首次 API 同步或启动错误时才建立分发目录中的 UTF-8 JSON Lines 日志 `SurvivalLogDataViewer.log`；新打包目录不预置日志，源码版不生成存档同步诊断日志。分发目录不可写时回退到 `%LOCALAPPDATA%\SurvivalLogDataViewer`。日志记录存档签名、解析阶段、图鉴映射 offset、候选评分、分类数量和错误原因，不记录原始存档字节；相同存档签名和错误只记录一次，日志达到 2 MiB 时轮转一个 `.1` 文件。
 
-完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。
+完成状态由 `HistorySave.bytes` 实时读取，具体完成数量随存档变化。食品和猎物可能引用同一个 `Config_Item`；数据库在 `completion` 中只保存一份主状态，同时在 `category_completion` 中保存按分类的完成状态，使两个分类分别计数。成就使用独立的 `achievement_completion` 表和独立统计，不并入六类图鉴总进度。
+
+### 成就条件说明
+
+`Config_Achievement` 使用当前 bundle 中验证过的 21 字段 schema：ID、排序、名称/本地化名称、描述/本地化描述、Steam 成就键、图标、展示标记、成就类型、浮点 `Value` 列表、分类、触发模式、计数器键、比较方式、阈值、条件组 ID、隐藏标记、进度计数器键和进度目标。解析器验证对象数量、字段数量、浮点列表长度、重复 ID 和数据 EOF。
+
+人工整理的条件保存在跟踪文件 [`achievement_conditions.json`](./achievement_conditions.json)，由 `codex_achievements.py` 校验 `source_version`、ID 集合、名称和隐藏标记。每条说明包括分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项；当前版本的结局成就 1102-1108 还共享“必须实际触发结局、同一存档只能承诺一条路线、承诺事件消耗 9048、撑过最终尸潮”等边界说明。配置版本或成就 ID 发生变化而条件文件未更新时，构建和自动更新会报错，不会静默显示不完整条件。
+
+其中，图纸成就按制造图鉴解锁数判断，不按累计制作次数判断；社区成就按成功发送的社区群表态/回复次数判断，取消回复、普通私聊和独立八卦选项不计；纪念品成就要求指定 9300-9307 家具各至少有一个实例实际摆放，只有拥有或放在背包中不计。`3003` 的“预算”取灾变前配置预算，储蓄能力增加的是可用资金上限，不会改变该成就的原始预算门槛；是否满足仍以游戏实际触发的条件组和禁用标记为准。
 
 ### 存档可烹饪菜肴
 
@@ -50,7 +68,7 @@
 
 子存档按当前 `GameSaveData` 的 `CurSave` 读取。主控 `LeadingRole.ItemList` 始终作为背包来源；先读取 `LeadingRole.Name` 并按已验证名称映射确定角色，再按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 的顺序兼容回退，名称未知、缺失或与数字身份冲突时会保留角色上下文和诊断。储物家具以静态库 `storage_furniture` 表为权威来源，覆盖当前 `Config_Furniture` 中 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的全部配置，不受图鉴 `is_current` 可见性影响，也不按本地化名称筛选；旧数据库缺少专用表时才回退到旧的当前图鉴行。家具优先使用 `BagFurnitureConfigId`，否则使用 `AgentConfigId`，同名的多个家具实例均单独保留。容器必须同时有储物行为配置、当前角色槽位和地图证据：先比较主控 `MapConfigIdHome`、`ChapterAgentMap` 地图键与实例 `MapConfigId`，任一地图 ID 不一致始终判定为其他位置；再按当前角色选择槽位，角色 1 使用 `HomeBuildingPos`/`Home_`，角色 2 使用 `NeighborGirlBuildingPos`，角色 3 使用 `WarehousePos`。空槽位不再因地图相同而视为家中，其他角色的已知槽位判定为其他位置，未知槽位判定为未知并跳过库存；位置、实例和角色解析诊断仍保留在后端 `storage_containers`/存档 JSON。`IsDoorBox == true` 仅在地图明确属于当前家中时作为兼容储物容器读取；工作台抽屉 `WorkbenchDrawerItems` 作为家中直接容器读取，车辆后备箱和普通 `ChapterAgentMap` 条目忽略。旧版 `DoorBoxItems`/`DoorBoxItems2` 只对 15000/15001 保留兼容回退，且仅在没有对应实际家具并已解析出已知角色时使用。
 
-数据库 schema v8 额外保存全部 `Config_Item` 的烹饪相关字段、按储物功能生成的家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建，旧 v6 源码库会拆分为静态库和 runtime 库。菜肴匹配拆分为两个独立指令：`SpecificItems` 按 `Config_Item.Category == 1 && CanCook == true` 和实际物品 ID 多重集合精确匹配；`TagCombo` 按子分类数量枚举库存组合，并用参与食材的 `SubCategory`、`price` 和 `Config_GlobalSetting` 阈值解析 `CookingTier`，取支持质量档位的最高档，再应用可选的质量保底 rank，最后选择同档位配方。主食等不在 native 质量子分类集合中的食材只负责满足 `TagCombo`，不改变档位。两类结果仍互不预留或扣除共享食材，但每个完整食材组合先执行 `SpecificItems` 特色菜肴优先判断，只有未命中特色菜肴时才允许将 `TagCombo` 通用菜肴作为匹配候选；因此菠菜只有在补入后的完整组合没有命中特色菜肴时，才可作为通用菜肴候选。近匹配只在其他槽位和数量全部满足、加入候选食材后确实能得到有效目标通用菜肴且未命中特色菜肴时返回；候选可来自配置上可烹饪但当前尚未拥有的食材，并统一放在 `missing_item_candidates`。智能菜谱页面同时展示特色菜肴和通用菜肴结果；当前存档解析未持久化 native 的 `TagTierFloorRank`，因此计划构建默认使用保底 rank 0。
+数据库 schema v9 额外保存全部 `Config_Item` 的烹饪相关字段、按储物功能生成的家具映射和七类烹饪档位阈值及其 `Config_GlobalSetting` 键；旧 v5 数据库会强制重建，旧 v6 源码库会拆分为静态库和 runtime 库。菜肴匹配拆分为两个独立指令：`SpecificItems` 按 `Config_Item.Category == 1 && CanCook == true` 和实际物品 ID 多重集合精确匹配；`TagCombo` 按子分类数量枚举库存组合，并用参与食材的 `SubCategory`、`price` 和 `Config_GlobalSetting` 阈值解析 `CookingTier`，取支持质量档位的最高档，再应用可选的质量保底 rank，最后选择同档位配方。主食等不在 native 质量子分类集合中的食材只负责满足 `TagCombo`，不改变档位。两类结果仍互不预留或扣除共享食材，但每个完整食材组合先执行 `SpecificItems` 特色菜肴优先判断，只有未命中特色菜肴时才允许将 `TagCombo` 通用菜肴作为匹配候选；因此菠菜只有在补入后的完整组合没有命中特色菜肴时，才可作为通用菜肴候选。近匹配只在其他槽位和数量全部满足、加入候选食材后确实能得到有效目标通用菜肴且未命中特色菜肴时返回；候选可来自配置上可烹饪但当前尚未拥有的食材，并统一放在 `missing_item_candidates`。智能菜谱页面同时展示特色菜肴和通用菜肴结果；当前存档解析未持久化 native 的 `TagTierFloorRank`，因此计划构建默认使用保底 rank 0。
 
 ### ChapterAgentMap 外层键判定（当前实现）
 
@@ -139,7 +157,7 @@ python "codex_database.py" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v8 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断；`POST /api/recipe-plans/refresh?file_name=...` 只重读指定的当前子存档，并将结果合并回现有计划。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v9 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断；`POST /api/recipe-plans/refresh?file_name=...` 只重读指定的当前子存档，并将结果合并回现有计划。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
 源码默认数据库为根目录的 `survival_log_codex.sqlite3`，runtime 文件固定为根目录的 `survival_log_codex_runtime.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的 `data/survival_log_codex.sqlite3` 时，工具会先执行 `PRAGMA integrity_check`，校验通过后在临时文件中原子拆分静态和 runtime 数据库，并保留完成状态、存档哈希和已有缓存；存在 WAL/SHM 旁车文件、锁定或目标冲突时会保留旧文件。显式 `--database` 路径不会触发默认迁移。
 

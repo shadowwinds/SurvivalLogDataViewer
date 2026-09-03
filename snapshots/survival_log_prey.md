@@ -1,9 +1,9 @@
 # Survival Log 猎物（离线解析）
 
-- 生成时间：2026-08-27T22:19:26+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:48+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
 - 条目数量：19
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。

@@ -1,0 +1,1991 @@
+{
+  "source_version": "1.0.15511 / catalog 2.3.1",
+  "common_notes": [
+    "必须实际触发并确认对应结局事件；只看到路线介绍、收到路线提示或满足路线前置条件，都不会直接完成成就。",
+    "选择路线的承诺事件都要求消耗 1 个「军用维修套件」（物品 ID `9048`）。当前版本路线承诺截止日为第 74 天；第 75 天起不能再选择新的结局路线。",
+    "同一存档只能成功承诺一条结局路线。各路线的承诺条件会排除其他路线已经选择的标记，因此不能在同一局同时承诺多条路线。",
+    "7 个结局条件都要求 `TAG_FINAL_WAVE_SURVIVED`，也就是实际撑过终局尸潮。到达第 87 天但没有撑过终局尸潮，或者只触发了路线选择事件，均不算完成。"
+  ],
+  "achievements": [
+    {
+      "id": 1001,
+      "name": "灾变第一夜",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "进入灾变后的生存阶段，并活过第 1 天。只要没有在第 1 天结束前失败即可满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [
+        1.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1001",
+        "Config_Achievement.SteamAPI:FIRST_NIGHT",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1002,
+      "name": "第一周",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "灾变后连续生存到第 7 天。条件关注生存天数，不要求完成特定路线或任务。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 7.0,
+      "value_parameters": [
+        7.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1002",
+        "Config_Achievement.SteamAPI:FIRST_WEEK",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1003,
+      "name": "一个月",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "灾变后活到第 30 天。达到该天数即可，不要求在当天完成结局。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [
+        30.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1003",
+        "Config_Achievement.SteamAPI:FIRST_MONTH",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1004,
+      "name": "过半",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "灾变后活到第 50 天。核心条件是生存天数达到 50。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 50.0,
+      "value_parameters": [
+        50.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1004",
+        "Config_Achievement.SteamAPI:HALFWAY",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1005,
+      "name": "摊牌之日",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "撑到第 70 天，并让各方答复陆续送达。不是只推进到 70 天前的某个准备阶段，而是要触发第 70 天对应的答复流程。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 70.0,
+      "value_parameters": [
+        70.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1005",
+        "Config_Achievement.SteamAPI:SHOWDOWN_DAY",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1006,
+      "name": "我的选择",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "在游戏提供的结局路线中做出结局承诺，选定任意一条路线。配置会监听 8 个结局路线选择事件中的任意一个，单纯看到路线介绍但没有确认选择不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1006",
+        "Config_Achievement.SteamAPI:MY_CHOICE",
+        "Config_Achievement.Category:1",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32101"
+      ]
+    },
+    {
+      "id": 1007,
+      "name": "最后的尸潮",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "撑过第 87 天的终局尸潮，在终局尸潮结束后仍然存活。仅到达第 87 天但没有撑过尸潮不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 88.0,
+      "value_parameters": [
+        88.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1007",
+        "Config_Achievement.SteamAPI:FINAL_WAVE",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1008,
+      "name": "一百天",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "灾变后活到第 100 天。达到 100 天即可，不要求特定结局。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 100.0,
+      "value_parameters": [
+        100.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1008",
+        "Config_Achievement.SteamAPI:ONE_HUNDRED_DAYS",
+        "Config_Achievement.Category:1"
+      ]
+    },
+    {
+      "id": 1101,
+      "name": "撤离",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "完整达成「救援」结局。需要实际结算为该结局，不能只选择救援路线。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 5.0,
+      "value_parameters": [
+        5.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1101",
+        "Config_Achievement.SteamAPI:ENDING_RESCUE",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1102,
+      "name": "共同生活",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「女孩」结局。内部条件是 `TAG_LINE_GIRL_CHOSEN`、`TAG_FINAL_WAVE_SURVIVED`、`TAG_NEIGHBOR_RESCUE3_COMPLETE`，并且不能有 `TAG_NEIGHBOR_DEAD`。",
+      "method": "推进女孩邻居线并完成第三次救助；相关收尾阶段包括「女孩求助·搭桥的料」。在第 74 天及以前，通过「把冬天送过去」消耗军用维修套件，正式承诺女孩路线；保持女孩邻居存活，最后撑过终局尸潮。",
+      "role_restriction": "仅限 `PlayerSelectId=1`，即男性主角路线。“女孩”指结局对象，不是要求使用女孩角色。",
+      "notes": [],
+      "numeric_threshold": 6.0,
+      "value_parameters": [
+        6.0
+      ],
+      "exclusions": [
+        "TAG_NEIGHBOR_DEAD"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:1102",
+        "Config_Achievement.SteamAPI:ENDING_GIRL",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1103,
+      "name": "网",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「陌生人」结局。内部条件是 `TAG_LINE_STRANGER_CHOSEN`、`TAG_FINAL_WAVE_SURVIVED`、`TAG_LINE_STRANGER_CAMP_DONE`。",
+      "method": "先在第 71 天的路线检查前后保持足够数量的被支援幸存者存活，使陌生人路线可用；在第 74 天及以前通过「更远的航程」消耗军用维修套件，承诺陌生人路线。路线选定后，用无人机向幸存者据点投送物资，累计完成 4 趟，完成据点筹备，最后撑过终局尸潮。",
+      "role_restriction": "仅限 `PlayerSelectId=1`，男性主角路线。",
+      "notes": [
+        "数值注意：当前 `Config_GlobalSetting` 的有效门槛是至少 6 名被支援幸存者存活，检查日为第 71 天；但事件文案仍写“十二个呼号”。这是当前版本的配置值与文案不一致，应以实际配置门槛 6 人为准。"
+      ],
+      "numeric_threshold": 7.0,
+      "value_parameters": [
+        7.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1103",
+        "Config_Achievement.SteamAPI:ENDING_STRANGER",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1104,
+      "name": "堡垒",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「安全屋」结局。内部条件是 `TAG_LINE_SHELTER_CHOSEN`、`TAG_FINAL_WAVE_SURVIVED`、`TAG_LINE_SHELTER_HELD`。",
+      "method": "先把房屋防御、门窗耐久和供电准备到上述门槛，在第 74 天及以前通过「不眠的防线」消耗军用维修套件，承诺安全屋路线；保持防御和供电有效，撑过终局尸潮。",
+      "role_restriction": "男性主角和女孩角色均可，即 `PlayerSelectId=1` 或 `2`。",
+      "notes": [
+        "路线前置要求：门窗加固耐久汇总达到 `600`；大门耐久至少 `2000`；窗户耐久至少 `1500`；尖刺障碍（家具 ID `36002`）、电网（家具 ID `36003`）、机械电锯（家具 ID `36004`）分别至少布置 `4` 个；并满足第 60–69 天的电力储备检查，电力储备比例参数为 `80%`。"
+      ],
+      "numeric_threshold": 8.0,
+      "value_parameters": [
+        8.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1104",
+        "Config_Achievement.SteamAPI:ENDING_SHELTER",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1105,
+      "name": "真相",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「真相」结局。内部条件是 `TAG_LINE_TRUTH_CHOSEN`、`TAG_LINE_TRUTH_EXPLORED`、`TAG_FINAL_WAVE_SURVIVED`。",
+      "method": "依次取得医院线索 1、2、3 并完成医院线索拼合；找到家具 ID `9297`「记录仪」，带回家并摆放好；再通过「读出答案」消耗军用维修套件，承诺真相路线。到达第 75 天后触发「真相·最后的探索」，取得第 4 条线索并完成最终探索，最后撑过终局尸潮。",
+      "role_restriction": "三种角色均可：`PlayerSelectId=1` 男性主角、`PlayerSelectId=2` 女孩角色、`PlayerSelectId=3` 仓库角色。三个角色分别有对应的真相结局事件，但完成条件相同。",
+      "notes": [],
+      "numeric_threshold": 9.0,
+      "value_parameters": [
+        9.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1105",
+        "Config_Achievement.SteamAPI:ENDING_TRUTH",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1106,
+      "name": "温室",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「末日温室」结局。内部条件是 `TAG_LINE_GREENHOUSE_CHOSEN`、`TAG_LINE_GREENHOUSE_DONE`、`TAG_FINAL_WAVE_SURVIVED`。",
+      "method": "在第 74 天及以前通过「长明的灯」消耗军用维修套件，承诺温室路线；按事件要求给每个花盆补充光照和恒温，完成温室建设，最后撑过终局尸潮。代码中的提交参数为光照 `2`、恒温 `2`，配置没有将其展开成额外的材料数量，实际以每个花盆的光照/恒温事件完成为准。",
+      "role_restriction": "仅限 `PlayerSelectId=2`，女孩角色路线。",
+      "notes": [
+        "路线前置要求：到第 71 天的路线检查时，家中至少有 `24` 个种植花盆。"
+      ],
+      "numeric_threshold": 11.0,
+      "value_parameters": [
+        11.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1106",
+        "Config_Achievement.SteamAPI:ENDING_GREENHOUSE",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1107,
+      "name": "陪伴",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「陪伴」结局。内部条件是 `TAG_LINE_COMPANION_CHOSEN`、`TAG_COMPANION_RESCUE3_COMPLETE`、`TAG_FINAL_WAVE_SURVIVED`，并且不能有 `TAG_COMPANION_MAN_DEAD`。",
+      "method": "推进伙伴线并完成第三次救助；确保伙伴中的男性角色没有死亡。在第 74 天及以前通过「把冬天送过去」消耗军用维修套件，承诺陪伴路线，最后撑过终局尸潮。",
+      "role_restriction": "仅限 `PlayerSelectId=2`，女孩角色路线。",
+      "notes": [],
+      "numeric_threshold": 12.0,
+      "value_parameters": [
+        12.0
+      ],
+      "exclusions": [
+        "TAG_COMPANION_MAN_DEAD"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:1107",
+        "Config_Achievement.SteamAPI:ENDING_COMPANION",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1108,
+      "name": "补给站",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "达成「铁桶枢纽」结局。内部条件是 `TAG_LINE_SUPPLY_CHOSEN`、`TAG_LINE_SUPPLY_HELD`、`TAG_FINAL_WAVE_SURVIVED`。",
+      "method": "在第 71 天前准备好食物、物资和储物设施；在第 74 天及以前通过「落锁」消耗军用维修套件，修好并加固补给站大门，保持补给站守住终局尸潮。",
+      "role_restriction": "仅限 `PlayerSelectId=3`，仓库角色路线。",
+      "notes": [
+        "路线前置要求：第 71 天路线检查时同时满足总饱食度至少 `1200`、仓库物品总数量至少 `180`、储物设施至少 `8` 个；三项必须在同一次检查中同时达标。"
+      ],
+      "numeric_threshold": 13.0,
+      "value_parameters": [
+        13.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1108",
+        "Config_Achievement.SteamAPI:ENDING_SUPPLY_HUB",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1109,
+      "name": "留在原地",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "完整达成「躺平」结局。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 10.0,
+      "value_parameters": [
+        10.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1109",
+        "Config_Achievement.SteamAPI:ENDING_LIE_FLAT",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1110,
+      "name": "打工仔的故事",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "使用“打工仔”角色，并用该角色完整达成任意一个结局。只使用该角色开始游戏但没有结局结算不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [
+        1.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1110",
+        "Config_Achievement.SteamAPI:STORY_WORKER",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1111,
+      "name": "大学生的故事",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "使用“大学生”角色，并用该角色完整达成任意一个结局。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 2.0,
+      "value_parameters": [
+        2.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1111",
+        "Config_Achievement.SteamAPI:STORY_STUDENT",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1112,
+      "name": "仓管员的故事",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "使用“仓库管理员”角色，并用该角色完整达成任意一个结局。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 3.0,
+      "value_parameters": [
+        3.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1112",
+        "Config_Achievement.SteamAPI:STORY_KEEPER",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1113,
+      "name": "三段人生",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "让三个不同角色各自至少通关一次。配置进度目标为 3，重复使用同一个角色通关不能代替另外两个角色。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 3.0,
+      "value_parameters": [
+        0.0,
+        3.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1113",
+        "Config_Achievement.SteamAPI:THREE_LIVES",
+        "Config_Achievement.Category:2",
+        "Config_Achievement.ProgressTarget:3.0"
+      ]
+    },
+    {
+      "id": 1114,
+      "name": "所有的路",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "收集并完成全部 9 种不同结局。完成数量达到 9 种即可，重复同一种结局不增加有效进度。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 9.0,
+      "value_parameters": [
+        9.0,
+        0.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1114",
+        "Config_Achievement.SteamAPI:ALL_ROADS",
+        "Config_Achievement.Category:2",
+        "Config_Achievement.ProgressTarget:9.0"
+      ]
+    },
+    {
+      "id": 1201,
+      "name": "电工本色",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "在家中同时具备太阳能板、燃油发电机、蓄电池、鼠笼发电机四类供电设备，并且全屋处于不断电状态。条件组要求家具类型 `[2,3,5,6]` 全部具备，同时满足供电检查。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1201",
+        "Config_Achievement.SteamAPI:ELECTRICIAN",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32102"
+      ]
+    },
+    {
+      "id": 1202,
+      "name": "织网人",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "先选定“陌生人”路线，再为幸存者据点投送物资 12 次。每次成功投送使 `camp.prep.supply` 增加，达到 `12` 才完成；没有选定该路线时，单独投送不满足完整条件。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 12.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1202",
+        "Config_Achievement.SteamAPI:WEAVER",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:camp.prep.supply",
+        "Config_Achievement.Threshold:12.0",
+        "Config_Achievement.ProgressCounterKey:camp.prep.supply",
+        "Config_Achievement.ProgressTarget:12.0"
+      ]
+    },
+    {
+      "id": 1203,
+      "name": "拼图",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "收集全部真相线索。当前配置目标为 `clue >= 4`，所以需要集齐 4 条真相线索，而不是只发现其中一部分。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 4.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1203",
+        "Config_Achievement.SteamAPI:PUZZLE",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:clue",
+        "Config_Achievement.Threshold:4.0",
+        "Config_Achievement.ProgressCounterKey:clue",
+        "Config_Achievement.ProgressTarget:4.0"
+      ]
+    },
+    {
+      "id": 1211,
+      "name": "绿手指",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "在家中拥有或布置满 24 个种植容器。条件组直接检查种植容器数量 `PlantPotCount = 24`，少于 24 个时不完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1211",
+        "Config_Achievement.SteamAPI:GREEN_FINGER",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32104"
+      ]
+    },
+    {
+      "id": 1212,
+      "name": "一顿好饭",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "成功做出 10 道完美料理。每次料理需要实际判定为“完美”，普通、失败或仅放入材料不计入 `cook.perfect`。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 10.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1212",
+        "Config_Achievement.SteamAPI:GOOD_MEAL",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:cook.perfect",
+        "Config_Achievement.Threshold:10.0",
+        "Config_Achievement.ProgressCounterKey:cook.perfect",
+        "Config_Achievement.ProgressTarget:10.0"
+      ]
+    },
+    {
+      "id": 1213,
+      "name": "隔壁的人",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "把邻居关系推进到真正建立羁绊的阶段，触发邻居温馨结局事件 `TAG_NEIGHBOR_ENDING_COZY`。单纯与邻居聊天或完成普通邻居事件不一定满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1213",
+        "Config_Achievement.SteamAPI:NEIGHBOR_BOND",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32105"
+      ]
+    },
+    {
+      "id": 1221,
+      "name": "库存盘点",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "在同一次条件检查中同时满足三项储备要求：总饱腹度至少 1200、物品数量至少 180、储物家具至少 8 个。三项必须同时达标，分别达标后又减少其中一项不会完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1221",
+        "Config_Achievement.SteamAPI:INVENTORY_CHECK",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32106"
+      ]
+    },
+    {
+      "id": 1222,
+      "name": "供应链",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "与 8 位不同的陌生人完成短信交易。计数器 `trade.stranger.partner` 统计不同交易对象，和同一个人重复交易不会替代新的陌生人。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 8.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1222",
+        "Config_Achievement.SteamAPI:SUPPLY_CHAIN",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trade.stranger.partner",
+        "Config_Achievement.Threshold:8.0",
+        "Config_Achievement.ProgressCounterKey:trade.stranger.partner",
+        "Config_Achievement.ProgressTarget:8.0"
+      ]
+    },
+    {
+      "id": 1223,
+      "name": "面单上的名字",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "先收集至少 3 段单据线索，再选定补给站路线。条件要求 `clue >= 3` 且触发 `TAG_LINE_SUPPLY_CHOSEN`，只满足其中一项不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1223",
+        "Config_Achievement.SteamAPI:NAME_ON_THE_SLIP",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32107"
+      ]
+    },
+    {
+      "id": 2001,
+      "name": "开始囤货",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "在灾变发生前，把物资总重量囤积到超过 5 公斤。检查的是灾变前的囤货状态，不是灾变后的家中库存。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 5000.0,
+      "value_parameters": [
+        5000.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2001",
+        "Config_Achievement.SteamAPI:START_HOARDING_R",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2002,
+      "name": "满载而归",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "在灾变发生前，把物资总重量囤积到超过 25 公斤。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 25000.0,
+      "value_parameters": [
+        25000.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2002",
+        "Config_Achievement.SteamAPI:FULLY_LOADED",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2003,
+      "name": "末日富翁",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "在灾变发生前，把物资总重量囤积到超过 50 公斤。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 50000.0,
+      "value_parameters": [
+        50000.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2003",
+        "Config_Achievement.SteamAPI:DOOMSDAY_TYCOON_R",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2004,
+      "name": "精打细算",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "灾变发生时，角色身上剩余的钱不足 50。必须在灾变切换时满足，之后再花钱或赚钱不会改变当时的判定。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 50.0,
+      "value_parameters": [
+        50.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2004",
+        "Config_Achievement.SteamAPI:FRUGAL_R",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2005,
+      "name": "逛遍全城",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "灾变前至少去过 5 个采购点。条件看访问过的采购点数量，不是购买物品数量。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 5.0,
+      "value_parameters": [
+        5.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2005",
+        "Config_Achievement.SteamAPI:CITY_TOUR",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2006,
+      "name": "丰富伙食",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "灾变前购买过至少 20 种不同的食物。重复购买同一种食物不按新的种类计算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 20.0,
+      "value_parameters": [
+        20.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2006",
+        "Config_Achievement.SteamAPI:RICH_DIET",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2007,
+      "name": "有备无患",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "灾变前购买过至少 4 种不同的材料。重复购买同一种材料不会增加有效种类数。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 4.0,
+      "value_parameters": [
+        4.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2007",
+        "Config_Achievement.SteamAPI:BE_PREPARED_R",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2008,
+      "name": "四平八稳",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "在条件检查时，饱腹、心态、精力、生命四项数值同时达到 80 以上。四项中任何一项低于 80 都不能满足；配置检查的是四个属性键 `[1,2,3,5]`。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2008",
+        "Config_Achievement.SteamAPI:WELL_BALANCED",
+        "Config_Achievement.Category:4",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32108"
+      ]
+    },
+    {
+      "id": 2009,
+      "name": "家底",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "家中现有物资提供的总饱腹度突破 2000。检查的是家中储备的总饱腹度，不是角色当前一次进食后的饱腹值。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2009",
+        "Config_Achievement.SteamAPI:FAMILY_STOCK",
+        "Config_Achievement.Category:4",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32109"
+      ]
+    },
+    {
+      "id": 2010,
+      "name": "不浪费",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "活到第 30 天，并且本轮从未发生食物变质。配置要求达到第 30 天，同时不能出现 `ach.taboo.food_rot` 标记；只要本轮有食物变质，后续即使补充食物也不能满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.food_rot"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:2010",
+        "Config_Achievement.SteamAPI:NO_WASTE",
+        "Config_Achievement.Category:4",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32110"
+      ]
+    },
+    {
+      "id": 2011,
+      "name": "破限",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "让任意一项属性的上限突破 150。检查的是属性上限，不是当前属性值；三项属性中有一项达到要求即可。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 150.0,
+      "value_parameters": [
+        150.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2011",
+        "Config_Achievement.SteamAPI:AWAKENING",
+        "Config_Achievement.Category:4"
+      ]
+    },
+    {
+      "id": 2012,
+      "name": "超凡",
+      "category": "灾变前准备",
+      "hidden_in_text": false,
+      "condition": "让三项属性的上限同时突破 150。三项必须同时达到要求，少一项都不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2012",
+        "Config_Achievement.SteamAPI:TRANSCENDENT",
+        "Config_Achievement.Category:4",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32111"
+      ]
+    },
+    {
+      "id": 2101,
+      "name": "开火",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "第一次成功做出一道菜。计数器 `cook.count` 达到 1；打开烹饪界面、放入材料或制作失败都不算成功做菜。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2101",
+        "Config_Achievement.SteamAPI:FIRST_COOKING_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:cook.count",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2102,
+      "name": "家常菜",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "本轮累计成功做出 30 道菜。每道成功产出的菜使 `cook.count` 增加，达到 `30` 完成；失败料理不按成功菜计数。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2102",
+        "Config_Achievement.SteamAPI:HOME_COOKING",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:cook.count",
+        "Config_Achievement.Threshold:30.0",
+        "Config_Achievement.ProgressCounterKey:cook.count",
+        "Config_Achievement.ProgressTarget:30.0"
+      ]
+    },
+    {
+      "id": 2103,
+      "name": "完美主义",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "本轮成功做出 30 道完美料理。必须是完美品质，计数器 `cook.perfect` 达到 `30`；普通品质料理不计入。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2103",
+        "Config_Achievement.SteamAPI:PERFECTIONIST",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:cook.perfect",
+        "Config_Achievement.Threshold:30.0",
+        "Config_Achievement.ProgressCounterKey:cook.perfect",
+        "Config_Achievement.ProgressTarget:30.0"
+      ]
+    },
+    {
+      "id": 2104,
+      "name": "第一抹绿",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "第一次收获自己种植的作物。成功完成一次自种作物收获后，`plant.harvest` 达到 1；野外拾取或只种下但没有收获不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2104",
+        "Config_Achievement.SteamAPI:FIRST_GREEN_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:plant.harvest",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2105,
+      "name": "阳台农场主",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "本轮累计完成 50 次收获。计数器 `plant.harvest` 达到 `50`，每次有效收获按一次计算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 50.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2105",
+        "Config_Achievement.SteamAPI:BALCONY_FARMER_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:plant.harvest",
+        "Config_Achievement.Threshold:50.0",
+        "Config_Achievement.ProgressCounterKey:plant.harvest",
+        "Config_Achievement.ProgressTarget:50.0"
+      ]
+    },
+    {
+      "id": 2106,
+      "name": "无瑕生长",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "完成 10 次全程没有异常、并且最终为完美品质的收获。每次必须同时满足“全程无异常”和“完美收获”，计数器 `plant.perfect` 达到 `10`。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 10.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2106",
+        "Config_Achievement.SteamAPI:FLAWLESS_GROWTH",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:plant.perfect",
+        "Config_Achievement.Threshold:10.0",
+        "Config_Achievement.ProgressCounterKey:plant.perfect",
+        "Config_Achievement.ProgressTarget:10.0"
+      ]
+    },
+    {
+      "id": 2107,
+      "name": "守株待兔",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "第一次成功布置陷阱。完成一次有效放置后 `trap.place` 达到 1；查看陷阱或拿着陷阱材料不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2107",
+        "Config_Achievement.SteamAPI:FIRST_TRAP_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trap.place",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2108,
+      "name": "室内猎人",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "累计捕获 30 只猎物。每次陷阱实际捕获猎物才增加 `trap.catch`，达到 `30` 完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2108",
+        "Config_Achievement.SteamAPI:INDOOR_HUNTER_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trap.catch",
+        "Config_Achievement.Threshold:30.0",
+        "Config_Achievement.ProgressCounterKey:trap.catch",
+        "Config_Achievement.ProgressTarget:30.0"
+      ]
+    },
+    {
+      "id": 2109,
+      "name": "修补匠",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "累计制造 100 件物品。计数器 `craft.total` 达到 `100`；这是制造次数成就，不等于解锁 100 张制造图纸，也不等于制造类图鉴全部点亮。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 100.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2109",
+        "Config_Achievement.SteamAPI:TINKERER",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:craft.total",
+        "Config_Achievement.Threshold:100.0",
+        "Config_Achievement.ProgressCounterKey:craft.total",
+        "Config_Achievement.ProgressTarget:100.0"
+      ]
+    },
+    {
+      "id": 2110,
+      "name": "通电",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "使用自己的发电机和蓄电池给家里供上电。条件组要求家中处于供电状态，并且电力来源满足“自有电力来源”检查；只接入外部或仅摆放设备不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2110",
+        "Config_Achievement.SteamAPI:POWERED_UP",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32112"
+      ]
+    },
+    {
+      "id": 2111,
+      "name": "地下与天台",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "同时解锁地下室和二楼露台。配置要求触发 `TAG_FLOOR_B1_UNLOCKED` 与 `TAG_FLOOR_2F_UNLOCKED` 两个解锁事件，只有一个区域解锁不完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2111",
+        "Config_Achievement.SteamAPI:BASEMENT_AND_ROOF",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32113"
+      ]
+    },
+    {
+      "id": 2112,
+      "name": "五边形战士",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "把五个系统的熟练度全部升到满级。计数器 `prof.allmax` 达到 1，要求五个系统全部满级，不能只把其中几个系统升满。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2112",
+        "Config_Achievement.SteamAPI:PENTAGON_WARRIOR_R",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:prof.allmax",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2113,
+      "name": "图纸尽收",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "把制造类图鉴中所有应收录的图纸逐一解锁，使制造图鉴点亮数达到 125。当前 `Config_ProductionList` 共 148 条原始记录，其中 `InCodex = true` 的制造图鉴条目正好是 125 条，因此这 125 条全部解锁后才会满足条件；它检查的是图鉴解锁状态，不是累计制造 125 件物品。累计制造 100 件是另一个成就“修补匠”。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2113",
+        "Config_Achievement.SteamAPI:ALL_BLUEPRINTS",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32114"
+      ]
+    },
+    {
+      "id": 2201,
+      "name": "第一滴血",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "第一次击杀丧尸。完成一次有效丧尸击杀后，`zombie.kill` 达到 1。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2201",
+        "Config_Achievement.SteamAPI:FIRST_BLOOD",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:zombie.kill",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2202,
+      "name": "绞肉机",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "本轮累计击杀 400 只丧尸。计数器 `zombie.kill` 达到 `400`；要求本轮计数，不是把多个不同存档的击杀数相加。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 400.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2202",
+        "Config_Achievement.SteamAPI:MEAT_GRINDER",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:zombie.kill",
+        "Config_Achievement.Threshold:400.0",
+        "Config_Achievement.ProgressCounterKey:zombie.kill",
+        "Config_Achievement.ProgressTarget:400.0"
+      ]
+    },
+    {
+      "id": 2203,
+      "name": "三重防线",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "在防御设施中分别布置至少 4 台尖刺、4 台电网、4 台电锯。配置检查的对象 ID 为 `[36002,36003,36004]`，三类各自达到 4 台才算，不能用某一类多摆来抵消另一类不足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2203",
+        "Config_Achievement.SteamAPI:TRIPLE_LINE",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32115"
+      ]
+    },
+    {
+      "id": 2204,
+      "name": "门是关着的",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "成功度过一次危机，并且该次危机结束时房门耐久仍在 80% 以上。只要危机期间或结束检查时低于 80%，该次危机就不能满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 0.800000011920929,
+      "value_parameters": [
+        0.800000011920929
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2204",
+        "Config_Achievement.SteamAPI:DOOR_HELD",
+        "Config_Achievement.Category:6"
+      ]
+    },
+    {
+      "id": 2205,
+      "name": "铜墙铁壁",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "把家中的门窗全部升级到最高档。条件检查的是所有相关门窗的最高等级，不能只升级主要房门而留下其他窗户或门。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2205",
+        "Config_Achievement.SteamAPI:IRON_WALL",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32116"
+      ]
+    },
+    {
+      "id": 2206,
+      "name": "挺过来了",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "在无尽模式中累计挺过 30 波尸潮。计数器 `wave.survived` 达到 `30`，每一波必须实际撑过，未完成的波次不计。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2206",
+        "Config_Achievement.SteamAPI:SURVIVED_WAVES",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:wave.survived",
+        "Config_Achievement.Threshold:30.0",
+        "Config_Achievement.ProgressCounterKey:wave.survived",
+        "Config_Achievement.ProgressTarget:30.0"
+      ]
+    },
+    {
+      "id": 2207,
+      "name": "零失守",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "完整撑过终局尸潮，并让终局尸潮全程门窗保持在 70% 以上。条件组还要求终局尸潮完成计数 `siege.final.kill >= 40`，且没有 `ach.taboo.siege_door_worn` 标记；终局期间任一门窗跌破 70% 都会留下不满足标记。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.siege_door_worn"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:2207",
+        "Config_Achievement.SteamAPI:NO_BREACH",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32117"
+      ]
+    },
+    {
+      "id": 2208,
+      "name": "捕鼠能手",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "累计抓住 8 只老鼠。只有陷阱实际捕获老鼠才增加 `ratCatch`，达到 `8` 完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 8.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2208",
+        "Config_Achievement.SteamAPI:RAT_CATCHER",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:ratCatch",
+        "Config_Achievement.Threshold:8.0",
+        "Config_Achievement.ProgressCounterKey:ratCatch",
+        "Config_Achievement.ProgressTarget:8.0"
+      ]
+    },
+    {
+      "id": 2209,
+      "name": "久病成医",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "累计度过 3 次危机。每次危机成功结束后增加 `crisis.survived`，达到 `3` 完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 3.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2209",
+        "Config_Achievement.SteamAPI:SEASONED_SURVIVOR",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:crisis.survived",
+        "Config_Achievement.Threshold:3.0",
+        "Config_Achievement.ProgressCounterKey:crisis.survived",
+        "Config_Achievement.ProgressTarget:3.0"
+      ]
+    },
+    {
+      "id": 2301,
+      "name": "第一次出门",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "第一次走出家门并完成一次探索。计数器 `explore.total` 达到 1；打开地图或查看探索点不算实际探索。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2301",
+        "Config_Achievement.SteamAPI:FIRST_EXPLORE",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:explore.total",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2302,
+      "name": "走遍废墟",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "至少去过 4 个不同的探索点，每个探索点至少访问一次。计数器 `explore.points.distinct` 达到 `4`，重复访问同一个点不增加不同地点数。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 4.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2302",
+        "Config_Achievement.SteamAPI:RUINS_TOUR",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:explore.points.distinct",
+        "Config_Achievement.Threshold:4.0",
+        "Config_Achievement.ProgressCounterKey:explore.points.distinct",
+        "Config_Achievement.ProgressTarget:4.0"
+      ]
+    },
+    {
+      "id": 2303,
+      "name": "拾荒者",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "本轮累计完成 15 次探索。计数器 `explore.total` 达到 `15`，中途回家或更换地点不会重置已完成的本轮探索计数。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 15.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2303",
+        "Config_Achievement.SteamAPI:SCAVENGER",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:explore.total",
+        "Config_Achievement.Threshold:15.0",
+        "Config_Achievement.ProgressCounterKey:explore.total",
+        "Config_Achievement.ProgressTarget:15.0"
+      ]
+    },
+    {
+      "id": 2304,
+      "name": "医院深处",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "收集齐医院的 3 段线索。计数器 `clue` 达到 `3` 且线索属于医院线，其他地点的线索不能替代医院线索。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 3.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2304",
+        "Config_Achievement.SteamAPI:HOSPITAL_DEPTHS",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:clue",
+        "Config_Achievement.Threshold:3.0",
+        "Config_Achievement.ProgressCounterKey:clue",
+        "Config_Achievement.ProgressTarget:3.0"
+      ]
+    },
+    {
+      "id": 2305,
+      "name": "第一笔生意",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "第一次和陌生人完成一笔交易。计数器 `trade.active.dealcount` 达到 1；查看报价、发起但未完成交易不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2305",
+        "Config_Achievement.SteamAPI:FIRST_DEAL",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trade.active.dealcount",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2306,
+      "name": "老主顾",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "与 4 名不同的陌生人建立往来。计数器 `trade.stranger.partner` 达到 `4`，要求交易对象不同，和同一个人反复交易不替代新对象。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 4.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2306",
+        "Config_Achievement.SteamAPI:REGULAR_CUSTOMER",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trade.stranger.partner",
+        "Config_Achievement.Threshold:4.0",
+        "Config_Achievement.ProgressCounterKey:trade.stranger.partner",
+        "Config_Achievement.ProgressTarget:4.0"
+      ]
+    },
+    {
+      "id": 2307,
+      "name": "供应商",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "累计完成 30 次交易。计数器 `trade.active.dealcount` 达到 `30`，每次实际成交按一次计算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 30.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2307",
+        "Config_Achievement.SteamAPI:SUPPLIER",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:trade.active.dealcount",
+        "Config_Achievement.Threshold:30.0",
+        "Config_Achievement.ProgressCounterKey:trade.active.dealcount",
+        "Config_Achievement.ProgressTarget:30.0"
+      ]
+    },
+    {
+      "id": 2308,
+      "name": "空中拾荒",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "本轮累计派无人机完成拾荒 25 次。计数器 `drone.foraging.count` 达到 `25`，只派出但任务未完成不算一次有效拾荒。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 25.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2308",
+        "Config_Achievement.SteamAPI:SKY_SCAVENGER",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:drone.foraging.count",
+        "Config_Achievement.Threshold:25.0",
+        "Config_Achievement.ProgressCounterKey:drone.foraging.count",
+        "Config_Achievement.ProgressTarget:25.0"
+      ]
+    },
+    {
+      "id": 2309,
+      "name": "深入废墟",
+      "category": "探索与交易",
+      "hidden_in_text": false,
+      "condition": "在残破超市完成 5 次搜刮。计数器 `marketLoot` 达到 `5`，其他地点的搜刮次数不计入这个地点专属成就。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 5.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2309",
+        "Config_Achievement.SteamAPI:DEEP_IN_RUINS",
+        "Config_Achievement.Category:7",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:marketLoot",
+        "Config_Achievement.Threshold:5.0",
+        "Config_Achievement.ProgressCounterKey:marketLoot",
+        "Config_Achievement.ProgressTarget:5.0"
+      ]
+    },
+    {
+      "id": 2401,
+      "name": "极限开始",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "第一次进入无尽模式。条件组状态为 `EndlessState = 1`，实际进入无尽流程才算，查看模式入口不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2401",
+        "Config_Achievement.SteamAPI:ENDLESS_START",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32122"
+      ]
+    },
+    {
+      "id": 2402,
+      "name": "不肯谢幕",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "完成一个结局后选择继续坚守，进入结局后的继续生存流程。条件组状态为 `EndlessState = 2`，只完成结局但没有选择继续不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2402",
+        "Config_Achievement.SteamAPI:REFUSE_CURTAIN",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32123"
+      ]
+    },
+    {
+      "id": 2403,
+      "name": "坚守三十天",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "在纯净无尽模式中坚守至少 30 天。条件组要求 `EndlessState = 3` 且无尽天数 `EndlessDayMin >= 30`，中途失败不能满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2403",
+        "Config_Achievement.SteamAPI:HOLD_30_DAYS",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32124"
+      ]
+    },
+    {
+      "id": 2404,
+      "name": "威胁等级 8",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "在无尽模式中把威胁等级提升到 8。条件组同时要求处于无尽状态 `EndlessState = 1`，并达到 `EndlessTierMin = 8`。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2404",
+        "Config_Achievement.SteamAPI:THREAT_TIER_8",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32125"
+      ]
+    },
+    {
+      "id": 2405,
+      "name": "尸山",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "本轮累计击杀 2000 只丧尸。计数器 `zombie.kill` 达到 `2000`，要求本轮击杀数。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 2000.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2405",
+        "Config_Achievement.SteamAPI:MOUNTAIN_OF_BODIES",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:zombie.kill",
+        "Config_Achievement.Threshold:2000.0",
+        "Config_Achievement.ProgressCounterKey:zombie.kill",
+        "Config_Achievement.ProgressTarget:2000.0"
+      ]
+    },
+    {
+      "id": 3001,
+      "name": "一次就好",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "在本存档中一次重生都没有使用过，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.rebirth` 标记；只要本存档使用过重生，即使最后不用重生通关也不满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.rebirth"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3001",
+        "Config_Achievement.SteamAPI:ONE_SHOT",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32131"
+      ]
+    },
+    {
+      "id": 3002,
+      "name": "闭门不出",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮一次都没有走出家门，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.explore` 标记；进行过一次探索就会失去本条件。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.explore"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3002",
+        "Config_Achievement.SteamAPI:SHUT_IN",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32132"
+      ]
+    },
+    {
+      "id": 3003,
+      "name": "极简预算",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮灾变前花掉的钱不超过原有预算的一半，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.overspend` 标记；超过一半后再省钱不能恢复本轮条件。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.overspend"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3003",
+        "Config_Achievement.SteamAPI:MINIMAL_BUDGET",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32133"
+      ]
+    },
+    {
+      "id": 3004,
+      "name": "完璧",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮全程门窗都保持在 70% 以上，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.door_worn` 标记；任意时刻门窗跌破阈值都会使本轮不满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.door_worn"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3004",
+        "Config_Achievement.SteamAPI:IMMACULATE",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32134"
+      ]
+    },
+    {
+      "id": 3005,
+      "name": "素食主义",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮一口荤都没有吃，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.meat` 标记；拥有、购买或制作荤食本身不一定触发，实际食用荤食会使条件失效。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.meat"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3005",
+        "Config_Achievement.SteamAPI:VEGETARIAN",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32135"
+      ]
+    },
+    {
+      "id": 3006,
+      "name": "独行",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮从未完成过任何交易，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.trade` 标记；查看交易界面不等于交易，完成一笔交易会使条件失效。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.trade"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3006",
+        "Config_Achievement.SteamAPI:LONE_WOLF",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32136"
+      ]
+    },
+    {
+      "id": 3007,
+      "name": "一个人的一百天",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮从未推进过邻居线，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.neighbor` 标记；只要推进邻居剧情即不再满足。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.neighbor"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3007",
+        "Config_Achievement.SteamAPI:HUNDRED_DAYS_ALONE",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32137"
+      ]
+    },
+    {
+      "id": 3008,
+      "name": "不曾倒下",
+      "category": "结局挑战",
+      "hidden_in_text": false,
+      "condition": "本轮生命值从未掉到 20% 以下，并且最终走到结局。条件组要求触发结局事件，同时不能出现 `ach.taboo.low_vitality` 标记；生命值跌破阈值后恢复，也不能消除本轮记录。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [
+        "ach.taboo.low_vitality"
+      ],
+      "config_references": [
+        "Config_Achievement.ID:3008",
+        "Config_Achievement.SteamAPI:NEVER_FELL",
+        "Config_Achievement.Category:9",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32138"
+      ]
+    },
+    {
+      "id": 9001,
+      "name": "邻里之间",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "打开手机的社区群，在群消息出现“在群里说一下/表态”入口时点击，完成回复并确认发送；每次成功执行一次群回复，计数器 `group.reply` 增加 1，达到 20 次才完成。仅打开回复框后取消、普通私聊回复，以及独立的八卦/选项回复不计入这个计数器。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 20.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9001",
+        "Config_Achievement.SteamAPI:AMONG_NEIGHBORS",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:group.reply",
+        "Config_Achievement.Threshold:20.0",
+        "Config_Achievement.ProgressCounterKey:group.reply",
+        "Config_Achievement.ProgressTarget:20.0"
+      ]
+    },
+    {
+      "id": 9002,
+      "name": "电视迷",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "在电视小游戏中实际取得至少 70 分。条件组读取最高分计数 `tvgame.best.*`，要求最高分达到 `70`；只打开小游戏或开始但没有取得该分数不算。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9002",
+        "Config_Achievement.SteamAPI:TV_ADDICT",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32142"
+      ]
+    },
+    {
+      "id": 9003,
+      "name": "一屋子花",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "实际收获 10 朵花。计数器 `plant.harvest.flower` 达到 `10`，种植、购买或持有花朵而没有完成收获不计入。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 10.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9003",
+        "Config_Achievement.SteamAPI:HOUSE_OF_FLOWERS",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:plant.harvest.flower",
+        "Config_Achievement.Threshold:10.0",
+        "Config_Achievement.ProgressCounterKey:plant.harvest.flower",
+        "Config_Achievement.ProgressTarget:10.0"
+      ]
+    },
+    {
+      "id": 9004,
+      "name": "收藏家",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "先取得或制作 8 件指定纪念品，再把它们全部作为家具实际摆放在家中，并在条件检查时同时保持摆出状态。指定家具 ID 是 `[9300,9301,9302,9303,9304,9305,9306,9307]`，分别为幸存者纪念杯、「百日之约」纪念画、旧世界地球仪、老吉他、假山盆景、红酒柜、室内景观树、重装摩托。只拥有、放在背包或收纳容器中都不算；条件要求这 8 个 ID 各至少有 1 个已摆放实例。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9004",
+        "Config_Achievement.SteamAPI:COLLECTOR",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32144"
+      ]
+    },
+    {
+      "id": 9005,
+      "name": "我不怕冷",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "实际使用冰块完成一次冷水澡。只拥有冰块、把冰块放在背包里或打开洗澡界面不算，必须完成该次使用动作。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 108.0,
+      "value_parameters": [
+        108.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9005",
+        "Config_Achievement.SteamAPI:NOT_AFRAID_OF_COLD",
+        "Config_Achievement.Category:10"
+      ]
+    },
+    {
+      "id": 9006,
+      "name": "深夜厨房",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "在凌晨 3 点左右实际做出一顿饭。条件组要求 `cook.midnight >= 1`，必须成功完成一次符合时间条件的烹饪，其他时间做饭不计入。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9006",
+        "Config_Achievement.SteamAPI:MIDNIGHT_KITCHEN",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32145"
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "source_tables": [
+    "Config_Achievement",
+    "HistorySave.bytes:HistoryData.UnlockedAchievementIds"
+  ]
+}

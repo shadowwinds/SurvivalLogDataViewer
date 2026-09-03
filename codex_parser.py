@@ -143,6 +143,14 @@ class Reader:
             raise ValueError(f"非法列表长度 {count} at offset {self.pos - 4}")
         return [self.i32() for _ in range(count)]
 
+    def float_list(self) -> list[float] | None:
+        count = self.i32()
+        if count == -1:
+            return None
+        if count < -1 or count > 1_000_000:
+            raise ValueError(f"非法浮点列表长度 {count} at offset {self.pos - 4}")
+        return [self.f32() for _ in range(count)]
+
     def string_list(self) -> list[str | None] | None:
         count = self.i32()
         if count == -1:
@@ -359,6 +367,15 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("ID", "i32"), ("TriggerFurnitureId", "i32"), ("PartnerType", "i32"),
         ("PartnerConfigIds", "list_i32"), ("MissingHintKey", "str"), ("PriorityWeight", "i32"),
     ),
+    "Config_Achievement": (
+        ("ID", "i32"), ("Order", "i32"), ("Name", "str"), ("Name_Local", "str"),
+        ("Des", "str"), ("Des_Local", "str"), ("SteamAPI", "str"), ("WebIcon", "str"),
+        ("ShowType", "bool"), ("WebSmallIcon", "str"), ("AchievementType", "i32"),
+        ("Value", "list_f32"), ("Category", "i32"), ("TriggerMode", "i32"),
+        ("CounterKey", "str"), ("Compare", "i32"), ("Threshold", "f32"),
+        ("ConditionSetId", "i32"), ("IsHidden", "bool"),
+        ("ProgressCounterKey", "str"), ("ProgressTarget", "f32"),
+    ),
 }
 
 
@@ -502,6 +519,8 @@ def read_schema_value(reader: Reader, kind: str) -> Any:
         return reader.memorypack_string()
     if kind == "list_i32":
         return reader.int_list()
+    if kind == "list_f32":
+        return reader.float_list()
     if kind == "list_str":
         return reader.string_list()
     raise ValueError(f"未知 MemoryPack 字段类型：{kind}")
@@ -516,6 +535,7 @@ def parse_config_table(raw: bytes, table_name: str) -> list[ConfigRow]:
     if count < 0 or count > 2_000_000:
         raise ValueError(f"{table_name} 行数非法：{count}")
     rows: list[ConfigRow] = []
+    seen_ids: set[int] = set()
     expected_members = len(schema)
     for index in range(count):
         member_count = reader.u8()
@@ -525,7 +545,11 @@ def parse_config_table(raw: bytes, table_name: str) -> list[ConfigRow]:
                 f"member count={member_count}, expected={expected_members}"
             )
         values = {name: read_schema_value(reader, kind) for name, kind in schema}
-        rows.append(ConfigRow(table_name, values))
+        row = ConfigRow(table_name, values)
+        if row.row_id in seen_ids:
+            raise ValueError(f"{table_name} 出现重复 ID：{row.row_id} at row {index}")
+        seen_ids.add(row.row_id)
+        rows.append(row)
     if reader.pos != len(raw):
         raise ValueError(
             f"{table_name} 解析未到末尾：offset={reader.pos}, total={len(raw)}"
@@ -557,6 +581,7 @@ def build_extraction_context(game_root: Path) -> ExtractionContext:
         "Config_FurnitureState",
         "Config_FurnitureTag",
         "Config_FurniturePartner",
+        "Config_Achievement",
     ]
     tables: dict[str, list[ConfigRow]] = {}
     bundle_names: set[str] = set()
@@ -690,6 +715,11 @@ def md_escape(value: str) -> str:
 
 FIELD_LABELS = {
     "ID": "ID", "ItemName": "名称键", "ItemName_Local": "名称", "ItemDes1": "描述键1",
+    "Order": "排序", "SteamAPI": "Steam 成就键", "ShowType": "显示类型",
+    "WebSmallIcon": "小图标", "AchievementType": "成就类型", "Value": "数值参数",
+    "TriggerMode": "触发模式", "CounterKey": "计数器键", "Compare": "比较方式",
+    "Threshold": "阈值", "IsHidden": "隐藏成就", "ProgressCounterKey": "进度计数器键",
+    "ProgressTarget": "进度目标",
     "RecipeName": "菜肴名称键", "RecipeName_Local": "菜肴名称",
     "TagCombo": "食材分类", "SpecificItems": "具体食材",
     "PerfectItemID": "完美产物 ID", "GoodItemID": "良好产物 ID",

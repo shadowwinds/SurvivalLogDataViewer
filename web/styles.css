@@ -695,6 +695,10 @@ button {
   gap: 12px;
 }
 
+.detail-heading-main {
+  min-width: 0;
+}
+
 .detail-name {
   margin: 0;
   font-size: 20px;
@@ -708,6 +712,24 @@ button {
   white-space: pre-wrap;
 }
 
+.achievement-visibility,
+.entry-visibility {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #eef1f3;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.achievement-visibility {
+  margin-top: 10px;
+}
+
 .detail-section {
   margin-top: 22px;
   padding-top: 16px;
@@ -718,6 +740,28 @@ button {
   margin: 0 0 11px;
   color: var(--ink);
   font-size: 12px;
+}
+
+.achievement-text {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.achievement-method-list,
+.achievement-notes {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.achievement-method-list li,
+.achievement-notes li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
 }
 
 .highlight-table {

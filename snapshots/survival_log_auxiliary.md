@@ -1,10 +1,10 @@
 # Survival Log 图鉴辅助配置（离线解析）
 
-- 生成时间：2026-08-27T22:19:27+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:48+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
-- 条目数量：461
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
+- 条目数量：463
 - 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：保存主图鉴条目引用的分类、等级和家具辅助配置；这些行不参与六类图鉴完成进度。
@@ -8870,6 +8870,56 @@
 - 预览属性变化：
 - 功能组键：引诱
 - 功能组顺序：3
+
+### 自动换碟（ID 80035）
+
+- ID：80035
+- 功能名称键：FurnitureFunc_BtnName_80035
+- 功能名称：自动换碟
+- 功能提示键：FurnitureFunc_BtnTips_80035
+- 功能提示：放完一张接着放下一张 一直放下去
+- 确认信息键：
+- 确认信息：
+- 显示条件组：ID:6011
+- Demo 模式：0
+- 条件组：无
+- 功能图标：../../Res/icon/icon_line_autonext.png
+- 章节：2
+- 冷却时间：0
+- 每日上限：0
+- 奖励组：无
+- 功能类型：2
+- 动作 ID 列表：`[9089]`；解析：ID:9089
+- 跳转地图：无
+- 推荐权重：0
+- 预览属性变化：
+- 功能组键：
+- 功能组顺序：0
+
+### 关闭自动换碟（ID 80036）
+
+- ID：80036
+- 功能名称键：FurnitureFunc_BtnName_80036
+- 功能名称：关闭自动换碟
+- 功能提示键：FurnitureFunc_BtnTips_80036
+- 功能提示：这张放完就停下 不再自动换
+- 确认信息键：
+- 确认信息：
+- 显示条件组：ID:6011
+- Demo 模式：0
+- 条件组：无
+- 功能图标：../../Res/icon/icon_line_autonext_off.png
+- 章节：2
+- 冷却时间：0
+- 每日上限：0
+- 奖励组：无
+- 功能类型：2
+- 动作 ID 列表：`[9090]`；解析：ID:9090
+- 跳转地图：无
+- 推荐权重：0
+- 预览属性变化：
+- 功能组键：
+- 功能组顺序：0
 
 ## 家具烹饪配置
 

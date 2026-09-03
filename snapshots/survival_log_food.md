@@ -1,9 +1,9 @@
 # Survival Log 食品（离线解析）
 
-- 生成时间：2026-08-27T22:19:25+08:00
-- 游戏资源版本：1.0.15218 / catalog 2.3.1
+- 生成时间：2026-09-03T17:43:46+08:00
+- 游戏资源版本：1.0.15511 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\456d0b5f506db80b521c7133c499def1.bundle`
+- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
 - 条目数量：174
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -6382,12 +6382,12 @@
 - 描述键1：Item_ItemDes1_2324
 - 描述1：重量超过20磅的节日巨兽，是感恩节和圣诞节的核心
 - 描述键2：Item_ItemDes2_2324
-- 描述2：需大量冷冻空间，食用前需解冻并烤制4小时以上；大量食物
-- 属性1：15
-- 属性2：-4
+- 描述2：需大量冷冻空间保存；整件无法直接下锅，须先分割成巨型火鸡肉块，而安稳日子里腾不出处理它的手脚；巨量食物
+- 属性1：0
+- 属性2：0
 - 属性3：0
 - 属性4：0
-- 属性5：2
+- 属性5：0
 - 堆叠上限：1
 - 物品大类 ID：1
 - 物品子类：2；肉类
@@ -6425,7 +6425,7 @@
 - 模型：Assets/RuntimeAssets/Prefabs/Furniture/P_Food_001_S1_M01
 - 条件组：无
 - 高需求：否
-- 交易价值：22
+- 交易价值：18
 - 推荐类型：0
 - 推荐权重：0
 - 进入图鉴：是
@@ -6434,7 +6434,7 @@
 - 花瓶士气系数：0
 - 花瓶模型：
 - 可酿造：否
-- 切割产物：无
+- 切割产物：巨型火鸡肉块（ID 2331）
 - 使用动作：ID:100002324
 
 ### 金枪鱼鱼段（ID 2325）

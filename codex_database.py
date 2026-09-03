@@ -22,6 +22,12 @@ from codex_parser import (
     build_extraction_context,
     select_category_rows,
 )
+from codex_achievements import (
+    CONDITION_SCHEMA_VERSION,
+    AchievementConditionError,
+    load_achievement_conditions,
+    validate_achievement_conditions,
+)
 from codex_recipe import (
     RecipeConfigError,
     load_recipe_static_data,
@@ -44,8 +50,8 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-DATABASE_SCHEMA_VERSION = 8
-RUNTIME_SCHEMA_VERSION = 1
+DATABASE_SCHEMA_VERSION = 9
+RUNTIME_SCHEMA_VERSION = 2
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_DIR / "data"
 DEFAULT_DATABASE_PATH = PROJECT_DIR / "survival_log_codex.sqlite3"
@@ -70,11 +76,13 @@ STATIC_TABLES = (
     "recipe_items",
     "recipe_tier_rules",
     "storage_furniture",
+    "achievements",
 )
 RUNTIME_TABLES = (
     "metadata",
     "completion",
     "category_completion",
+    "achievement_completion",
     "runtime_cache",
 )
 
@@ -138,6 +146,12 @@ CREATE TABLE IF NOT EXISTS {prefix}category_completion (
     PRIMARY KEY (entry_key, category)
 );
 
+CREATE TABLE IF NOT EXISTS {prefix}achievement_completion (
+    achievement_id INTEGER PRIMARY KEY,
+    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS {prefix}runtime_cache (
     cache_key TEXT PRIMARY KEY,
     signature TEXT NOT NULL,
@@ -147,6 +161,8 @@ CREATE TABLE IF NOT EXISTS {prefix}runtime_cache (
 
 CREATE INDEX IF NOT EXISTS {prefix}idx_category_completion_category
     ON category_completion(category, completed);
+CREATE INDEX IF NOT EXISTS {prefix}idx_achievement_completion_completed
+    ON achievement_completion(completed);
 """
 
 
@@ -173,6 +189,20 @@ def _copy_legacy_runtime_rows(
                 "SELECT entry_key, category, completed, updated_at FROM category_completion"
             ).fetchall(),
         )
+    if "achievement_completion" in legacy_tables:
+        try:
+            runtime.executemany(
+                """
+                INSERT OR REPLACE INTO achievement_completion(
+                    achievement_id, completed, updated_at
+                ) VALUES (?, ?, ?)
+                """,
+                legacy.execute(
+                    "SELECT achievement_id, completed, updated_at FROM achievement_completion"
+                ).fetchall(),
+            )
+        except sqlite3.OperationalError:
+            pass
     if "runtime_cache" in legacy_tables:
         try:
             runtime.executemany(
@@ -247,12 +277,13 @@ def _split_legacy_database(
         try:
             legacy.backup(static)
             static.execute("PRAGMA foreign_keys = ON")
-            for table in ("completion", "category_completion", "runtime_cache"):
+            for table in ("completion", "category_completion", "achievement_completion", "runtime_cache"):
                 if table in _sqlite_table_names(static):
                     static.execute(f"DROP TABLE {table}")
             static.execute("DELETE FROM metadata WHERE key LIKE 'save_%'")
             static.execute("DELETE FROM metadata WHERE key = 'runtime_schema_version'")
             static.executescript(STATIC_SCHEMA_SQL)
+            _ensure_achievement_columns(static)
             static.execute(
                 """
                 INSERT INTO metadata(key, value) VALUES ('database_schema_version', ?)
@@ -336,6 +367,9 @@ class CompletionSyncResult:
     codex_end_offset: int | None = None
     candidate_count: int = 0
     candidate_score: tuple[int, ...] = ()
+    achievement_count: int = 0
+    achievement_status_available: bool = False
+    unknown_achievement_ids: tuple[int, ...] = ()
 
 
 STATIC_SCHEMA_SQL = """
@@ -419,6 +453,28 @@ CREATE TABLE IF NOT EXISTS storage_furniture (
     name TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS achievements (
+    achievement_id INTEGER PRIMARY KEY,
+    sort_order INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL,
+    description TEXT NOT NULL,
+    icon_path TEXT NOT NULL,
+    category TEXT NOT NULL,
+    is_hidden INTEGER NOT NULL CHECK (is_hidden IN (0, 1)),
+    condition_text TEXT NOT NULL,
+    method_text TEXT NOT NULL,
+    role_restriction TEXT NOT NULL,
+    notes_json TEXT NOT NULL,
+    common_notes_json TEXT NOT NULL,
+    numeric_threshold REAL,
+    value_parameters_json TEXT NOT NULL DEFAULT '[]',
+    exclusions_json TEXT NOT NULL DEFAULT '[]',
+    config_references_json TEXT NOT NULL DEFAULT '[]',
+    source_version TEXT NOT NULL,
+    raw_json TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_codex_entry_categories_category
     ON codex_entry_categories(category, sort_order);
 CREATE INDEX IF NOT EXISTS idx_codex_entries_name
@@ -429,10 +485,33 @@ CREATE INDEX IF NOT EXISTS idx_recipe_items_cookable_category
     ON recipe_items(can_cook, sub_category, price);
 CREATE INDEX IF NOT EXISTS idx_storage_furniture_name
     ON storage_furniture(name);
+CREATE INDEX IF NOT EXISTS idx_achievements_sort
+    ON achievements(sort_order, achievement_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_name
+    ON achievements(name);
 """
 
 RUNTIME_SCHEMA_SQL = _runtime_schema_sql()
 SCHEMA_SQL = STATIC_SCHEMA_SQL + RUNTIME_SCHEMA_SQL
+
+
+def _ensure_achievement_columns(connection: sqlite3.Connection) -> None:
+    """Add condition columns to a v9 database created before their introduction."""
+
+    if "achievements" not in _sqlite_table_names(connection):
+        return
+    existing = {
+        str(row[1]) for row in connection.execute("PRAGMA table_info(achievements)")
+    }
+    columns = {
+        "numeric_threshold": "REAL",
+        "value_parameters_json": "TEXT NOT NULL DEFAULT '[]'",
+        "exclusions_json": "TEXT NOT NULL DEFAULT '[]'",
+        "config_references_json": "TEXT NOT NULL DEFAULT '[]'",
+    }
+    for name, definition in columns.items():
+        if name not in existing:
+            connection.execute(f"ALTER TABLE achievements ADD COLUMN {name} {definition}")
 
 
 def utc_now() -> str:
@@ -646,6 +725,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     """Initialize a standalone database containing static and runtime tables."""
 
     connection.executescript(STATIC_SCHEMA_SQL)
+    _ensure_achievement_columns(connection)
     initialize_runtime_database(connection)
     row = connection.execute(
         "SELECT value FROM metadata WHERE key = 'database_schema_version'"
@@ -671,6 +751,7 @@ def initialize_database(connection: sqlite3.Connection) -> None:
 
 def initialize_static_database(connection: sqlite3.Connection) -> None:
     connection.executescript(STATIC_SCHEMA_SQL)
+    _ensure_achievement_columns(connection)
     unexpected = sorted(_sqlite_table_names(connection) & set(RUNTIME_TABLES[1:]))
     if unexpected:
         raise RuntimeError(
@@ -834,6 +915,15 @@ def _current_category_entries(
     return category_entries, current_entry_keys
 
 
+def _current_achievement_ids(connection: sqlite3.Connection) -> set[int]:
+    return {
+        int(row[0])
+        for row in connection.execute(
+            "SELECT achievement_id FROM achievements"
+        ).fetchall()
+    }
+
+
 def sync_game_completion(
     connection: sqlite3.Connection,
     save_file: Path | None = None,
@@ -847,7 +937,9 @@ def sync_game_completion(
     runtime_schema = _runtime_schema(connection)
     completion_table = _schema_table(runtime_schema, "completion")
     category_completion_table = _schema_table(runtime_schema, "category_completion")
+    achievement_completion_table = _schema_table(runtime_schema, "achievement_completion")
     category_entries, current_entry_keys = _current_category_entries(connection)
+    current_achievement_ids = _current_achievement_ids(connection)
     known_category_ids = {
         category: set(source_ids)
         for category, source_ids in category_entries.items()
@@ -891,6 +983,14 @@ def sync_game_completion(
         )
 
     metadata = get_metadata(connection)
+    unknown_achievement_ids = tuple(
+        sorted(achievement_id for achievement_id in state.achievement_ids
+               if achievement_id not in current_achievement_ids)
+    ) if state.achievement_status_available else ()
+    desired_achievement_ids = (
+        set(state.achievement_ids) & current_achievement_ids
+        if state.achievement_status_available else set()
+    )
     category_completion_rows = int(
         connection.execute(f"SELECT COUNT(*) FROM {category_completion_table}").fetchone()[0]
     )
@@ -904,6 +1004,15 @@ def sync_game_completion(
             """
         ).fetchone()[0]
     )
+    achievement_completion_rows = int(
+        connection.execute(f"SELECT COUNT(*) FROM {achievement_completion_table}").fetchone()[0]
+    )
+    expected_achievement_completion_rows = len(current_achievement_ids)
+    achievement_cache_valid = (
+        achievement_completion_rows == expected_achievement_completion_rows
+        and metadata.get("save_achievement_status_available", "0")
+        == ("1" if state.achievement_status_available else "0")
+    )
     if (
         not force
         and metadata.get("save_sha256") == state.file_info.sha256
@@ -915,6 +1024,7 @@ def sync_game_completion(
         and metadata.get("save_candidate_count") == str(state.candidate_count)
         and metadata.get("save_candidate_score") == json_text(list(state.candidate_score))
         and category_completion_rows == expected_category_completion_rows
+        and achievement_cache_valid
     ):
         write_save_diagnostic(
             log_path,
@@ -938,6 +1048,9 @@ def sync_game_completion(
             codex_end_offset=state.codex_end_offset,
             candidate_count=state.candidate_count,
             candidate_score=state.candidate_score,
+            achievement_count=len(desired_achievement_ids),
+            achievement_status_available=state.achievement_status_available,
+            unknown_achievement_ids=unknown_achievement_ids,
         )
 
     current_category_pairs: set[tuple[str, str]] = set()
@@ -978,6 +1091,45 @@ def sync_game_completion(
             """,
             ((entry_key, category, now) for entry_key, category in current_category_pairs),
         )
+        connection.execute(
+            f"""
+            DELETE FROM {achievement_completion_table}
+            WHERE achievement_id NOT IN (
+                SELECT achievement_id FROM achievements
+            )
+            """
+        )
+        connection.executemany(
+            f"""
+            INSERT OR IGNORE INTO {achievement_completion_table}(
+                achievement_id, completed, updated_at
+            ) VALUES (?, 0, ?)
+            """,
+            ((achievement_id, now) for achievement_id in sorted(current_achievement_ids)),
+        )
+        if state.achievement_status_available:
+            cursor = connection.execute(
+                f"""
+                UPDATE {achievement_completion_table}
+                SET completed = 0, updated_at = ?
+                WHERE achievement_id IN (
+                    SELECT achievement_id FROM achievements
+                ) AND completed <> 0
+                """,
+                (now,),
+            )
+            updated_entries += max(0, cursor.rowcount)
+            if desired_achievement_ids:
+                placeholders = ",".join("?" for _ in desired_achievement_ids)
+                cursor = connection.execute(
+                    f"""
+                    UPDATE {achievement_completion_table}
+                    SET completed = 1, updated_at = ?
+                    WHERE achievement_id IN ({placeholders}) AND completed <> 1
+                    """,
+                    (now, *sorted(desired_achievement_ids)),
+                )
+                updated_entries += max(0, cursor.rowcount)
         for category in CATEGORY_ORDER:
             cursor = connection.execute(
                 f"""
@@ -1044,6 +1196,11 @@ def sync_game_completion(
                 "save_category_counts": json_text(state.category_counts),
                 "save_total_memberships": str(state.total_memberships),
                 "save_unknown_ids": json_text(unknown_ids),
+                "save_achievement_count": str(len(desired_achievement_ids)),
+                "save_achievement_status_available": (
+                    "1" if state.achievement_status_available else "0"
+                ),
+                "save_unknown_achievement_ids": json_text(unknown_achievement_ids),
                 "save_schema_profile": state.schema_profile,
                 "save_codex_offset": str(state.codex_offset),
                 "save_codex_end_offset": str(state.codex_end_offset),
@@ -1065,8 +1222,16 @@ def sync_game_completion(
         f"已同步游戏存档：{state.total_memberships} 个分类完成状态"
         + ("（使用 .bak 备份）" if state.file_info.used_backup else "")
     )
+    if state.achievement_status_available:
+        message += (
+            f"；成就完成 {len(desired_achievement_ids)}/{len(current_achievement_ids)}"
+        )
+    else:
+        message += "；成就状态不可用，保留上一次有效状态"
     if unknown_ids:
         message += f"；未匹配源 ID：{sum(len(values) for values in unknown_ids.values())} 个"
+    if unknown_achievement_ids:
+        message += f"；未匹配成就 ID：{len(unknown_achievement_ids)} 个"
     return CompletionSyncResult(
         status=status,
         changed=True,
@@ -1081,6 +1246,9 @@ def sync_game_completion(
         codex_end_offset=state.codex_end_offset,
         candidate_count=state.candidate_count,
         candidate_score=state.candidate_score,
+        achievement_count=len(desired_achievement_ids),
+        achievement_status_available=state.achievement_status_available,
+        unknown_achievement_ids=unknown_achievement_ids,
     )
 
 
@@ -1103,6 +1271,19 @@ def build_database(
     if runtime_database_path is not None:
         ensure_database_outside_game_root(game_root, runtime_database_path)
     context = build_extraction_context(game_root)
+    achievement_rows = list(context.tables.get("Config_Achievement", ()))
+    try:
+        achievement_condition_version, _common_notes, achievement_conditions = (
+            load_achievement_conditions()
+        )
+        validate_achievement_conditions(
+            achievement_rows,
+            context.package_version,
+            achievement_conditions,
+            achievement_condition_version,
+        )
+    except AchievementConditionError:
+        raise
     recipe_items, recipe_specs, tier_rules = load_recipe_static_data(game_root, context)
     storage_furniture = storage_furniture_specs_from_rows(
         context.tables.get("Config_Furniture", ())
@@ -1135,6 +1316,7 @@ def build_database(
             connection.execute("DELETE FROM recipe_items")
             connection.execute("DELETE FROM recipe_tier_rules")
             connection.execute("DELETE FROM storage_furniture")
+            connection.execute("DELETE FROM achievements")
 
             for sort_order, (category, label) in enumerate(CATEGORY_LABELS.items()):
                 connection.execute(
@@ -1220,6 +1402,56 @@ def build_database(
                 storage_furniture=storage_furniture,
             )
 
+            achievement_insert_rows = []
+            for row in sorted(
+                achievement_rows,
+                key=lambda item: (int(item.values.get("Order") or 0), item.row_id),
+            ):
+                condition = achievement_conditions[row.row_id]
+                achievement_insert_rows.append(
+                    (
+                        row.row_id,
+                        int(row.values.get("Order") or 0),
+                        config_row_name(row),
+                        row_name_key(row),
+                        row_description(row),
+                        row_icon_path(row),
+                        condition.category,
+                        int(bool(row.values.get("IsHidden", False))),
+                        condition.condition,
+                        condition.method,
+                        condition.role_restriction,
+                        json_text(list(condition.notes)),
+                        json_text(list(condition.common_notes)),
+                        condition.numeric_threshold,
+                        json_text(list(condition.value_parameters)),
+                        json_text(list(condition.exclusions)),
+                        json_text(list(condition.config_references)),
+                        achievement_condition_version,
+                        json_text(row.values),
+                    )
+                )
+            connection.executemany(
+                """
+                INSERT INTO achievements(
+                    achievement_id, sort_order, name, name_key, description, icon_path,
+                    category, is_hidden, condition_text, method_text, role_restriction,
+                    notes_json, common_notes_json, numeric_threshold, value_parameters_json,
+                    exclusions_json, config_references_json, source_version, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                achievement_insert_rows,
+            )
+            if single_file:
+                connection.executemany(
+                    """
+                    INSERT OR IGNORE INTO achievement_completion(
+                        achievement_id, completed, updated_at
+                    ) VALUES (?, 0, ?)
+                    """,
+                    ((row[0], imported_at) for row in achievement_insert_rows),
+                )
+
             metadata = {
                 "database_schema_version": str(DATABASE_SCHEMA_VERSION),
                 "game_version": context.package_version,
@@ -1232,6 +1464,9 @@ def build_database(
                 "recipe_count": str(len(recipe_specs)),
                 "recipe_tier_rule_count": str(recipe_table_counts["recipe_tier_rules"]),
                 "storage_furniture_count": str(recipe_table_counts["storage_furniture"]),
+                "achievement_count": str(len(achievement_rows)),
+                "achievement_condition_version": achievement_condition_version,
+                "achievement_condition_schema_version": str(CONDITION_SCHEMA_VERSION),
                 "database_profile": "standalone" if single_file else "static",
             }
             _upsert_metadata(connection, metadata)
@@ -1278,6 +1513,7 @@ def build_database(
         "recipe_items": len(recipe_items),
         "recipe_count": len(recipe_specs),
         "recipe_tier_rules": len(tier_rules),
+        "achievements": len(achievement_rows),
         **{category: len(rows) for category, rows in selected_rows.items()},
         "save_sync": save_sync,
     }
@@ -1313,7 +1549,7 @@ def prepare_packaged_database(source_path: Path, destination_path: Path) -> Path
         connection.execute("PRAGMA foreign_keys = ON")
         initialize_database(connection)
         with connection:
-            for table in ("completion", "category_completion", "runtime_cache"):
+            for table in ("completion", "category_completion", "achievement_completion", "runtime_cache"):
                 connection.execute(f"DELETE FROM {table}")
             connection.execute("DELETE FROM metadata WHERE key GLOB 'save_*'")
             connection.execute(
@@ -1423,6 +1659,93 @@ def get_overall_summary(connection: sqlite3.Connection) -> dict[str, int]:
         "total": sum(int(row["total"]) for row in summaries),
         "completed": sum(int(row["completed"]) for row in summaries),
     }
+
+
+def get_achievement_summary(connection: sqlite3.Connection) -> dict[str, int]:
+    completion_table = _schema_table(_runtime_schema(connection), "achievement_completion")
+    row = connection.execute(
+        f"""
+        SELECT COUNT(*) AS total,
+               COUNT(CASE WHEN COALESCE(ac.completed, 0) = 1 THEN 1 END) AS completed
+        FROM achievements a
+        LEFT JOIN {completion_table} ac ON ac.achievement_id = a.achievement_id
+        """
+    ).fetchone()
+    return {
+        "total": int(row["total"]),
+        "completed": int(row["completed"]),
+    }
+
+
+def query_achievements(
+    connection: sqlite3.Connection,
+    name_search: str = "",
+    completion_filter: str = "all",
+    limit: int | None = 200,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    if completion_filter not in {"all", "completed", "pending"}:
+        raise ValueError(f"未知完成状态筛选：{completion_filter}")
+    completion_table = _schema_table(_runtime_schema(connection), "achievement_completion")
+    clauses: list[str] = []
+    params: list[Any] = []
+    search = name_search.strip()
+    if search:
+        pattern = f"%{search}%"
+        clauses.append(
+            "(a.name LIKE ? OR a.name_key LIKE ? OR CAST(a.achievement_id AS TEXT) LIKE ? "
+            "OR a.description LIKE ? OR a.condition_text LIKE ? OR a.method_text LIKE ? "
+            "OR a.role_restriction LIKE ? OR a.notes_json LIKE ?)"
+        )
+        params.extend([pattern] * 8)
+    if completion_filter == "completed":
+        clauses.append("COALESCE(ac.completed, 0) = 1")
+    elif completion_filter == "pending":
+        clauses.append("COALESCE(ac.completed, 0) = 0")
+    query = f"""
+        SELECT a.achievement_id, a.sort_order, a.name, a.name_key,
+               a.description, a.icon_path, a.category, a.is_hidden,
+               a.condition_text, a.method_text, a.role_restriction,
+               a.notes_json, a.common_notes_json, a.numeric_threshold,
+               a.value_parameters_json, a.exclusions_json, a.config_references_json,
+               a.source_version, a.raw_json,
+               COALESCE(ac.completed, 0) AS completed
+        FROM achievements a
+        LEFT JOIN {completion_table} ac ON ac.achievement_id = a.achievement_id
+        {('WHERE ' + ' AND '.join(clauses)) if clauses else ''}
+        ORDER BY a.sort_order, a.achievement_id
+    """
+    if limit is None:
+        if offset:
+            query += " LIMIT -1 OFFSET ?"
+            params.append(max(0, offset))
+    else:
+        params.extend([max(1, min(limit, 500)), max(0, offset)])
+        query += " LIMIT ? OFFSET ?"
+    return [dict(row) for row in connection.execute(query, params).fetchall()]
+
+
+def get_achievement(
+    connection: sqlite3.Connection,
+    achievement_id: int,
+) -> dict[str, Any] | None:
+    completion_table = _schema_table(_runtime_schema(connection), "achievement_completion")
+    row = connection.execute(
+        f"""
+        SELECT a.achievement_id, a.sort_order, a.name, a.name_key,
+               a.description, a.icon_path, a.category, a.is_hidden,
+               a.condition_text, a.method_text, a.role_restriction,
+               a.notes_json, a.common_notes_json, a.numeric_threshold,
+               a.value_parameters_json, a.exclusions_json, a.config_references_json,
+               a.source_version, a.raw_json,
+               COALESCE(ac.completed, 0) AS completed
+        FROM achievements a
+        LEFT JOIN {completion_table} ac ON ac.achievement_id = a.achievement_id
+        WHERE a.achievement_id = ?
+        """,
+        (int(achievement_id),),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def query_entries(

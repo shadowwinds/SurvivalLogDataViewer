@@ -24,7 +24,10 @@ UNITYPY_HIDDENIMPORTS = (
     else []
 )
 
-DATA_FILES = [(str(PROJECT_DIR / "web"), "web")]
+DATA_FILES = [
+    (str(PROJECT_DIR / "web"), "web"),
+    (str(PROJECT_DIR / "achievement_conditions.json"), "."),
+]
 if VENDOR_DIR.is_dir():
     DATA_FILES.extend(collect_data_files("UnityPy", include_py_files=False))
 

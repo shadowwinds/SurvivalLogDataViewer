@@ -22,6 +22,8 @@ from codex_database import (
     CATEGORY_LABELS,
     CATEGORY_ORDER,
     CompletionSyncResult,
+    get_achievement,
+    get_achievement_summary,
     get_category_summaries,
     get_entry,
     get_entry_relations,
@@ -29,6 +31,7 @@ from codex_database import (
     get_overall_summary,
     get_runtime_cache,
     open_database,
+    query_achievements,
     query_entries,
     resolve_default_database_path,
     resolve_default_runtime_database_path,
@@ -60,6 +63,7 @@ CATEGORY_EMOJI = {
     "prey": "🐾",
     "craft": "🔧",
     "furniture": "🛋️",
+    "achievements": "🏆",
     "recipes": "🍲",
 }
 DETAIL_RELATION_PREFIXES = {
@@ -113,6 +117,59 @@ def _client_id(value: str) -> str | None:
 
 def _json_safe_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in entry.items() if key != "raw_json"}
+
+
+def _json_string_list(value: object) -> list[str]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
+
+
+def _json_number_list(value: object) -> list[float]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    numbers: list[float] = []
+    for item in parsed:
+        if isinstance(item, (int, float)) and not isinstance(item, bool):
+            numbers.append(float(item))
+    return numbers
+
+
+def _achievement_payload(row: dict[str, Any]) -> dict[str, Any]:
+    condition = str(row.get("condition_text") or "").strip()
+    method = str(row.get("method_text") or "").strip()
+    return {
+        "entry_key": str(int(row["achievement_id"])),
+        "achievement_id": int(row["achievement_id"]),
+        "source_table": "Config_Achievement",
+        "source_id": int(row["achievement_id"]),
+        "name": str(row.get("name") or ""),
+        "name_key": str(row.get("name_key") or ""),
+        "description": str(row.get("description") or ""),
+        "icon_path": str(row.get("icon_path") or ""),
+        "category": str(row.get("category") or ""),
+        "is_hidden": bool(row.get("is_hidden")),
+        "completed": bool(row.get("completed")),
+        "condition": condition,
+        "condition_summary": condition,
+        "method": method,
+        "role_restriction": str(row.get("role_restriction") or "").strip(),
+        "notes": _json_string_list(row.get("notes_json")),
+        "common_notes": _json_string_list(row.get("common_notes_json")),
+        "numeric_threshold": row.get("numeric_threshold"),
+        "value_parameters": _json_number_list(row.get("value_parameters_json")),
+        "exclusions": _json_string_list(row.get("exclusions_json")),
+        "config_references": _json_string_list(row.get("config_references_json")),
+        "source_version": str(row.get("source_version") or ""),
+    }
 
 
 def _relation_matches(relation_type: str, prefixes: tuple[str, ...]) -> bool:
@@ -462,6 +519,9 @@ class CodexService:
                     codex_end_offset=self._last_sync.codex_end_offset,
                     candidate_count=self._last_sync.candidate_count,
                     candidate_score=self._last_sync.candidate_score,
+                    achievement_count=self._last_sync.achievement_count,
+                    achievement_status_available=self._last_sync.achievement_status_available,
+                    unknown_achievement_ids=self._last_sync.unknown_achievement_ids,
                 )
 
             result = sync_game_completion(
@@ -495,6 +555,7 @@ class CodexService:
             result = self._ensure_sync()
             metadata = get_metadata(self.connection)
             summaries = get_category_summaries(self.connection)
+            achievement_summary = get_achievement_summary(self.connection)
             summary_by_category = {row["category"]: row for row in summaries}
             categories = [
                 {
@@ -506,6 +567,15 @@ class CodexService:
                 }
                 for category in CATEGORY_ORDER
             ]
+            categories.append(
+                {
+                    "category": "achievements",
+                    "label": "成就",
+                    "emoji": CATEGORY_EMOJI["achievements"],
+                    "total": int(achievement_summary["total"]),
+                    "completed": int(achievement_summary["completed"]),
+                }
+            )
             categories.append(
                 {
                     "category": "recipes",
@@ -532,10 +602,14 @@ class CodexService:
                 "unknown_ids": {
                     category: list(values) for category, values in result.unknown_ids.items()
                 },
+                "unknown_achievement_ids": list(result.unknown_achievement_ids),
+                "achievement_count": result.achievement_count,
+                "achievement_status_available": result.achievement_status_available,
             }
             return {
                 "categories": categories,
                 "overall": get_overall_summary(self.connection),
+                "achievement_summary": achievement_summary,
                 "metadata": metadata,
                 "sync": sync,
                 "poll_interval_seconds": POLL_INTERVAL_SECONDS,
@@ -649,6 +723,68 @@ class CodexService:
                 "name_search": name_search,
                 "material_search": material_search,
                 "entries": [_json_safe_entry(row) for row in rows],
+            }
+
+    def achievements(
+        self,
+        name_search: str,
+        completion_filter: str,
+    ) -> dict[str, Any]:
+        if completion_filter not in {"all", "completed", "pending"}:
+            raise ValueError(f"未知成就状态筛选：{completion_filter}")
+        with self._lock:
+            self._ensure_sync()
+            rows = query_achievements(
+                self.connection,
+                name_search,
+                completion_filter,
+                limit=None,
+            )
+            return {
+                "category": "achievements",
+                "label": "成就",
+                "total": len(rows),
+                "name_search": name_search,
+                "completion": completion_filter,
+                "entries": [_achievement_payload(row) for row in rows],
+            }
+
+    def achievement(self, achievement_id: int) -> dict[str, Any] | None:
+        if int(achievement_id) <= 0:
+            raise ValueError("成就 ID 必须是正整数")
+        with self._lock:
+            self._ensure_sync()
+            row = get_achievement(self.connection, int(achievement_id))
+            if row is None:
+                return None
+            payload = _achievement_payload(row)
+            raw = json.loads(row["raw_json"])
+            config_fields = [
+                {
+                    "field": field,
+                    "label": FIELD_LABELS.get(field, field),
+                    "value": format_scalar(value),
+                }
+                for field, value in raw.items()
+            ]
+            method = payload["method"]
+            return {
+                "achievement": payload,
+                "conditions": {
+                    "condition": payload["condition"],
+                    "method": method,
+                    "method_steps": [
+                        line.strip() for line in method.splitlines() if line.strip()
+                    ],
+                    "role_restriction": payload["role_restriction"],
+                    "notes": payload["notes"],
+                    "common_notes": payload["common_notes"],
+                    "numeric_threshold": payload["numeric_threshold"],
+                    "value_parameters": payload["value_parameters"],
+                    "exclusions": payload["exclusions"],
+                    "config_references": payload["config_references"],
+                },
+                "config_fields": config_fields,
             }
 
     def entry(self, category: str, entry_key: str) -> dict[str, Any] | None:
@@ -812,6 +948,27 @@ class CodexRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/recipe-plans":
             self._send_json(HTTPStatus.OK, service.recipe_plans())
+            return
+        if path == "/api/achievements":
+            name_search = _first_query_value(query, "name_search")
+            if not name_search:
+                name_search = _first_query_value(query, "search")
+            completion = _first_query_value(query, "completion", "all")
+            self._send_json(
+                HTTPStatus.OK,
+                service.achievements(name_search, completion),
+            )
+            return
+        achievement_prefix = "/api/achievements/"
+        if path.startswith(achievement_prefix):
+            raw_id = urllib.parse.unquote(path[len(achievement_prefix) :])
+            if not re.fullmatch(r"[0-9]+", raw_id):
+                raise ValueError("成就 ID 必须是正整数")
+            result = service.achievement(int(raw_id))
+            if result is None:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "找不到成就")
+            else:
+                self._send_json(HTTPStatus.OK, result)
             return
         if path == "/api/entries":
             category = _first_query_value(query, "category", "furniture")

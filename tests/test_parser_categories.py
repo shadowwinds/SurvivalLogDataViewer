@@ -37,6 +37,7 @@ TABLE_NAMES = (
     "Config_FurnitureState",
     "Config_FurnitureTag",
     "Config_FurniturePartner",
+    "Config_Achievement",
 )
 
 
@@ -174,6 +175,60 @@ class DishRenderingTests(unittest.TestCase):
         self.assertIn("Item 10（ID 10）", content)
         self.assertIn("Subcategory 2（ID 2）", content)
         self.assertIn("60 秒（1.0 分钟）", content)
+
+
+class AchievementSchemaTests(unittest.TestCase):
+    def _pack_string(self, value: str) -> bytes:
+        import struct
+
+        raw = value.encode("utf-8")
+        return struct.pack("<ii", ~len(raw), len(value)) + raw
+
+    def _pack_row(self, achievement_id: int) -> bytes:
+        import struct
+
+        values = [
+            struct.pack("<ii", achievement_id, 10),
+            self._pack_string("Achievement_Name"),
+            self._pack_string("成就"),
+            self._pack_string("Achievement_Des"),
+            self._pack_string("描述"),
+            self._pack_string("STEAM_KEY"),
+            self._pack_string("icon.png"),
+            b"\x00",
+            self._pack_string("small.png"),
+            struct.pack("<i", 11),
+            struct.pack("<if", 2, 1.0) + struct.pack("<f", 0.0),
+            struct.pack("<ii", 1, 0),
+            self._pack_string("counter"),
+            struct.pack("<if", 0, 2.0),
+            struct.pack("<i", 0),
+            b"\x00",
+            self._pack_string("progress"),
+            struct.pack("<f", 2.0),
+        ]
+        return b"\x15" + b"".join(values)
+
+    def test_achievement_schema_reads_float_list_and_eof(self) -> None:
+        import struct
+        from codex_parser import parse_config_table
+
+        raw = struct.pack("<i", 1) + self._pack_row(1001)
+        rows = parse_config_table(raw, "Config_Achievement")
+        self.assertEqual(rows[0].row_id, 1001)
+        self.assertEqual(rows[0].values["Value"], [1.0, 0.0])
+        with self.assertRaises(ValueError):
+            parse_config_table(raw + b"x", "Config_Achievement")
+
+    def test_achievement_schema_rejects_wrong_member_count_and_duplicate_id(self) -> None:
+        import struct
+        from codex_parser import parse_config_table
+
+        with self.assertRaises(ValueError):
+            parse_config_table(struct.pack("<i", 1) + b"\x14", "Config_Achievement")
+        raw = struct.pack("<i", 2) + self._pack_row(1001) + self._pack_row(1001)
+        with self.assertRaisesRegex(ValueError, "重复 ID"):
+            parse_config_table(raw, "Config_Achievement")
 
 
 class DatabaseRefreshTests(unittest.TestCase):

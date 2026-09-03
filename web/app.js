@@ -121,7 +121,12 @@
 
   function renderHeader() {
     const category = currentCategory();
-    byId("entriesTitle").textContent = `${category.label}条目`;
+    byId("entriesTitle").textContent = category.category === "achievements"
+      ? "成就列表"
+      : `${category.label}条目`;
+    byId("detailTitle").textContent = category.category === "achievements"
+      ? "成就详情"
+      : "条目详情";
     byId("resultCount").textContent = `${state.entries.length} 条`;
   }
 
@@ -159,9 +164,16 @@
   }
 
   function renderSearchControls() {
+    const nameInput = byId("nameSearchInput");
+    const nameLabel = byId("nameSearchLabel");
     const input = byId("materialSearchInput");
     const field = input && input.closest(".material-search-field");
     const supported = ["dish", "craft", "furniture"].includes(state.category);
+    const achievements = state.category === "achievements";
+    if (nameLabel) nameLabel.textContent = achievements ? "成就搜索" : "成品名称";
+    if (nameInput) {
+      nameInput.placeholder = achievements ? "名称、ID或条件文字" : "名称、名称键或 ID";
+    }
     if (!input || !field) return;
     input.disabled = !supported;
     field.classList.toggle("is-disabled", !supported);
@@ -189,6 +201,7 @@
     }
 
     const fragment = document.createDocumentFragment();
+    const achievements = state.category === "achievements";
     state.entries.forEach((entry) => {
       const row = makeElement("article", "entry-row");
       row.classList.toggle("selected", entry.entry_key === state.selectedKey);
@@ -201,10 +214,13 @@
         makeElement("div", "entry-name", entry.name),
         makeElement("span", "entry-id", `ID ${entry.source_id}`),
       );
+      if (achievements && entry.is_hidden) {
+        titleLine.append(makeElement("span", "entry-visibility", "隐藏"));
+      }
       const highlightLine = makeElement("div", "entry-highlight");
-      const highlightItems = Array.isArray(entry.highlight_items)
-        ? entry.highlight_items
-        : [];
+      const highlightItems = achievements
+        ? [{ label: "完成条件", value: entry.condition_summary || "未提供条件说明" }]
+        : (Array.isArray(entry.highlight_items) ? entry.highlight_items : []);
       if (highlightItems.length) {
         highlightItems.forEach((item) => {
           const highlightItem = makeElement("span", "entry-highlight-item");
@@ -663,7 +679,142 @@
     content.replaceChildren(makeElement("div", "empty-state", message));
   }
 
+  function renderAchievementDetail(payload) {
+    const content = byId("detailContent");
+    content.replaceChildren();
+    if (!payload || !payload.achievement) {
+      renderDetailEmpty("选择一个成就查看详情");
+      return;
+    }
+
+    const entry = payload.achievement;
+    const conditions = payload.conditions || {};
+    const heading = makeElement("div", "detail-heading");
+    const headingMain = makeElement("div", "detail-heading-main");
+    headingMain.append(
+      makeElement("h4", "detail-name", entry.name),
+      makeElement("div", "detail-source", `${entry.source_table} · ID ${entry.source_id}`),
+    );
+    if (entry.is_hidden) headingMain.append(makeElement("span", "achievement-visibility", "隐藏成就"));
+    heading.append(
+      headingMain,
+      makeElement(
+        "span",
+        `detail-status ${entry.completed ? "completed" : "pending"}`,
+        entry.completed ? "已解锁" : "未解锁",
+      ),
+    );
+    content.append(heading);
+
+    if (entry.description) {
+      content.append(makeElement("p", "detail-description", entry.description));
+    }
+
+    const addTextSection = (title, value, fallback) => {
+      const section = makeElement("section", "detail-section achievement-section");
+      section.append(makeElement("h5", "detail-section-title", title));
+      section.append(makeElement("p", "achievement-text", value || fallback));
+      content.append(section);
+    };
+
+    addTextSection("完成条件", conditions.condition || entry.condition, "未提供详细条件说明");
+
+    const methodSteps = Array.isArray(conditions.method_steps)
+      ? conditions.method_steps.filter((value) => String(value || "").trim())
+      : [];
+    const methodSection = makeElement("section", "detail-section achievement-section");
+    methodSection.append(makeElement("h5", "detail-section-title", "完成方法"));
+    if (methodSteps.length > 1) {
+      const list = makeElement("ol", "achievement-method-list");
+      methodSteps.forEach((step) => list.append(makeElement("li", null, step)));
+      methodSection.append(list);
+    } else {
+      methodSection.append(
+        makeElement("p", "achievement-text", methodSteps[0] || conditions.method || "配置未提供额外方法说明"),
+      );
+    }
+    content.append(methodSection);
+
+    addTextSection(
+      "角色限制",
+      conditions.role_restriction,
+      "整理资料与当前配置未注明角色限制",
+    );
+
+    const notes = Array.isArray(conditions.notes) ? conditions.notes : [];
+    const commonNotes = Array.isArray(conditions.common_notes) ? conditions.common_notes : [];
+    const numericThreshold = conditions.numeric_threshold;
+    const valueParameters = Array.isArray(conditions.value_parameters)
+      ? conditions.value_parameters
+      : [];
+    if ((numericThreshold !== null && numericThreshold !== undefined) || valueParameters.length) {
+      const thresholdSection = makeElement("section", "detail-section achievement-section");
+      thresholdSection.append(makeElement("h5", "detail-section-title", "数值门槛"));
+      const values = [];
+      if (numericThreshold !== null && numericThreshold !== undefined) {
+        values.push(`主门槛：${numericThreshold}`);
+      }
+      if (valueParameters.length) {
+        values.push(`配置参数：${valueParameters.join("、")}`);
+      }
+      thresholdSection.append(makeElement("p", "achievement-text", values.join("；")));
+      content.append(thresholdSection);
+    }
+
+    const exclusions = Array.isArray(conditions.exclusions) ? conditions.exclusions : [];
+    if (exclusions.length) {
+      const exclusionSection = makeElement("section", "detail-section achievement-section");
+      exclusionSection.append(makeElement("h5", "detail-section-title", "排除项"));
+      const list = makeElement("ul", "achievement-notes");
+      exclusions.forEach((item) => list.append(makeElement("li", null, item)));
+      exclusionSection.append(list);
+      content.append(exclusionSection);
+    }
+
+    const notesSection = makeElement("section", "detail-section achievement-section");
+    notesSection.append(makeElement("h5", "detail-section-title", "注意事项"));
+    const list = makeElement("ul", "achievement-notes");
+    if (commonNotes.length || notes.length) {
+      [...commonNotes, ...notes].forEach((note) => list.append(makeElement("li", null, note)));
+    } else {
+      list.append(makeElement("li", null, "暂无额外注意事项"));
+    }
+    notesSection.append(list);
+    content.append(notesSection);
+
+    const configReferences = Array.isArray(conditions.config_references)
+      ? conditions.config_references
+      : [];
+    if (configReferences.length) {
+      const referenceSection = makeElement("section", "detail-section achievement-section");
+      referenceSection.append(makeElement("h5", "detail-section-title", "配置引用"));
+      referenceSection.append(makeElement("p", "achievement-text", configReferences.join("、")));
+      content.append(referenceSection);
+    }
+
+    const configFields = Array.isArray(payload.config_fields) ? payload.config_fields : [];
+    if (configFields.length) {
+      const details = makeElement("details", "detail-collapse");
+      details.append(makeElement("summary", "detail-collapse-summary", "配置字段"));
+      const fieldSection = makeElement("section", "detail-section");
+      const fieldTable = makeElement("dl", "field-table");
+      configFields.forEach((field) => {
+        fieldTable.append(
+          makeElement("dt", "field-label", field.label),
+          makeElement("dd", "field-value", field.value),
+        );
+      });
+      fieldSection.append(fieldTable);
+      details.append(fieldSection);
+      content.append(details);
+    }
+  }
+
   function renderDetail(payload) {
+    if (state.category === "achievements") {
+      renderAchievementDetail(payload);
+      return;
+    }
     const content = byId("detailContent");
     content.replaceChildren();
     if (!payload || !payload.entry) {
@@ -757,8 +908,10 @@
     }
     byId("detailContent").classList.add("is-loading");
     try {
-      const query = new URLSearchParams({ category: state.category });
-      const payload = await requestJson(`/api/entries/${encodeURIComponent(entryKey)}?${query}`);
+      const path = state.category === "achievements"
+        ? `/api/achievements/${encodeURIComponent(entryKey)}`
+        : `/api/entries/${encodeURIComponent(entryKey)}?${new URLSearchParams({ category: state.category })}`;
+      const payload = await requestJson(path);
       if (requestId === state.detailRequest) renderDetail(payload);
     } catch (error) {
       if (requestId === state.detailRequest) renderDetailEmpty(error.message);
@@ -767,7 +920,38 @@
     }
   }
 
+  async function loadAchievementEntries() {
+    const requestId = ++state.entriesRequest;
+    byId("entryList").classList.add("is-loading");
+    const query = new URLSearchParams({
+      name_search: state.nameSearch,
+      completion: state.completion,
+    });
+    try {
+      const payload = await requestJson(`/api/achievements?${query}`);
+      if (requestId !== state.entriesRequest) return;
+      state.entries = payload.entries || [];
+      if (!state.entries.some((entry) => entry.entry_key === state.selectedKey)) {
+        state.selectedKey = state.entries.length ? state.entries[0].entry_key : null;
+      }
+      renderEntries();
+      await loadDetail(state.selectedKey);
+    } catch (error) {
+      if (requestId === state.entriesRequest) {
+        state.entries = [];
+        byId("entryList").replaceChildren(makeElement("div", "error-state", error.message));
+        renderHeader();
+        renderDetailEmpty("成就详情暂不可用");
+      }
+    } finally {
+      if (requestId === state.entriesRequest) byId("entryList").classList.remove("is-loading");
+    }
+  }
+
   async function loadEntries() {
+    if (state.category === "achievements") {
+      return loadAchievementEntries();
+    }
     const requestId = ++state.entriesRequest;
     byId("entryList").classList.add("is-loading");
     const query = new URLSearchParams({

@@ -1,7 +1,11 @@
 <!-- BEGIN USER GUIDE -->
 # Survival Log Data Viewer
 
-离线读取 Survival Log 本地资源的图鉴查看器。程序不启动游戏，不修改游戏文件、Mod、Steam Cloud 或存档；图鉴配置来自本机游戏资源，完成状态只读取 `HistorySave.bytes`。
+成就模块读取当前资源中的全部 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
+
+条件说明来自随程序发布的 `achievement_conditions.json`。该文件的 `source_version` 必须与当前游戏资源版本一致，并且每个 `Config_Achievement` ID、名称和隐藏标记都必须有对应说明；校验失败时不会静默导入不完整条件。成就同步与其他完成状态共用约 5 秒轮询，主存档和 `.bak` 都无法解析，或旧存档格式无法确认 `UnlockedAchievementIds` 时，保留上一次有效成就状态。
+
+离线读取 Survival Log 本地资源的图鉴查看器。程序不启动游戏，不修改游戏文件、Mod、Steam Cloud 或存档；图鉴配置来自本机游戏资源，完成状态只读取 `HistorySave.bytes`，成就条件来自随程序发布的版本化说明文件。
 
 ## 面向用户
 
@@ -31,7 +35,7 @@
 
 完成状态同步只读游戏保存的图鉴完成列表；菜肴页面另行只读各子存档的主控背包、工作台抽屉和按当前角色判定位于玩家家中的全部储物容器。子存档先按 `LeadingRole.Name` 解析角色，名称缺失、未知或冲突时按 `GameSaveData.PlayerSelectId`、`HistoryList.PlayerSelectId`、`LeadingRole.AgentConfigId` 顺序兼容回退并显示诊断。储物容器先按 `InitChapterId` 选择 `ChapterAgentMap` 外层章节分组，再按专用配置功能、角色槽位和 `MapConfigIdHome`/实例 `MapConfigId` 证据识别，不按容器名称筛选；外层键不是角色 ID、地图 ID 或“数值越大越新”，角色 1/2/3 分别使用 `HomeBuildingPos`/`Home_`、`NeighborGirlBuildingPos`、`WarehousePos` 槽位，空槽位不因地图相同而视为家中，其他角色槽位和未知位置不会并入食材库存，但每个实例及位置诊断仍会保留。专用储物配置覆盖全部 `FurnitureFunc` 包含 215 或 `ShowStorage > 0` 的家具，因此旧配置 ID `80062` 和其他非当前图鉴家具也可被识别。程序不读取联网数据，也不会写回存档；主存档和备份都无法解析时，页面会保留上一次有效状态并显示同步错误。
 
-当前数据库 schema 为 v8。菜肴近匹配只有在精确配方缺一个物品数量，或分类配方只缺一个分类槽位且其余实际库存组合完整时才显示；多个可替代食材仍属于同一个分类槽位。
+当前数据库 schema 为 v9，runtime schema 为 v2。菜肴近匹配只有在精确配方缺一个物品数量，或分类配方只缺一个分类槽位且其余实际库存组合完整时才显示；多个可替代食材仍属于同一个分类槽位。
 
 ### 存档章节分组说明
 
@@ -105,6 +109,8 @@
 如果页面显示的是旧数据，先确认数据库目录有写入权限，再查看同目录日志。不要手动编辑数据库、存档或游戏资源；这类修改可能使后续完整性检查或存档解析失败。需要重新生成静态图鉴时，应由开发者使用源码命令并把输出写到指定的项目外目录。
 
 程序的静态图鉴数据始终来自当前本机游戏资源；页面显示的是当前数据库内容和所选存档完成状态。
+成就 API 为 `GET /api/achievements?name_search=&completion=all` 和 `GET /api/achievements/{achievement_id}`。前者支持名称、ID、描述和条件文字搜索，以及全部、已解锁、未解锁筛选；后者返回完整条件说明、方法步骤、角色限制、数值门槛、排除项、注意事项、配置引用和配置字段。
+
 <!-- END USER GUIDE -->
 
 <!-- BEGIN DEVELOPER GUIDE -->
@@ -116,6 +122,7 @@
 | --- | --- |
 | `codex_parser.py` | 定位 YooAsset、解密 UnityFS 并解析 MemoryPack 配置 |
 | `codex_database.py` | 构建、查询和同步 SQLite 数据库 |
+| `codex_achievements.py` | 加载并校验版本化的成就条件说明 |
 | `codex_save.py` | 只读解析 `HistorySave.bytes` |
 | `codex_server.py` | 标准库本地 HTTP 服务和 API |
 | `codex_launcher.py` | 独立版启动、存档选择和自动更新 |
@@ -125,6 +132,7 @@
 | `snapshots/` | 七份版本化 Markdown 快照 |
 | `survival_log_codex.sqlite3` | 跟踪的源码静态配置库 |
 | `survival_log_codex_runtime.sqlite3` | 未跟踪的源码完成状态、存档元数据和 runtime 缓存 |
+| `achievement_conditions.json` | 与当前游戏资源版本绑定的全部成就条件、方法和限制 |
 | `parser_notes.md` | 资源格式、schema、分类和运行限制 |
 
 ### 开发环境和依赖
