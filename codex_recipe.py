@@ -1264,8 +1264,8 @@ def build_recipe_plan(
         raise RecipeConfigError(
             f"数据库烹饪档位阈值不完整：actual={len(rules)}, expected={len(SUPPORTED_TIER_SUBCATEGORIES)}"
         )
-    if len(recipes) != 496:
-        raise RecipeConfigError(f"数据库菜谱数量不完整：actual={len(recipes)}, expected=496")
+    if not recipes:
+        raise RecipeConfigError("数据库未包含任何菜谱；请先重建数据库")
     completed = frozenset(history.category_ids.get("dish", ()))
     pending = [recipe for recipe in recipes if recipe.recipe_id not in completed]
     pending_payload = [

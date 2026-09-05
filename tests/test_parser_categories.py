@@ -240,6 +240,10 @@ class DatabaseRefreshTests(unittest.TestCase):
             connection.execute(
                 "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
             )
+            connection.execute(
+                "CREATE TABLE achievements (achievement_id INTEGER PRIMARY KEY)"
+            )
+            connection.execute("INSERT INTO achievements(achievement_id) VALUES (1001)")
             connection.executemany(
                 "INSERT INTO metadata(key, value) VALUES (?, ?)",
                 [
@@ -270,4 +274,42 @@ class DatabaseRefreshTests(unittest.TestCase):
             result = codex_update.update_database_if_needed(database, game)
 
         self.assertEqual(result.status, "updated")
-        build_database.assert_called_once_with(game.root, database, sync_save=False)
+        build_database.assert_called_once_with(
+            game.root,
+            database,
+            sync_save=False,
+            refresh_achievements=False,
+        )
+
+    def test_condition_metadata_does_not_force_resource_refresh(self) -> None:
+        database = self._make_metadata_database("9")
+        game = GameInstallation(
+            root=Path("test-game"),
+            catalog_path=Path("test-catalog"),
+            package_version="1.0.15130 / catalog 2.3.1",
+        )
+
+        with patch.object(codex_database, "build_database") as build_database:
+            result = codex_update.update_database_if_needed(database, game)
+
+        self.assertEqual(result.status, "unchanged")
+        build_database.assert_not_called()
+
+    def test_resource_version_change_refreshes_six_categories_only(self) -> None:
+        database = self._make_metadata_database("9")
+        game = GameInstallation(
+            root=Path("test-game"),
+            catalog_path=Path("test-catalog"),
+            package_version="1.0.14956 / catalog 2.3.1",
+        )
+
+        with patch.object(codex_database, "build_database") as build_database:
+            result = codex_update.update_database_if_needed(database, game)
+
+        self.assertEqual(result.status, "updated")
+        build_database.assert_called_once_with(
+            game.root,
+            database,
+            sync_save=False,
+            refresh_achievements=False,
+        )

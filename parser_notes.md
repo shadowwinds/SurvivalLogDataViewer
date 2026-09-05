@@ -2,7 +2,7 @@
 
 ## 成就模块（当前实现）
 
-当前资源中的 `Config_Achievement` 已按 21 字段 MemoryPack schema 读取，并以配置 ID 为主键写入静态库 `achievements` 表；`achievement_conditions.json` 保存全部成就的分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项。条件文件的 `source_version`、ID 集合、名称和隐藏标记必须与当前资源一致，数据库更新会在校验失败时保留旧库。
+手动导入成就时，当前资源中的 `Config_Achievement` 按 21 字段 MemoryPack schema 读取，并以配置 ID 为主键写入静态库 `achievements` 表；`achievement_conditions.json` 保存全部成就的分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项。条件文件的 `source_version` 仅记录人工整理时参考的资源版本，不参与自动更新版本判断；手动导入仍校验 ID 集合、名称和隐藏标记。自动更新六类图鉴时跳过 `Config_Achievement` 和条件文件，保留已有成就内容及完成状态。
 
 成就完成状态只读取 `HistorySave.bytes` 的全局 `HistoryData.UnlockedAchievementIds`，不按 `Save_*.bytes` 子存档区分。当前配置中未出现的已解锁 ID 只写入诊断；旧存档无法确认该字段时，以及主存档和 `.bak` 都无法读取时，保留上一次有效成就状态。成就使用 runtime 的 `achievement_completion` 表和独立的 `已完成/总数`统计，不计入六类图鉴总进度；网页侧边栏显示全部成就，包括隐藏成就，约每 5 秒轮询一次。
 
@@ -12,7 +12,7 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机 `HistorySave.bytes` 中的图鉴完成状态。不启动游戏，不修改存档、mod DLL、游戏资源或 Steam Cloud。
 
-当前本地游戏资源版本为 `1.0.15511`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
+当前本地游戏资源版本为 `1.0.15704`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -22,7 +22,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前版本主图鉴配置总量为：食品 174、菜肴 496、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 174、菜肴 496、植物 34、猎物 19、制造 125、家具 87，六类分类映射合计 `935`；当前 `Config_Achievement` 读取 93 行、21 个字段。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
+当前版本主图鉴配置总量为：食品 173、菜肴 493、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 173、菜肴 493、植物 34、猎物 19、制造 124、家具 87，六类分类映射合计 `930`；当前 `Config_Achievement` 读取 93 行、21 个字段。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
 
 ## 2. 游戏图鉴和存档
 
@@ -56,7 +56,7 @@
 
 `Config_Achievement` 使用当前 bundle 中验证过的 21 字段 schema：ID、排序、名称/本地化名称、描述/本地化描述、Steam 成就键、图标、展示标记、成就类型、浮点 `Value` 列表、分类、触发模式、计数器键、比较方式、阈值、条件组 ID、隐藏标记、进度计数器键和进度目标。解析器验证对象数量、字段数量、浮点列表长度、重复 ID 和数据 EOF。
 
-人工整理的条件保存在跟踪文件 [`achievement_conditions.json`](./achievement_conditions.json)，由 `codex_achievements.py` 校验 `source_version`、ID 集合、名称和隐藏标记。每条说明包括分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项；当前版本的结局成就 1102-1108 还共享“必须实际触发结局、同一存档只能承诺一条路线、承诺事件消耗 9048、撑过最终尸潮”等边界说明。配置版本或成就 ID 发生变化而条件文件未更新时，构建和自动更新会报错，不会静默显示不完整条件。
+人工整理的条件保存在跟踪文件 [`achievement_conditions.json`](./achievement_conditions.json)，由 `codex_achievements.py` 校验 ID 集合、名称和隐藏标记；`source_version` 只作为说明来源记录。每条说明包括分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项；当前版本的结局成就 1102-1108 还共享“必须实际触发结局、同一存档只能承诺一条路线、承诺事件消耗 9048、撑过最终尸潮”等边界说明。资源版本更新时自动更新只处理原有六类图鉴，不会重新读取或覆盖成就内容；用户需要手动整理成就说明后，再执行显式的成就导入/数据库构建。
 
 其中，图纸成就按制造图鉴解锁数判断，不按累计制作次数判断；社区成就按成功发送的社区群表态/回复次数判断，取消回复、普通私聊和独立八卦选项不计；纪念品成就要求指定 9300-9307 家具各至少有一个实例实际摆放，只有拥有或放在背包中不计。`3003` 的“预算”取灾变前配置预算，储蓄能力增加的是可用资金上限，不会改变该成就的原始预算门槛；是否满足仍以游戏实际触发的条件组和禁用标记为准。
 
@@ -80,11 +80,11 @@
 
 食品和猎物使用当前游戏 Codex 字段，两个分类允许重叠：
 
-- 食品：`Config_Item.InCodex == true && Category == 1`，当前展示 174 条。
+- 食品：`Config_Item.InCodex == true && Category == 1`，当前展示 173 条。
 - 猎物：`Config_Item.InCodex == true && Prey_Rarity > 0`，当前展示 19 条。
-- 菜肴：当前 `Config_CookingRecipe` 的全部 496 条配置（该表没有 `InCodex` 字段）。
+- 菜肴：当前 `Config_CookingRecipe` 的全部 493 条配置（该表没有 `InCodex` 字段）。
 - 植物：`Config_Plant.InCodex == true`，当前展示 34 条。
-- 制造：`Config_ProductionList.InCodex == true`，当前展示 125 条。
+- 制造：`Config_ProductionList.InCodex == true`，当前展示 124 条。
 - 家具：`Config_Furniture.InCodex == true`，当前展示 87 条。
 
 因此，猎物物品可以同时出现在食品和猎物 Markdown 中；数据库只保存一份完成状态，并通过分类映射分别计数。主 Markdown 只展开主表条目，物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `survival_log_auxiliary.md`。

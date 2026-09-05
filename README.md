@@ -1,11 +1,11 @@
 <!-- BEGIN USER GUIDE -->
 # Survival Log Data Viewer
 
-成就模块读取当前资源中的全部 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
+成就模块在手动导入时读取 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
 
-条件说明来自随程序发布的 `achievement_conditions.json`。该文件的 `source_version` 必须与当前游戏资源版本一致，并且每个 `Config_Achievement` ID、名称和隐藏标记都必须有对应说明；校验失败时不会静默导入不完整条件。成就同步与其他完成状态共用约 5 秒轮询，主存档和 `.bak` 都无法解析，或旧存档格式无法确认 `UnlockedAchievementIds` 时，保留上一次有效成就状态。
+条件说明来自随程序发布的 `achievement_conditions.json`，其中的 `source_version` 仅记录人工整理时参考的资源版本，不参与自动更新判断。自动更新只校验并重建原有六类图鉴，跳过 `Config_Achievement` 和人工条件说明，并保留数据库中已有的成就内容及完成状态；仅在数据库尚无成就数据时，才会在初始化阶段导入当前手工说明。成就同步与其他完成状态共用约 5 秒轮询，主存档和 `.bak` 都无法解析，或旧存档格式无法确认 `UnlockedAchievementIds` 时，保留上一次有效成就状态。
 
-离线读取 Survival Log 本地资源的图鉴查看器。程序不启动游戏，不修改游戏文件、Mod、Steam Cloud 或存档；图鉴配置来自本机游戏资源，完成状态只读取 `HistorySave.bytes`，成就条件来自随程序发布的版本化说明文件。
+离线读取 Survival Log 本地资源的图鉴查看器。程序不启动游戏，不修改游戏文件、Mod、Steam Cloud 或存档；六类图鉴配置来自本机游戏资源，完成状态只读取 `HistorySave.bytes`，成就条件来自随程序发布的手动维护说明文件。
 
 ## 面向用户
 
@@ -87,7 +87,7 @@
 
 ### 游戏更新和文件管理
 
-程序会把数据库记录的游戏资源版本与本机安装目录的 catalog 版本进行比较。版本一致时直接打开已有数据库，版本变化时才重新解析配置。更新过程只读取游戏文件，并通过数据库事务写入新结果；资源缺失、版本格式异常或 schema 不匹配时会显示错误并保留旧数据库。
+程序会把数据库记录的游戏资源版本与本机安装目录的 catalog 版本进行比较。版本一致时直接打开已有数据库，版本变化时只重新解析六类图鉴配置，跳过 `Config_Achievement` 和人工成就条件说明；更新过程只读取游戏文件，并通过数据库事务写入新结果，同时保留已有成就内容和完成状态。资源缺失、版本格式异常或 schema 不匹配时会显示错误并保留旧数据库。
 
 发布包必须作为完整文件夹移动或备份。除了 `生存日志图鉴.exe`，网页资源目录和 `SurvivalLogDataViewer.sqlite3` 也是运行所需文件；只复制 exe 会导致页面或数据库缺失。新生成的发布目录不包含日志；程序使用后产生的日志可以一起保留，用于排查存档同步问题，但其中不包含原始存档内容。
 
@@ -122,7 +122,7 @@
 | --- | --- |
 | `codex_parser.py` | 定位 YooAsset、解密 UnityFS 并解析 MemoryPack 配置 |
 | `codex_database.py` | 构建、查询和同步 SQLite 数据库 |
-| `codex_achievements.py` | 加载并校验版本化的成就条件说明 |
+| `codex_achievements.py` | 加载并校验手动维护的成就条件说明 |
 | `codex_save.py` | 只读解析 `HistorySave.bytes` |
 | `codex_server.py` | 标准库本地 HTTP 服务和 API |
 | `codex_launcher.py` | 独立版启动、存档选择和自动更新 |
@@ -132,7 +132,7 @@
 | `snapshots/` | 七份版本化 Markdown 快照 |
 | `survival_log_codex.sqlite3` | 跟踪的源码静态配置库 |
 | `survival_log_codex_runtime.sqlite3` | 未跟踪的源码完成状态、存档元数据和 runtime 缓存 |
-| `achievement_conditions.json` | 与当前游戏资源版本绑定的全部成就条件、方法和限制 |
+| `achievement_conditions.json` | 手动维护的全部成就条件、方法和限制 |
 | `parser_notes.md` | 资源格式、schema、分类和运行限制 |
 
 ### 开发环境和依赖

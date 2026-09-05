@@ -9,6 +9,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import codex_database
@@ -118,7 +119,7 @@ def _insert_achievement(connection: sqlite3.Connection, achievement_id: int, nam
 
 
 class AchievementConditionTests(unittest.TestCase):
-    def test_condition_catalog_covers_current_ids_and_hidden_flags(self) -> None:
+    def test_condition_catalog_covers_current_ids_and_ignores_resource_version(self) -> None:
         source_version, _common_notes, conditions = load_achievement_conditions()
         self.assertEqual(source_version, "1.0.15511 / catalog 2.3.1")
         self.assertEqual(len(conditions), 93)
@@ -129,7 +130,7 @@ class AchievementConditionTests(unittest.TestCase):
             )
             for achievement_id, condition in conditions.items()
         ]
-        validate_achievement_conditions(rows, source_version, conditions, source_version)
+        validate_achievement_conditions(rows, "new-game-version", conditions, source_version)
         self.assertTrue(conditions[1102].hidden_in_text)
         self.assertTrue(conditions[1102].role_restriction)
         self.assertEqual(conditions[9004].value_parameters, ())
@@ -250,6 +251,86 @@ class AchievementDatabaseTests(unittest.TestCase):
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM metadata WHERE key LIKE 'save_%'").fetchone()[0],
                 0,
+            )
+        finally:
+            connection.close()
+
+    def test_resource_refresh_preserves_manual_achievement_data_and_status(self) -> None:
+        database = self.root / "refresh.sqlite3"
+        connection = sqlite3.connect(database)
+        initialize_database(connection)
+        _insert_achievement(connection, 1001, "manual achievement")
+        connection.execute(
+            "UPDATE achievements SET condition_text = 'manual-condition' WHERE achievement_id = 1001"
+        )
+        connection.execute(
+            "INSERT INTO achievement_completion(achievement_id, completed, updated_at) VALUES (1001, 1, 'manual')"
+        )
+        connection.execute(
+            "INSERT INTO metadata(key, value) VALUES ('achievement_condition_version', 'manual-version')"
+        )
+        connection.commit()
+        connection.close()
+
+        context = SimpleNamespace(
+            package_version="new-game-version",
+            bundle_name="new-bundle",
+            bundle_path=Path("new-bundle.bytes"),
+            tables={table_name: [] for table_name, _title in codex_database.AUXILIARY_TABLES},
+        )
+        selected_rows = {category: [] for category in codex_database.CATEGORY_ORDER}
+        recipe_counts = {
+            "recipe_items": 0,
+            "recipe_tier_rules": 0,
+            "storage_furniture": 0,
+        }
+        with (
+            patch.object(codex_database, "build_extraction_context", return_value=context) as build_context,
+            patch.object(
+                codex_database,
+                "load_achievement_conditions",
+                side_effect=AssertionError("automatic refresh must not load manual conditions"),
+            ),
+            patch.object(
+                codex_database,
+                "load_recipe_static_data",
+                return_value=([], [object()] * 496, []),
+            ),
+            patch.object(codex_database, "storage_furniture_specs_from_rows", return_value=[]),
+            patch.object(codex_database, "collect_entries", return_value=({}, [])),
+            patch.object(codex_database, "build_relations", return_value=[]),
+            patch.object(codex_database, "select_category_rows", return_value=selected_rows),
+            patch.object(codex_database, "populate_recipe_tables", return_value=recipe_counts),
+        ):
+            result = codex_database.build_database(
+                Path("test-game"),
+                database,
+                sync_save=False,
+                single_file=True,
+                refresh_achievements=False,
+            )
+
+        self.assertFalse(build_context.call_args.kwargs["include_achievement"])
+        self.assertEqual(result["achievements"], 1)
+        connection = sqlite3.connect(database)
+        try:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT name, condition_text FROM achievements WHERE achievement_id = 1001"
+                ).fetchone(),
+                ("manual achievement", "manual-condition"),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT completed FROM achievement_completion WHERE achievement_id = 1001"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT value FROM metadata WHERE key = 'achievement_condition_version'"
+                ).fetchone()[0],
+                "manual-version",
             )
         finally:
             connection.close()

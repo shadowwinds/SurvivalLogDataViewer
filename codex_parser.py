@@ -563,7 +563,11 @@ def load_config_table(game_root: Path, table_name: str) -> tuple[list[ConfigRow]
     return parse_config_table(raw, table_name), bundle_name, package_version, bundle_path
 
 
-def build_extraction_context(game_root: Path) -> ExtractionContext:
+def build_extraction_context(
+    game_root: Path,
+    *,
+    include_achievement: bool = True,
+) -> ExtractionContext:
     primary_tables = [
         "Config_Item",
         "Config_ItemSubCategory",
@@ -581,8 +585,9 @@ def build_extraction_context(game_root: Path) -> ExtractionContext:
         "Config_FurnitureState",
         "Config_FurnitureTag",
         "Config_FurniturePartner",
-        "Config_Achievement",
     ]
+    if include_achievement:
+        primary_tables.append("Config_Achievement")
     tables: dict[str, list[ConfigRow]] = {}
     bundle_names: set[str] = set()
     package_versions: set[str] = set()

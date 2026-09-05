@@ -219,6 +219,13 @@ def validate_achievement_conditions(
     conditions: Mapping[int, AchievementCondition],
     source_version: str,
 ) -> None:
+    """Validate manual notes against a selected Config_Achievement snapshot.
+
+    The version arguments are retained for API compatibility and metadata
+    reporting. Manual condition content is not version-gated.
+    """
+
+    del package_version, source_version
     config_by_id: dict[int, Any] = {}
     for row in config_rows:
         row_id = int(row.row_id)
@@ -236,11 +243,6 @@ def validate_achievement_conditions(
         if extra:
             parts.append(f"说明中存在配置没有的 ID：{extra}")
         raise AchievementConditionError("成就条件说明与 Config_Achievement 不一致；" + "；".join(parts))
-    if source_version != package_version:
-        raise AchievementConditionError(
-            "成就条件说明版本与游戏资源版本不一致："
-            f"说明={source_version}，资源={package_version}；请更新 achievement_conditions.json"
-        )
     for achievement_id, condition in conditions.items():
         config_values = config_by_id[achievement_id].values
         config_name = str(config_values.get("Name_Local") or config_values.get("Name") or "")

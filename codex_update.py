@@ -291,36 +291,23 @@ def _database_schema_version(database_path: Path) -> str:
         connection.close()
 
 
-def _database_condition_version(database_path: Path) -> str:
+def _database_has_achievements(database_path: Path) -> bool:
+    """Return whether a database already contains the manual achievement data."""
+
     if not database_path.is_file():
-        return ""
+        return False
     import sqlite3
 
     connection = sqlite3.connect(str(database_path))
     try:
-        row = connection.execute(
-            "SELECT value FROM metadata WHERE key = 'achievement_condition_version'"
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'achievements'"
         ).fetchone()
-        return str(row[0]) if row else ""
+        if table is None:
+            return False
+        return connection.execute("SELECT 1 FROM achievements LIMIT 1").fetchone() is not None
     except sqlite3.DatabaseError:
-        return ""
-    finally:
-        connection.close()
-
-
-def _database_condition_schema_version(database_path: Path) -> str:
-    if not database_path.is_file():
-        return ""
-    import sqlite3
-
-    connection = sqlite3.connect(str(database_path))
-    try:
-        row = connection.execute(
-            "SELECT value FROM metadata WHERE key = 'achievement_condition_schema_version'"
-        ).fetchone()
-        return str(row[0]) if row else ""
-    except sqlite3.DatabaseError:
-        return ""
+        return False
     finally:
         connection.close()
 
@@ -339,15 +326,12 @@ def update_database_if_needed(
 
     old_version = _database_version(database_path)
     from codex_database import DATABASE_SCHEMA_VERSION, build_database
-    from codex_achievements import CONDITION_SCHEMA_VERSION, load_achievement_conditions
-
-    condition_version, _common_notes, _conditions = load_achievement_conditions()
+    refresh_achievements = not _database_has_achievements(database_path)
 
     if (
         old_version == game.package_version
         and _database_schema_version(database_path) == str(DATABASE_SCHEMA_VERSION)
-        and _database_condition_version(database_path) == condition_version
-        and _database_condition_schema_version(database_path) == str(CONDITION_SCHEMA_VERSION)
+        and not refresh_achievements
     ):
         return UpdateResult("unchanged", game.root, old_version, game.package_version, f"图鉴已是游戏版本 {game.package_version}")
 
@@ -357,22 +341,29 @@ def update_database_if_needed(
             database_path,
             sync_save=False,
             single_file=True,
+            refresh_achievements=refresh_achievements,
         )
     elif runtime_database_path is None:
-        build_database(game.root, database_path, sync_save=False)
+        build_database(
+            game.root,
+            database_path,
+            sync_save=False,
+            refresh_achievements=refresh_achievements,
+        )
     else:
         build_database(
             game.root,
             database_path,
             sync_save=False,
             runtime_database_path=runtime_database_path,
+            refresh_achievements=refresh_achievements,
         )
     return UpdateResult(
         "updated",
         game.root,
         old_version,
         game.package_version,
-        f"已从游戏版本 {old_version or '未知'} 更新图鉴到 {game.package_version}",
+        f"已从游戏版本 {old_version or '未知'} 更新六类图鉴到 {game.package_version}，成就内容保持不变",
     )
 
 

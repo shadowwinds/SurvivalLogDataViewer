@@ -1260,6 +1260,7 @@ def build_database(
     sync_save: bool = True,
     runtime_database_path: Path | None = None,
     single_file: bool = False,
+    refresh_achievements: bool = True,
 ) -> dict[str, Any]:
     game_root = game_root.expanduser().resolve()
     database_path = database_path.expanduser().resolve()
@@ -1270,27 +1271,33 @@ def build_database(
     ensure_database_outside_game_root(game_root, database_path)
     if runtime_database_path is not None:
         ensure_database_outside_game_root(game_root, runtime_database_path)
-    context = build_extraction_context(game_root)
+    context = build_extraction_context(
+        game_root,
+        include_achievement=refresh_achievements,
+    )
     achievement_rows = list(context.tables.get("Config_Achievement", ()))
-    try:
-        achievement_condition_version, _common_notes, achievement_conditions = (
-            load_achievement_conditions()
-        )
-        validate_achievement_conditions(
-            achievement_rows,
-            context.package_version,
-            achievement_conditions,
-            achievement_condition_version,
-        )
-    except AchievementConditionError:
-        raise
+    achievement_condition_version = ""
+    achievement_conditions = {}
+    if refresh_achievements:
+        try:
+            achievement_condition_version, _common_notes, achievement_conditions = (
+                load_achievement_conditions()
+            )
+            validate_achievement_conditions(
+                achievement_rows,
+                context.package_version,
+                achievement_conditions,
+                achievement_condition_version,
+            )
+        except AchievementConditionError:
+            raise
     recipe_items, recipe_specs, tier_rules = load_recipe_static_data(game_root, context)
     storage_furniture = storage_furniture_specs_from_rows(
         context.tables.get("Config_Furniture", ())
     )
-    if len(recipe_specs) != 496:
+    if not recipe_specs:
         raise RecipeConfigError(
-            f"Config_CookingRecipe 图鉴配方数量不完整：actual={len(recipe_specs)}, expected=496"
+            "Config_CookingRecipe 未解析到任何菜谱配置"
         )
     entries, memberships = collect_entries(context)
     relations = build_relations(context, entries)
@@ -1316,7 +1323,8 @@ def build_database(
             connection.execute("DELETE FROM recipe_items")
             connection.execute("DELETE FROM recipe_tier_rules")
             connection.execute("DELETE FROM storage_furniture")
-            connection.execute("DELETE FROM achievements")
+            if refresh_achievements:
+                connection.execute("DELETE FROM achievements")
 
             for sort_order, (category, label) in enumerate(CATEGORY_LABELS.items()):
                 connection.execute(
@@ -1403,54 +1411,59 @@ def build_database(
             )
 
             achievement_insert_rows = []
-            for row in sorted(
-                achievement_rows,
-                key=lambda item: (int(item.values.get("Order") or 0), item.row_id),
-            ):
-                condition = achievement_conditions[row.row_id]
-                achievement_insert_rows.append(
-                    (
-                        row.row_id,
-                        int(row.values.get("Order") or 0),
-                        config_row_name(row),
-                        row_name_key(row),
-                        row_description(row),
-                        row_icon_path(row),
-                        condition.category,
-                        int(bool(row.values.get("IsHidden", False))),
-                        condition.condition,
-                        condition.method,
-                        condition.role_restriction,
-                        json_text(list(condition.notes)),
-                        json_text(list(condition.common_notes)),
-                        condition.numeric_threshold,
-                        json_text(list(condition.value_parameters)),
-                        json_text(list(condition.exclusions)),
-                        json_text(list(condition.config_references)),
-                        achievement_condition_version,
-                        json_text(row.values),
+            if refresh_achievements:
+                for row in sorted(
+                    achievement_rows,
+                    key=lambda item: (int(item.values.get("Order") or 0), item.row_id),
+                ):
+                    condition = achievement_conditions[row.row_id]
+                    achievement_insert_rows.append(
+                        (
+                            row.row_id,
+                            int(row.values.get("Order") or 0),
+                            config_row_name(row),
+                            row_name_key(row),
+                            row_description(row),
+                            row_icon_path(row),
+                            condition.category,
+                            int(bool(row.values.get("IsHidden", False))),
+                            condition.condition,
+                            condition.method,
+                            condition.role_restriction,
+                            json_text(list(condition.notes)),
+                            json_text(list(condition.common_notes)),
+                            condition.numeric_threshold,
+                            json_text(list(condition.value_parameters)),
+                            json_text(list(condition.exclusions)),
+                            json_text(list(condition.config_references)),
+                            achievement_condition_version,
+                            json_text(row.values),
+                        )
                     )
-                )
-            connection.executemany(
-                """
-                INSERT INTO achievements(
-                    achievement_id, sort_order, name, name_key, description, icon_path,
-                    category, is_hidden, condition_text, method_text, role_restriction,
-                    notes_json, common_notes_json, numeric_threshold, value_parameters_json,
-                    exclusions_json, config_references_json, source_version, raw_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                achievement_insert_rows,
-            )
-            if single_file:
                 connection.executemany(
                     """
-                    INSERT OR IGNORE INTO achievement_completion(
-                        achievement_id, completed, updated_at
-                    ) VALUES (?, 0, ?)
+                    INSERT INTO achievements(
+                        achievement_id, sort_order, name, name_key, description, icon_path,
+                        category, is_hidden, condition_text, method_text, role_restriction,
+                        notes_json, common_notes_json, numeric_threshold, value_parameters_json,
+                        exclusions_json, config_references_json, source_version, raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    ((row[0], imported_at) for row in achievement_insert_rows),
+                    achievement_insert_rows,
                 )
+                if single_file:
+                    connection.executemany(
+                        """
+                        INSERT OR IGNORE INTO achievement_completion(
+                            achievement_id, completed, updated_at
+                        ) VALUES (?, 0, ?)
+                        """,
+                        ((row[0], imported_at) for row in achievement_insert_rows),
+                    )
+
+            achievement_count = int(
+                connection.execute("SELECT COUNT(*) FROM achievements").fetchone()[0]
+            )
 
             metadata = {
                 "database_schema_version": str(DATABASE_SCHEMA_VERSION),
@@ -1464,11 +1477,16 @@ def build_database(
                 "recipe_count": str(len(recipe_specs)),
                 "recipe_tier_rule_count": str(recipe_table_counts["recipe_tier_rules"]),
                 "storage_furniture_count": str(recipe_table_counts["storage_furniture"]),
-                "achievement_count": str(len(achievement_rows)),
-                "achievement_condition_version": achievement_condition_version,
-                "achievement_condition_schema_version": str(CONDITION_SCHEMA_VERSION),
                 "database_profile": "standalone" if single_file else "static",
             }
+            if refresh_achievements:
+                metadata.update(
+                    {
+                        "achievement_count": str(achievement_count),
+                        "achievement_condition_version": achievement_condition_version,
+                        "achievement_condition_schema_version": str(CONDITION_SCHEMA_VERSION),
+                    }
+                )
             _upsert_metadata(connection, metadata)
 
         if sync_save and single_file:
@@ -1513,7 +1531,7 @@ def build_database(
         "recipe_items": len(recipe_items),
         "recipe_count": len(recipe_specs),
         "recipe_tier_rules": len(tier_rules),
-        "achievements": len(achievement_rows),
+        "achievements": achievement_count,
         **{category: len(rows) for category, rows in selected_rows.items()},
         "save_sync": save_sync,
     }
