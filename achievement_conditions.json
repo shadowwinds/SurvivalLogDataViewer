@@ -1,5 +1,5 @@
 {
-  "source_version": "1.0.15511 / catalog 2.3.1",
+  "source_version": "1.0.15704 / catalog 2.3.1",
   "common_notes": [
     "必须实际触发并确认对应结局事件；只看到路线介绍、收到路线提示或满足路线前置条件，都不会直接完成成就。",
     "选择路线的承诺事件都要求消耗 1 个「军用维修套件」（物品 ID `9048`）。当前版本路线承诺截止日为第 74 天；第 75 天起不能再选择新的结局路线。",
@@ -1861,11 +1861,11 @@
       "name": "邻里之间",
       "category": "隐藏杂项",
       "hidden_in_text": true,
-      "condition": "打开手机的社区群，在群消息出现“在群里说一下/表态”入口时点击，完成回复并确认发送；每次成功执行一次群回复，计数器 `group.reply` 增加 1，达到 20 次才完成。仅打开回复框后取消、普通私聊回复，以及独立的八卦/选项回复不计入这个计数器。",
+      "condition": "打开手机的社区群，在群消息出现“在群里说一下/表态”入口时点击，完成回复并确认发送；每次成功执行一次群回复，计数器 `group.reply` 增加 1，达到 12 次才完成。仅打开回复框后取消、普通私聊回复，以及独立的八卦/选项回复不计入这个计数器。",
       "method": "",
       "role_restriction": "",
       "notes": [],
-      "numeric_threshold": 20.0,
+      "numeric_threshold": 12.0,
       "value_parameters": [],
       "exclusions": [],
       "config_references": [
@@ -1874,9 +1874,9 @@
         "Config_Achievement.Category:10",
         "Config_Achievement.TriggerMode:1",
         "Config_Achievement.CounterKey:group.reply",
-        "Config_Achievement.Threshold:20.0",
+        "Config_Achievement.Threshold:12.0",
         "Config_Achievement.ProgressCounterKey:group.reply",
-        "Config_Achievement.ProgressTarget:20.0"
+        "Config_Achievement.ProgressTarget:12.0"
       ]
     },
     {

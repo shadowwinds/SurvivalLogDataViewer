@@ -121,7 +121,7 @@ def _insert_achievement(connection: sqlite3.Connection, achievement_id: int, nam
 class AchievementConditionTests(unittest.TestCase):
     def test_condition_catalog_covers_current_ids_and_ignores_resource_version(self) -> None:
         source_version, _common_notes, conditions = load_achievement_conditions()
-        self.assertEqual(source_version, "1.0.15511 / catalog 2.3.1")
+        self.assertEqual(source_version, "1.0.15704 / catalog 2.3.1")
         self.assertEqual(len(conditions), 93)
         rows = [
             ConfigRow(
@@ -136,6 +136,8 @@ class AchievementConditionTests(unittest.TestCase):
         self.assertEqual(conditions[9004].value_parameters, ())
         self.assertIn("Config_Achievement.ConditionSetId:32144", conditions[9004].config_references)
         self.assertIn("ach.taboo.overspend", conditions[3003].exclusions)
+        self.assertEqual(conditions[9001].numeric_threshold, 12.0)
+        self.assertIn("Config_Achievement.Threshold:12.0", conditions[9001].config_references)
 
     def test_condition_catalog_rejects_unknown_schema_version(self) -> None:
         payload = json.loads((ROOT / "achievement_conditions.json").read_text(encoding="utf-8"))
