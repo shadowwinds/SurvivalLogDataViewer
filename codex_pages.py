@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sqlite3
@@ -21,6 +22,40 @@ SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "app.js", "favicon.svg")
+STAT_LABELS = ("饱食", "心态", "精力", "健康", "生命")
+PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
+
+
+def icon_filename(asset_path: str) -> str:
+    path = asset_path.replace("\\", "/").removesuffix(".png").lower()
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()[:20] + ".png"
+
+
+def public_icon(asset_path: str) -> str:
+    if not asset_path:
+        return ""
+    filename = icon_filename(asset_path)
+    source = SOURCE_DIR / "icons" / filename
+    return f"./icons/{filename}" if source.is_file() and not source.is_symlink() else ""
+
+
+def food_profile(raw: dict[str, Any], tags: dict[int, str], groups: dict[int, str]) -> dict[str, Any]:
+    counts: dict[int, int] = {}
+    for field in ("FoodTag1", "FoodTag2", "FoodTag3"):
+        tag_id = raw.get(field, 0)
+        if tag_id:
+            counts[tag_id] = counts.get(tag_id, 0) + 1
+    return {
+        "stats": [{"field": f"ValueDisplay{index}", "label": label, "value": raw.get(f"ValueDisplay{index}")}
+                  for index, label in enumerate(STAT_LABELS, 1)],
+        "tags": [{"id": tag_id, "name": tags.get(tag_id, f"ID:{tag_id}"), "count": count}
+                 for tag_id, count in counts.items()],
+        "sub_category_id": raw.get("SubCategory", 0),
+        "sub_category": groups.get(raw.get("SubCategory", 0), f"ID:{raw['SubCategory']}" if raw.get("SubCategory") else "未分类"),
+        "cookable": raw.get("CanCook", False),
+        "note": raw.get("ItemDes2_Local") or raw.get("ItemDes2") or "",
+        "icon": public_icon(raw.get("Icon") or ""),
+    }
 
 
 def config_fields(raw: dict[str, Any]) -> list[dict[str, str]]:
@@ -50,6 +85,12 @@ def export_data(database_path: Path) -> dict[str, Any]:
             for category in CATEGORY_ORDER
         ]
         category_map = {category["id"]: category for category in categories}
+        tags = {row["row_id"]: row["name"] for row in connection.execute(
+            "SELECT row_id, name FROM auxiliary_rows WHERE table_name='Config_FoodType'")}
+        groups = {row["row_id"]: row["name"] for row in connection.execute(
+            "SELECT row_id, name FROM auxiliary_rows WHERE table_name='Config_ItemSubCategory'")}
+        items = {row["item_id"]: (row["name"], json.loads(row["raw_json"]))
+                 for row in connection.execute("SELECT item_id, name, raw_json FROM recipe_items")}
         memberships: dict[str, list[str]] = {}
         for row in connection.execute(
             """
@@ -101,7 +142,20 @@ def export_data(database_path: Path) -> dict[str, Any]:
                     "highlights": highlights,
                     "fields": fields,
                     "relations": related,
+                    "icon": public_icon(raw.get("Icon") or ""),
                 }
+                if category in {"food", "prey"}:
+                    entry["food"] = food_profile(raw, tags, groups)
+                elif category == "dish":
+                    entry["products"] = []
+                    for field, quality in PRODUCT_FIELDS:
+                        item_id = raw.get(field, 0)
+                        if not item_id:
+                            continue
+                        name, product = items.get(item_id, (f"ID:{item_id}", {}))
+                        entry["products"].append({"id": item_id, "quality": quality, "name": name,
+                                                  **food_profile(product, tags, groups)})
+                    entry["icon"] = next((product["icon"] for product in entry["products"] if product["icon"]), "")
                 category_map[category]["entries"].append(entry)
         achievements = []
         for row in connection.execute("SELECT * FROM achievements ORDER BY sort_order, achievement_id"):
@@ -150,6 +204,20 @@ def build_pages(database_path: Path, output_dir: Path) -> Path:
             raise ValueError(f"输出文件不能是符号链接：{name}")
     for name in ASSETS:
         shutil.copyfile(SOURCE_DIR / name, output_dir / name)
+    icons = {entry.get("icon", "") for category in payload["categories"] for entry in category["entries"]}
+    icons.update(product["icon"] for category in payload["categories"] for entry in category["entries"]
+                 for product in entry.get("products", []))
+    if icons - {""}:
+        icon_dir = output_dir / "icons"
+        if icon_dir.is_symlink() or (icon_dir.exists() and not icon_dir.is_dir()):
+            raise ValueError("图标输出目录不能是符号链接或普通文件")
+        icon_dir.mkdir(exist_ok=True)
+        for icon in sorted(icons - {""}):
+            filename = Path(icon).name
+            target = icon_dir / filename
+            if target.is_symlink():
+                raise ValueError(f"图标输出文件不能是符号链接：{filename}")
+            shutil.copyfile(SOURCE_DIR / "icons" / filename, target)
     (output_dir / "data.json").write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
         encoding="utf-8",

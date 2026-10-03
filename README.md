@@ -5,7 +5,9 @@
 
 本 fork 的在线版：[生存日志在线图鉴](https://shadowwinds.github.io/SurvivalLogDataViewer/)。原项目来自 [tianwaiyan/SurvivalLogDataViewer](https://github.com/tianwaiyan/SurvivalLogDataViewer)。
 
-在线版从仓库已公开的静态 SQLite 生成，支持六类图鉴及成就的分类浏览、名称/ID 搜索、材料搜索和详情查询。它使用数据库中记录的数据版本，不自动跟随访客本机游戏更新；个人完成状态、存档自动同步和库存菜肴匹配仍由原项目本地版提供。
+在线版从仓库已公开的静态 SQLite 生成。食品直接展示饱食、心态、精力、健康、生命五项属性、食品标签及烹饪分类；菜肴可以切换普通、良好、完美和失败品质，查看成品效果。支持按标签、属性增益筛选及属性排序，也能从食材查询相关配方。页面配有从游戏只读提取的物品图标，缺失图标用分类符号占位。
+
+六类图鉴及成就仍支持名称/ID 搜索、材料搜索和详情查询。食品标签和烹饪分类分别保留，不用标签替代配方分类；相关配方只是食材用途参考，实际制作仍需满足完整配方与品质要求。数值使用数据库中记录的数据版本，不自动跟随访客本机游戏更新；个人完成状态、存档自动同步和库存菜肴匹配仍由原项目本地版提供。
 
 成就模块在手动导入时读取 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
 
@@ -124,7 +126,9 @@
 
 ### GitHub Pages 构建与部署
 
-运行 `python codex_pages.py --output-dir build/pages` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、`data.json` 和 `.nojekyll`。
+运行 `python codex_pages.py --output-dir build/pages` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json` 和 `.nojekyll`。
+
+图标提取是独立的本地步骤：安装 UnityPy 后运行 `python codex_pages_icons.py --game-root "游戏安装目录" --output-dir pages/icons`。脚本只从 catalog 定位图鉴条目及菜肴成品引用的图标，复用现有 bundle 解密，将 PNG 缩略图和不含本机路径的版本清单写入指定输出目录，不输出配置全集或修改游戏。Pages 工作流直接使用仓库图标，不需要游戏或 UnityPy。
 
 自己的公开 fork 也可以部署：在仓库 `Settings → Pages → Source` 选择 `GitHub Actions`，然后运行 `Build and deploy online codex` 工作流。后续主分支的相关代码或静态库更新会自动重新构建和发布。
 

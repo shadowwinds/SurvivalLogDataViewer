@@ -2,8 +2,20 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  const mobile = matchMedia("(max-width: 650px)");
-  const state = { categories: [], category: "food", key: "", entries: [], debounce: null };
+  const mobile = matchMedia("(max-width: 720px)");
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null };
+  const qualities = ["普通", "良好", "完美", "失败"];
+  const statLabels = ["饱食", "心态", "精力", "健康", "生命"];
+  const titles = { food: "食材与食品", dish: "料理与效果", plant: "种植手册", prey: "猎物图鉴", craft: "制造手册", furniture: "家具与设施", achievements: "成就指南" };
+  const intros = {
+    food: "看属性、查标签，找到食材的好去处。",
+    dish: "先看吃完的效果，再决定今天做什么。",
+    plant: "了解生长条件，把收获留给下一餐。",
+    prey: "查找猎物的属性与获取信息。",
+    craft: "材料与产物，一次查清。",
+    furniture: "从生活设施到生存据点。",
+    achievements: "查条件、看方法，补齐你的生存记录。",
+  };
   const icons = {
     food: '<path d="M5 10c-4-3-1-7 3-6 2-2 5-2 7 0 4-1 7 3 3 6v9H5z"/><path d="M9 11v4m5-4v4"/>',
     dish: '<path d="M3 12h18a9 9 0 0 1-18 0zM8 21h8M9 3c-3 3 3 3 0 6m6-6c-3 3 3 3 0 6"/>',
@@ -29,142 +41,423 @@
     return element;
   }
 
-  function category() {
-    return state.categories.find((item) => item.id === state.category);
+  function icon(categoryId) {
+    const span = node("span", "nav-icon");
+    span.setAttribute("aria-hidden", "true");
+    span.innerHTML = '<svg viewBox="0 0 24 24">' + (icons[categoryId] || icons.food) + "</svg>";
+    return span;
+  }
+
+  function art(src, categoryId = state.category, detail = false) {
+    const wrapper = node("span", "entry-art" + (detail ? " detail-art" : ""));
+    wrapper.setAttribute("aria-hidden", "true");
+    const fallback = () => {
+      wrapper.replaceChildren(icon(categoryId));
+      wrapper.title = "暂无物品图标";
+    };
+    if (/^\.\/icons\/[a-f0-9]{20}\.png$/.test(src || "")) {
+      const image = node("img");
+      image.src = src;
+      image.alt = "";
+      image.loading = detail ? "eager" : "lazy";
+      image.decoding = "async";
+      image.addEventListener("error", fallback, { once: true });
+      wrapper.append(image);
+    } else fallback();
+    return wrapper;
+  }
+
+  function category(id = state.category) {
+    return state.categories.find((item) => item.id === id);
   }
 
   function urlFor(categoryId, key) {
-    return `#${categoryId}/${encodeURIComponent(key)}`;
+    return "#" + categoryId + "/" + encodeURIComponent(key);
   }
 
   function setUrl() {
     history.replaceState(null, "", urlFor(state.category, state.key));
   }
 
+  function profile(entry) {
+    return entry.food || entry.products?.find((product) => product.quality === $("qualitySelect").value);
+  }
+
+  function statValue(entry, field) {
+    return profile(entry)?.stats.find((stat) => stat.field === field)?.value;
+  }
+
+  function signed(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+    const text = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+    return value > 0 ? "+" + text : text;
+  }
+
+  function valueClass(value) {
+    return typeof value !== "number" || value === 0 ? "zero" : value < 0 ? "negative" : "";
+  }
+
+  function tagList(tags, interactive = false) {
+    const list = node("div", "tag-list");
+    for (const tag of tags || []) {
+      const badge = node(interactive ? "button" : "span", "tag", tag.name);
+      if (tag.count > 1) badge.append(node("span", "tag-count", "×" + tag.count));
+      badge.title = "食品标签中的重复次数；烹饪配方使用食材分类进行匹配";
+      if (interactive) {
+        badge.type = "button";
+        badge.addEventListener("click", () => {
+          $("tagSelect").value = String(tag.id);
+          if (mobile.matches) $("detailPanel").close();
+          render();
+        });
+      }
+      list.append(badge);
+    }
+    return list;
+  }
+
+  function statGrid(stats, compact = false) {
+    const list = node(compact ? "div" : "dl", compact ? "card-stats" : "stat-grid");
+    for (const stat of stats || []) {
+      const row = node(compact ? "span" : "div", compact ? "card-stat" : "stat-tile " + valueClass(stat.value));
+      row.dataset.field = stat.field;
+      const label = node(compact ? "span" : "dt", "", stat.label);
+      const value = node(compact ? "b" : "dd", compact ? valueClass(stat.value) : "", signed(stat.value));
+      row.append(label, value);
+      row.setAttribute("aria-label", stat.label + " " + signed(stat.value));
+      list.append(row);
+    }
+    return list;
+  }
+
   function buildNav() {
     const fragment = document.createDocumentFragment();
-    for (const item of state.categories) {
+    for (const id of ["food", "dish", "plant", "prey", "craft", "furniture", "achievements"]) {
+      const item = category(id);
+      if (!item) continue;
+      if (id === "food" || id === "plant") fragment.append(node("div", "nav-caption", id === "food" ? "吃什么 · 怎么做" : "更多生存手册"));
       const button = node("button", "category-button");
       button.type = "button";
-      button.dataset.category = item.id;
-      button.setAttribute("aria-label", `${item.label}，${item.entries.length} 条`);
-      const icon = node("span", "nav-icon");
-      icon.setAttribute("aria-hidden", "true");
-      icon.innerHTML = `<svg viewBox="0 0 24 24">${icons[item.id] || ""}</svg>`;
-      button.append(icon, node("span", "category-label", item.label), node("span", "category-count", item.entries.length));
+      button.dataset.category = id;
+      button.setAttribute("aria-label", titles[id] + "，" + item.entries.length + " 条");
+      button.append(icon(id), node("span", "category-label", titles[id]), node("span", "category-count", item.entries.length));
       button.addEventListener("click", () => {
-        if (state.category === item.id) return;
-        location.hash = urlFor(item.id, item.entries[0]?.key || "");
+        if (state.category === id) return;
+        location.hash = urlFor(id, "");
       });
       fragment.append(button);
     }
     $("categoryNav").replaceChildren(fragment);
   }
 
-  function filteredEntries() {
-    const name = normalize($("nameSearch").value);
-    const material = $("materialField").hidden ? "" : normalize($("materialSearch").value);
-    return category().entries.filter((entry) => entry.nameIndex.includes(name) && entry.materialIndex.includes(material));
+  function configureControls() {
+    const isFood = ["food", "prey"].includes(state.category);
+    const isDish = state.category === "dish";
+    $("categoryTitle").textContent = titles[state.category];
+    $("categoryIntro").textContent = intros[state.category];
+    $("searchLabel").textContent = isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
+    $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
+    $("materialField").hidden = !["dish", "craft", "furniture"].includes(state.category);
+    $("materialSearch").placeholder = isDish ? "食材名称 / 分类，可用逗号组合" : "材料名称或 ID";
+    $("qualityField").hidden = !isDish;
+    $("playerFilters").hidden = !isFood && !isDish;
+    $("tagField").hidden = !isFood;
+    $("cookableField").hidden = !isFood;
+    const tags = new Map();
+    category().entries.forEach((entry) => entry.food?.tags.forEach((tag) => tags.set(tag.id, tag.name)));
+    const tagOptions = [node("option", "", "全部标签")];
+    tagOptions[0].value = "";
+    for (const [id, name] of tags) {
+      const option = node("option", "", name);
+      option.value = id;
+      tagOptions.push(option);
+    }
+    $("tagSelect").replaceChildren(...tagOptions);
+    const effects = statLabels.map((label, index) => {
+      const button = node("button", "filter-chip", label + " +");
+      button.type = "button";
+      button.dataset.effect = "ValueDisplay" + (index + 1);
+      button.title = "只显示" + label + "为正的条目，可再次点击取消";
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => {
+        state.effect = state.effect === button.dataset.effect ? "" : button.dataset.effect;
+        render();
+      });
+      return button;
+    });
+    $("effectFilters").replaceChildren(...effects);
+    const sorts = [node("option", "", "图鉴顺序")];
+    sorts[0].value = "default";
+    if (isFood || isDish) statLabels.forEach((label, index) => {
+      const option = node("option", "", label + "最高优先");
+      option.value = "ValueDisplay" + (index + 1);
+      sorts.push(option);
+    });
+    $("sortSelect").replaceChildren(...sorts);
   }
 
-  function preview(entry) {
-    if (state.category === "achievements") return entry.highlights[0]?.value || entry.description;
-    return entry.highlights.map((field) => `${field.label}：${field.value}`).join(" · ") || entry.description;
+  function clearFilters() {
+    clearTimeout(state.debounce);
+    $("nameSearch").value = "";
+    $("materialSearch").value = "";
+    $("tagSelect").value = "";
+    $("cookableOnly").checked = false;
+    $("sortSelect").value = "default";
+    state.effect = "";
+  }
+
+  function filteredEntries() {
+    const name = normalize($("nameSearch").value);
+    const materials = $("materialField").hidden ? [] : normalize($("materialSearch").value).split(/[\s,，、]+/).filter(Boolean);
+    const tag = $("tagField").hidden ? "" : $("tagSelect").value;
+    const cookable = !$("cookableField").hidden && $("cookableOnly").checked;
+    const entries = category().entries.filter((entry) =>
+      entry.nameIndex.includes(name) && (state.category === "dish" ? matchesMaterialSlots(entry, materials) : materials.every((term) => entry.materialIndex.includes(term))) &&
+      (!tag || entry.food?.tags.some((item) => String(item.id) === tag)) &&
+      (!cookable || entry.food?.cookable) && (!state.effect || statValue(entry, state.effect) > 0));
+    const sort = $("sortSelect").value;
+    if (sort !== "default") entries.sort((a, b) => {
+      const av = statValue(a, sort), bv = statValue(b, sort);
+      const difference = (typeof bv === "number" ? bv : -Infinity) - (typeof av === "number" ? av : -Infinity);
+      return Number.isNaN(difference) || difference === 0 ? a.id - b.id : difference;
+    });
+    return entries;
+  }
+
+  function matchesMaterialSlots(entry, terms) {
+    if (!terms.length) return true;
+    const used = new Set();
+    const assign = (index) => {
+      if (index === terms.length) return true;
+      return entry.materialSlots.some((slot, slotIndex) => {
+        if (used.has(slotIndex) || !slot.includes(terms[index])) return false;
+        used.add(slotIndex);
+        if (assign(index + 1)) return true;
+        used.delete(slotIndex);
+        return false;
+      });
+    };
+    return assign(0);
   }
 
   function renderList() {
     const fragment = document.createDocumentFragment();
-    state.entries.forEach((entry) => {
+    for (const entry of state.entries) {
       const button = node("button", "entry-card");
       button.type = "button";
       button.dataset.key = entry.key;
       button.classList.toggle("active", entry.key === state.key);
       button.setAttribute("aria-pressed", String(entry.key === state.key));
-      button.setAttribute("aria-label", `${entry.name}，ID ${entry.id}`);
+      const player = profile(entry);
+      const statsText = player?.stats.map((stat) => stat.label + signed(stat.value)).join("，");
+      button.setAttribute("aria-label", entry.name + (statsText ? "，" + statsText : "") + "，查看详情");
+      const top = node("span", "card-top");
+      const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
-      meta.append(node("span", "", `NO. ${String(entry.id).padStart(4, "0")}`));
-      if (entry.hidden) meta.append(node("span", "entry-tag", "隐藏成就"));
-      else if (entry.group) meta.append(node("span", "entry-tag", entry.group));
-      button.append(meta, node("span", "entry-name", entry.name), node("span", "entry-description", preview(entry)));
+      meta.append(node("span", "", player?.sub_category || (entry.hidden ? "隐藏成就" : entry.group || category().label)));
+      if (state.category === "dish") meta.append(node("span", "quality-label", $("qualitySelect").value + "品质"));
+      else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
+      heading.append(node("span", "entry-name", entry.name), meta);
+      top.append(art(player?.icon || entry.icon), heading);
+      button.append(top);
+      if (player) {
+        const tags = tagList(player.tags);
+        tags.classList.add("card-tags");
+        button.append(tags, statGrid(player.stats, true));
+        if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
+      } else {
+        button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
+      }
       button.addEventListener("click", () => selectEntry(entry.key, true));
       fragment.append(button);
-    });
+    }
     $("entryList").replaceChildren(fragment);
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
-    $("resultCount").textContent = `显示 ${state.entries.length} / ${category().entries.length} 条`;
+    $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
+    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" : ["food", "prey"].includes(state.category) ? "绿色为增益 · 橙色为减益" : "";
+  }
+
+  function section(title, caption = "") {
+    const element = node("section", "detail-section");
+    const heading = node("h3", "section-heading", title);
+    if (caption) heading.append(node("span", "", caption));
+    element.append(heading);
+    return element;
   }
 
   function addNotes(container, title, values) {
     if (!values?.length) return;
-    const section = node("section", "detail-section");
-    section.append(node("h3", "section-title", title));
+    const block = section(title);
     const list = node("ul", "notes-list");
     values.forEach((value) => list.append(node("li", "", value)));
-    section.append(list);
-    container.append(section);
+    block.append(list);
+    container.append(block);
   }
 
-  function renderDetail() {
+  function renderRelations(container, relations, title) {
+    if (!relations.length) return;
+    const block = section(title);
+    const groups = new Map();
+    for (const relation of relations) {
+      if (!groups.has(relation.relation_type)) groups.set(relation.relation_type, new Map());
+      const group = groups.get(relation.relation_type);
+      const key = relation.target_table + ":" + relation.target_id;
+      if (group.has(key)) group.get(key).quantity += 1;
+      else group.set(key, { ...relation, quantity: 1 });
+    }
+    for (const [label, relationsById] of groups) {
+      const group = node("div", "ingredient-group");
+      const readable = label === "具体食材" ? "指定食材" : label === "食材分类" ? "按食材分类搭配" : label;
+      group.append(node("div", "ingredient-label", readable));
+      const values = node("div", "relation-values");
+      for (const relation of relationsById.values()) {
+        const item = node(relation.link ? "a" : "span", "relation-item");
+        const target = category(relation.link?.category)?.entries.find((entry) => entry.key === relation.link?.key);
+        if (target?.icon) item.append(art(target.icon, relation.link.category));
+        item.append(node("span", "", (relation.target_name || "ID:" + relation.target_id) + (relation.quantity > 1 ? " × " + relation.quantity : "")));
+        item.title = relation.target_table + " / ID " + relation.target_id;
+        if (relation.link) item.href = urlFor(relation.link.category, relation.link.key);
+        values.append(item);
+      }
+      group.append(values);
+      block.append(group);
+    }
+    container.append(block);
+  }
+
+  function relatedDishes(entry) {
+    if (!entry.food?.cookable) return [];
+    return (category("dish")?.entries || []).filter((dish) => dish.ingredientIds.has(entry.id)).sort((a, b) => {
+      const exactA = a.relations.some((r) => r.relation_type === "具体食材" && r.target_id === entry.id);
+      const exactB = b.relations.some((r) => r.relation_type === "具体食材" && r.target_id === entry.id);
+      return Number(exactB) - Number(exactA) || a.id - b.id;
+    });
+  }
+
+  function showRelatedDishes(container, entry) {
+    if (!entry.food?.cookable) return;
+    const dishes = relatedDishes(entry);
+    const block = section("这个食材能做什么", dishes.length + " 道相关配方");
+    if (!dishes.length) {
+      block.append(node("p", "stat-help", "当前图鉴中没有匹配到相关配方。"));
+    } else {
+      for (const dish of dishes.slice(0, 5)) {
+        const link = node("a", "recipe-link");
+        link.href = urlFor("dish", dish.key);
+        const exact = dish.relations.some((r) => r.relation_type === "具体食材" && r.target_id === entry.id);
+        const name = node("span", "recipe-name", dish.name);
+        name.append(node("span", "recipe-hint", exact ? "配方指定食材" : "符合食材分类 · 仍需搭配"));
+        const product = dish.products?.find((item) => item.quality === $("qualitySelect").value);
+        const satiety = product?.stats.find((stat) => stat.field === "ValueDisplay1")?.value;
+        link.append(name, node("span", "recipe-effect", "饱食 " + signed(satiety) + " ↗"));
+        block.append(link);
+      }
+      block.append(node("p", "stat-help", $("qualitySelect").value + "品质效果。分类配方还需满足其余食材及档位要求；指定食材配方优先。"));
+      const more = node("button", "more-recipes", "用「" + entry.name + "」查全部配方 →");
+      more.type = "button";
+      more.addEventListener("click", () => {
+        if (mobile.matches) $("detailPanel").close();
+        state.category = "dish";
+        clearFilters();
+        configureControls();
+        $("materialSearch").value = entry.name;
+        state.key = "";
+        render();
+        $("entryList").scrollTop = 0;
+      });
+      block.append(more);
+    }
+    container.append(block);
+  }
+
+  function renderDetail(preserveScroll = false) {
+    const scroll = $("detailContent").scrollTop;
     const entry = state.entries.find((item) => item.key === state.key);
     if (!entry) {
-      const empty = node("div", "detail-placeholder");
-      empty.append(node("span", "", "SL"), node("p", "", "选择条目，查看图鉴详情。"));
-      $("detailContent").replaceChildren(empty);
-      $("detailPosition").textContent = "条目详情 / DETAIL";
+      const placeholder = node("div", "detail-placeholder");
+      placeholder.append(node("p", "", "没有匹配的条目，试试减少筛选条件。"));
+      $("detailContent").replaceChildren(placeholder);
+      $("detailPanel").removeAttribute("aria-labelledby");
+      $("detailPosition").textContent = "条目详情";
       return;
     }
     const fragment = document.createDocumentFragment();
-    fragment.append(node("div", "detail-category", `${category().label}${entry.hidden ? " / 隐藏成就" : ""}`));
-    const title = node("div", "detail-title-row");
+    const player = profile(entry);
+    const hero = node("div", "detail-hero");
+    const text = node("div", "detail-hero-text");
     const heading = node("h2", "", entry.name);
     heading.id = "detailName";
-    title.append(heading, node("span", "detail-id", `ID ${entry.id}`));
-    fragment.append(title);
+    text.append(node("div", "detail-category", titles[state.category] + (entry.hidden ? " / 隐藏成就" : "")), heading, node("div", "detail-id", "ID " + entry.id));
+    hero.append(art(player?.icon || entry.icon, state.category, true), text);
+    fragment.append(hero);
+    if (state.category === "dish") {
+      const block = section("吃完有什么效果", "按成品品质查看");
+      const tabs = node("div", "quality-tabs");
+      tabs.setAttribute("role", "group");
+      tabs.setAttribute("aria-label", "成品品质");
+      for (const quality of qualities) {
+        const button = node("button", "quality-tab", quality);
+        button.type = "button";
+        button.dataset.quality = quality;
+        button.classList.toggle("active", $("qualitySelect").value === quality);
+        button.setAttribute("aria-pressed", String($("qualitySelect").value === quality));
+        button.disabled = !entry.products?.some((product) => product.quality === quality);
+        button.addEventListener("click", () => {
+          $("qualitySelect").value = quality;
+          render(true);
+          $("detailContent").querySelector('[data-quality="' + quality + '"]')?.focus({ preventScroll: true });
+        });
+        tabs.append(button);
+      }
+      block.append(tabs);
+      if (player) {
+        block.append(node("div", "product-caption", player.name), statGrid(player.stats));
+        if (player.note) block.append(node("p", "food-note", player.note));
+      } else block.append(node("p", "stat-help", "当前数据未提供这一品质的成品效果。"));
+      block.append(node("p", "stat-help", "数值来自成品的五维展示属性；未叠加角色、技能或食物状态修正。"));
+      fragment.append(block);
+      renderRelations(fragment, entry.relations.filter((r) => ["具体食材", "食材分类"].includes(r.relation_type)), "怎么做这道菜");
+    } else if (player) {
+      const block = section("直接食用的属性", "增益 + / 减益 −");
+      block.append(statGrid(player.stats));
+      if (player.note) block.append(node("p", "food-note", player.note));
+      block.append(node("p", "stat-help", "配置基础展示值；实际效果可能受角色或食物状态影响。"));
+      fragment.append(block);
+      const tags = section("食品标签", "保留重复次数");
+      tags.append(tagList(player.tags, true));
+      if (!player.tags.length) tags.append(node("p", "stat-help", "没有食品标签"));
+      const info = node("div", "food-info");
+      info.append(node("span", "", "烹饪分类：" + player.sub_category), node("b", "", player.cookable ? "可以烹饪" : "不可用于烹饪"));
+      tags.append(info, node("p", "stat-help", "食品标签与烹饪分类分别展示；配方中的分类条件以烹饪分类为准。"));
+      fragment.append(tags);
+      showRelatedDishes(fragment, entry);
+    }
     if (entry.description) fragment.append(node("p", "detail-description", entry.description));
-    if (entry.highlights.some((field) => field.value)) {
-      const highlights = node("dl", "highlights");
-      entry.highlights.forEach((field) => {
+    const usefulHighlights = entry.highlights.filter((field) => !(player && ["acquisition", "ingredients"].includes(field.field)));
+    if (usefulHighlights.length) {
+      const block = section(state.category === "dish" ? "制作信息" : "更多信息");
+      const list = node("dl", "highlights");
+      usefulHighlights.forEach((field) => {
         if (!field.value) return;
         const row = node("div", "highlight-row");
         row.append(node("dt", "", field.label), node("dd", "", field.value));
-        highlights.append(row);
+        list.append(row);
       });
-      fragment.append(highlights);
+      block.append(list);
+      fragment.append(block);
     }
-    if (entry.relations.length) {
-      const section = node("section", "detail-section");
-      section.append(node("h3", "section-title", "关联配置"));
-      const groups = new Map();
-      for (const relation of entry.relations) {
-        if (!groups.has(relation.relation_type)) groups.set(relation.relation_type, new Map());
-        const key = `${relation.target_table}:${relation.target_id}`;
-        const group = groups.get(relation.relation_type);
-        if (group.has(key)) group.get(key).quantity += 1;
-        else group.set(key, { ...relation, quantity: 1 });
-      }
-      for (const [label, relations] of groups) {
-        const group = node("div", "relation-group");
-        group.append(node("div", "relation-label", label));
-        const values = node("div", "relation-values");
-        for (const relation of relations.values()) {
-          const item = node(relation.link ? "a" : "span", "relation-item");
-          item.append(node("span", "", `${relation.target_name || `ID:${relation.target_id}`}${relation.quantity > 1 ? ` × ${relation.quantity}` : ""}`));
-          item.append(node("span", "relation-id", `#${relation.target_id}`));
-          item.title = `${relation.target_table} / ID ${relation.target_id}`;
-          if (relation.link) item.href = urlFor(relation.link.category, relation.link.key);
-          values.append(item);
-        }
-        group.append(values);
-        section.append(group);
-      }
-      fragment.append(section);
-    }
+    const otherRelations = entry.relations.filter((r) => {
+      if (state.category === "dish") return !["具体食材", "食材分类", "完美产物", "良好产物", "普通产物", "失败产物"].includes(r.relation_type);
+      if (player) return !/^FoodTag[123]$/.test(r.relation_type) && r.relation_type !== "子分类";
+      return true;
+    });
+    renderRelations(fragment, otherRelations, "相关物品与用途");
     addNotes(fragment, "注意事项", entry.notes);
     addNotes(fragment, "排除项", entry.exclusions);
     addNotes(fragment, "配置引用", entry.references);
     const details = node("details", "raw-details");
-    details.append(node("summary", "", `全部配置字段 · ${entry.fields.length}`));
+    details.append(node("summary", "", "查看原始配置 · " + entry.fields.length + " 个字段"));
     const fields = node("dl", "config-fields");
     entry.fields.forEach((field) => {
       const row = node("div", "config-row");
@@ -174,11 +467,11 @@
       fields.append(row);
     });
     details.append(fields);
-    fragment.append(details);
-    fragment.append(node("div", "detail-source", `${entry.source_table} / ${entry.name_key || `ID:${entry.id}`}${entry.source_version ? ` · 成就说明参考版本 ${entry.source_version}` : ""}`));
+    fragment.append(details, node("div", "detail-source", entry.source_table + " / " + (entry.name_key || "ID:" + entry.id) + (entry.source_version ? " · 说明参考版本 " + entry.source_version : "")));
     $("detailContent").replaceChildren(fragment);
-    $("detailContent").scrollTop = 0;
-    $("detailPosition").textContent = `${String(state.entries.indexOf(entry) + 1).padStart(2, "0")} / ${state.entries.length} · 条目详情`;
+    $("detailPanel").setAttribute("aria-labelledby", "detailName");
+    $("detailContent").scrollTop = preserveScroll ? scroll : 0;
+    $("detailPosition").textContent = state.category === "dish" ? "料理笔记 · " + $("qualitySelect").value + "品质" : state.category === "food" ? "食材笔记 · 属性与用途" : category().label + " · 条目详情";
   }
 
   function selectEntry(key, openMobile = false) {
@@ -190,38 +483,31 @@
       button.setAttribute("aria-pressed", String(active));
     });
     renderDetail();
-    if (mobile.matches && openMobile) {
-      if ($("detailPanel").open) $("detailPanel").close();
-      $("detailPanel").showModal();
-    }
+    if (mobile.matches && openMobile && !$("detailPanel").open) $("detailPanel").showModal();
   }
 
-  function render() {
-    const current = category();
-    if (!current) return;
-    $("categoryTitle").textContent = current.label;
-    $("categoryTotal").textContent = current.entries.length;
-    document.title = `${current.label} · 生存日志在线图鉴`;
-    const materialEnabled = ["dish", "craft", "furniture"].includes(current.id);
-    $("materialField").hidden = !materialEnabled;
-    $("searchForm").classList.toggle("no-material", !materialEnabled);
-    $("searchForm").querySelector(".hint").hidden = !materialEnabled;
+  function render(preserveDetailScroll = false) {
+    if (!category()) return;
+    document.title = titles[state.category] + " · 生存日志";
     document.querySelectorAll(".category-button").forEach((button) => {
-      const active = button.dataset.category === current.id;
+      const active = button.dataset.category === state.category;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".filter-chip").forEach((button) => {
+      button.classList.toggle("active", button.dataset.effect === state.effect);
+      button.setAttribute("aria-pressed", String(button.dataset.effect === state.effect));
     });
     state.entries = filteredEntries();
     if (!state.entries.some((entry) => entry.key === state.key)) state.key = state.entries[0]?.key || "";
     setUrl();
     renderList();
-    renderDetail();
+    renderDetail(preserveDetailScroll);
   }
 
   function resetSearch() {
-    $("nameSearch").value = "";
-    $("materialSearch").value = "";
+    clearFilters();
     render();
     $("nameSearch").focus();
   }
@@ -230,25 +516,18 @@
     let categoryId, key;
     try {
       [categoryId, key] = location.hash.slice(1).split("/").map(decodeURIComponent);
-    } catch {
-      categoryId = "food";
-    }
+    } catch { categoryId = "food"; }
     if (!state.categories.some((item) => item.id === categoryId)) categoryId = "food";
     if (categoryId !== state.category) {
-      $("nameSearch").value = "";
-      $("materialSearch").value = "";
+      clearFilters();
+      state.category = categoryId;
+      configureControls();
       $("entryList").scrollTop = 0;
     }
-    state.category = categoryId;
     state.key = key || "";
-    if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) {
-      $("nameSearch").value = "";
-      $("materialSearch").value = "";
-    }
+    if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) clearFilters();
     render();
-    if (mobile.matches && openMobile && key && state.entries.some((entry) => entry.key === key)) {
-      selectEntry(key, true);
-    }
+    if (mobile.matches && openMobile && key && state.entries.some((entry) => entry.key === key)) selectEntry(key, true);
   }
 
   async function load() {
@@ -257,25 +536,38 @@
     $("entryList").setAttribute("aria-busy", "true");
     try {
       const response = await fetch(new URL("./data.json", location.href));
-      if (!response.ok) throw new Error(`数据请求失败（HTTP ${response.status}）`);
+      if (!response.ok) throw new Error("数据请求失败（HTTP " + response.status + "）");
       const data = await response.json();
       if (data.format_version !== 1 || !Array.isArray(data.categories) || !data.categories.length) throw new Error("图鉴数据格式不匹配");
       state.categories = data.categories;
+      const foods = category("food")?.entries || [];
       for (const item of state.categories) {
         for (const entry of item.entries) {
-          entry.nameIndex = normalize(`${entry.name} ${entry.name_key} ${entry.id}`);
-          entry.materialIndex = normalize(entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type)).map((relation) => `${relation.target_name} ${relation.target_id}`).join(" "));
+          entry.nameIndex = normalize([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
+            ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)].join(" "));
+          const materialRelations = entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type));
+          const specific = materialRelations.filter((relation) => relation.relation_type === "具体食材");
+          const groups = new Set(materialRelations.filter((relation) => relation.relation_type === "食材分类").map((relation) => relation.target_id));
+          const eligible = specific.length ? foods.filter((food) => specific.some((r) => r.target_id === food.id)) :
+            foods.filter((food) => food.food?.cookable && groups.has(food.food.sub_category_id));
+          entry.ingredientIds = new Set([...specific.map((r) => r.target_id), ...eligible.map((food) => food.id)]);
+          entry.materialIndex = normalize([...materialRelations.map((r) => r.target_name + " " + r.target_id), ...eligible.map((food) => food.name + " " + food.id)].join(" "));
+          entry.materialSlots = (specific.length ? specific : materialRelations.filter((r) => r.relation_type === "食材分类")).map((relation) => {
+            const candidates = specific.length ? [] : foods.filter((food) => food.food?.cookable && food.food.sub_category_id === relation.target_id);
+            return normalize([relation.target_name, relation.target_id, ...candidates.map((food) => food.name + " " + food.id)].join(" "));
+          });
         }
       }
-      $("gameVersion").textContent = `游戏版本 ${data.metadata.game_version || "未标注"}`;
-      $("footerVersion").textContent = `数据版本 ${data.metadata.game_version || "未标注"}`;
-      $("gameVersion").title = "此网页使用仓库中的公开数据快照，不会自动跟随本机游戏更新";
+      $("gameVersion").textContent = "数据 " + (data.metadata.game_version || "未标注");
+      $("footerVersion").textContent = "数据版本 " + (data.metadata.game_version || "未标注");
+      $("gameVersion").title = "图鉴效果来自仓库静态库；图标单独提取，不会改变图鉴数值";
       buildNav();
+      configureControls();
       readHash(Boolean(location.hash));
       ["nameSearch", "materialSearch", "resetSearch"].forEach((id) => { $(id).disabled = false; });
     } catch (error) {
       $("loadError").hidden = false;
-      $("errorMessage").textContent = `${error.message}。请稍后重试。`;
+      $("errorMessage").textContent = error.message + "。请稍后重试。";
       $("resultCount").textContent = "加载失败";
       $("entryList").setAttribute("aria-busy", "false");
     }
@@ -283,8 +575,9 @@
 
   ["nameSearch", "materialSearch"].forEach((id) => $(id).addEventListener("input", () => {
     clearTimeout(state.debounce);
-    state.debounce = setTimeout(render, 100);
+    state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
+  ["tagSelect", "cookableOnly", "sortSelect", "qualitySelect"].forEach((id) => $(id).addEventListener("change", () => render()));
   $("searchForm").addEventListener("submit", (event) => event.preventDefault());
   $("resetSearch").addEventListener("click", resetSearch);
   $("emptyReset").addEventListener("click", resetSearch);
@@ -295,9 +588,15 @@
   });
   $("retryLoad").addEventListener("click", load);
   window.addEventListener("hashchange", () => { if (state.categories.length) readHash(true); });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) && !event.target.isContentEditable && !(mobile.matches && $("detailPanel").open)) {
+      event.preventDefault();
+      $("nameSearch").focus();
+    }
+  });
   mobile.addEventListener("change", () => {
-    if (mobile.matches) $("detailPanel").close();
-    else { if ($("detailPanel").open) $("detailPanel").close(); $("detailPanel").show(); }
+    if ($("detailPanel").open) $("detailPanel").close();
+    if (!mobile.matches) $("detailPanel").show();
   });
   if (mobile.matches) $("detailPanel").close();
   load();
