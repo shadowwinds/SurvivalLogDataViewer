@@ -126,7 +126,11 @@
 
 ### GitHub Pages 构建与部署
 
-运行 `python codex_pages.py --output-dir build/pages` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json` 和 `.nojekyll`。
+运行 `python codex_pages.py --output-dir build/pages --site-url https://你的用户名.github.io/SurvivalLogDataViewer/` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml` 和 `guide/` 下的当前图鉴页面，保留其他文件。
+
+`guide/` 提供无需 JavaScript 的分类目录和独立详情页，包含属性、标签、各品质菜肴效果及关联条目。每页生成独立标题、描述、canonical、Open Graph、Twitter 分享信息和 WebPage / CollectionPage / BreadcrumbList 结构化数据；食品与猎物重叠条目共用一个详情地址。游戏菜肴不标注为现实食谱的 Recipe。站点地图列出真实页面地址，不包含 `#` 筛选状态。
+
+`--site-url` 用于所有公开网址，默认指向当前在线版；本地预览可传 `http://127.0.0.1:8502/pages/`。Actions 按当前仓库生成 Pages 网址，绑定自定义域名或使用用户主页仓库时需设置仓库变量 `PAGES_SITE_URL`。可将公开的 `sitemap.xml` 提交到搜索引擎站长平台；GitHub 项目站点不能通过子目录中的 `robots.txt` 控制整个域名，因此构建不生成这种无效的规则文件。
 
 图标提取是独立的本地步骤：安装 UnityPy 后运行 `python codex_pages_icons.py --game-root "游戏安装目录" --output-dir pages/icons`。脚本只从 catalog 定位图鉴条目及菜肴成品引用的图标，复用现有 bundle 解密，将 PNG 缩略图和不含本机路径的版本清单写入指定输出目录，不输出配置全集或修改游戏。Pages 工作流直接使用仓库图标，不需要游戏或 UnityPy。
 
@@ -143,6 +147,7 @@
 | `codex_server.py` | 标准库本地 HTTP 服务和 API |
 | `codex_launcher.py` | 独立版启动、存档选择和自动更新 |
 | `codex_update.py` | Steam 游戏发现和资源版本更新 |
+| `codex_pages.py` / `codex_pages_seo.py` | 导出公开在线图鉴与可抓取详情、站点地图 |
 | `survival_log_codex.spec` | PyInstaller 依赖配置 |
 | `web/` | 静态网页资源 |
 | `snapshots/` | 七份版本化 Markdown 快照 |

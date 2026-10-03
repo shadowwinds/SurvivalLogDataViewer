@@ -6,10 +6,47 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from html.parser import HTMLParser
 from pathlib import Path
+from unittest.mock import patch
+from xml.etree import ElementTree
 
 from codex_database import CATEGORY_LABELS, DATABASE_SCHEMA_VERSION, STATIC_SCHEMA_SQL
 from codex_pages import SOURCE_DIR, build_pages, export_data
+from codex_pages_seo import normalize_site_url
+
+
+class PageHTML(HTMLParser):
+    def __init__(self, text: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.canonicals: list[str] = []
+        self.links: list[str] = []
+        self.meta: dict[str, str] = {}
+        self.text: list[str] = []
+        self.schemas: list[dict] = []
+        self.in_schema = False
+        self.feed(text)
+
+    def handle_starttag(self, tag: str, attributes: list[tuple[str, str | None]]) -> None:
+        attrs = dict(attributes)
+        if tag == "link" and attrs.get("rel") == "canonical":
+            self.canonicals.append(attrs["href"])
+        if tag == "a":
+            self.links.append(attrs.get("href", ""))
+        if tag == "meta":
+            self.meta[attrs.get("name") or attrs.get("property") or ""] = attrs.get("content", "")
+        if tag == "script" and attrs.get("type") == "application/ld+json":
+            self.in_schema = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self.in_schema = False
+
+    def handle_data(self, data: str) -> None:
+        if self.in_schema:
+            self.schemas.append(json.loads(data))
+        else:
+            self.text.append(data)
 
 
 class PagesExportTests(unittest.TestCase):
@@ -142,6 +179,87 @@ class PagesExportTests(unittest.TestCase):
             build_pages(self.database, SOURCE_DIR)
         with self.assertRaises(ValueError):
             build_pages(self.database, self.root)
+
+    def test_sitemap_and_canonicals_cover_real_routes_without_duplicate_food_prey(self) -> None:
+        output = self.root / "output"
+        base = "https://example.org/fork/"
+        build_pages(self.database, output, base)
+        tree = ElementTree.parse(output / "sitemap.xml")
+        urls = [node.text for node in tree.findall("{*}url/{*}loc")]
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertIn(base + "guide/food/1/", urls)
+        self.assertNotIn(base + "guide/prey/1/", urls)
+        self.assertTrue(all(url.startswith(base) and "#" not in url for url in urls))
+        for url in urls:
+            source = output / url.removeprefix(base) / "index.html"
+            document = PageHTML(source.read_text(encoding="utf-8"))
+            self.assertEqual(document.canonicals, [url])
+            self.assertEqual(document.meta["og:url"], url)
+            self.assertTrue(document.meta["description"])
+            self.assertTrue(document.schemas)
+            self.assertNotIn("PRIVATE_", source.read_text(encoding="utf-8"))
+        prey = PageHTML((output / "guide/prey/index.html").read_text(encoding="utf-8"))
+        self.assertIn(base + "guide/food/1/", prey.links)
+
+    def test_static_details_show_stats_tags_and_all_qualities_without_javascript(self) -> None:
+        output = self.root / "output"
+        build_pages(self.database, output)
+        food = " ".join(PageHTML((output / "guide/food/1/index.html").read_text(encoding="utf-8")).text)
+        for value in ("+8", "-4", "0", "未提供", "鱼类 ×2", "ID:99", "菌菇", "可用于烹饪：是", "ID:99999"):
+            self.assertIn(value, food)
+        dish = " ".join(PageHTML((output / "guide/dish/10/index.html").read_text(encoding="utf-8")).text)
+        for value in ("完美品质", "良好品质", "普通品质", "失败品质", "+60", "+50", "+40", "ID:104", "食用说明", "未提供"):
+            self.assertIn(value, dish)
+        self.assertNotIn('<script src=', (output / "guide/dish/10/index.html").read_text(encoding="utf-8"))
+
+    def test_game_text_is_escaped_in_html_and_jsonld(self) -> None:
+        malicious = '</script><img src=x onerror="alert(1)"> & 食材'
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("UPDATE codex_entries SET name=?, description=? WHERE source_id=1", (malicious, malicious))
+        output = self.root / "output"
+        build_pages(self.database, output)
+        text = (output / "guide/food/1/index.html").read_text(encoding="utf-8")
+        self.assertNotIn(malicious, text)
+        self.assertNotIn('<img src=x', text)
+        document = PageHTML(text)
+        page = document.schemas[0]["@graph"][0]
+        self.assertIn(malicious, page["name"])
+        self.assertIn(malicious, " ".join(document.text))
+
+    def test_site_url_validation_prevents_invalid_canonical_before_writing(self) -> None:
+        self.assertEqual(normalize_site_url("https://example.org/project"), "https://example.org/project/")
+        for url in ("/relative/", "javascript:alert(1)", "https://user:pass@example.org/", "https://example.org/?q=x", "https://example.org/#food", "https://example.org/a/../b", "https://example.org/%2e%2e/"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                build_pages(self.database, self.root / "invalid", url)
+        self.assertFalse((self.root / "invalid").exists())
+
+    def test_nested_output_link_is_rejected_before_overwriting_any_page(self) -> None:
+        output = self.root / "output"
+        output.mkdir()
+        home = output / "index.html"
+        home.write_text("keep", encoding="utf-8")
+        original = Path.is_symlink
+        with patch.object(Path, "is_symlink", lambda path: path == output / "guide" or original(path)):
+            with self.assertRaisesRegex(ValueError, "符号链接"):
+                build_pages(self.database, output)
+        self.assertEqual(home.read_text(encoding="utf-8"), "keep")
+
+    def test_same_names_are_disambiguated_with_category_or_config_id(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            for key, table, item_id, name, category in (
+                    ("Config_Item:3", "Config_Item", 3, "食品", "food"),
+                    ("Config_ProductionList:1", "Config_ProductionList", 1, "加工木板", "craft"),
+                    ("Config_Furniture:1", "Config_Furniture", 1, "加工木板", "furniture")):
+                connection.execute("INSERT INTO codex_entries VALUES (?, ?, ?, ?, '', '', '', ?, 1)",
+                                   (key, table, item_id, name, json.dumps({"ID": item_id})))
+                connection.execute("INSERT INTO codex_entry_categories VALUES (?, ?, ?)", (key, category, item_id))
+        output = self.root / "output"
+        build_pages(self.database, output)
+        for path, qualifier in (("food/1", "（ID:1）"), ("food/3", "（ID:3）"),
+                                ("craft/1", "制造图鉴"), ("furniture/1", "家具图鉴")):
+            text = (output / "guide" / path / "index.html").read_text(encoding="utf-8")
+            title = text.split("<title>", 1)[1].split("</title>", 1)[0]
+            self.assertIn(qualifier, title)
 
 
 if __name__ == "__main__":

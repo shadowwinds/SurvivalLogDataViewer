@@ -10,7 +10,11 @@
 
 `codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理公开图鉴条目及其菜肴产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标来自本机游戏 `1.1.18293 / catalog 2.3.1`，图鉴数值仍使用静态库记录版本，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
 
-个人完成状态和库存匹配仍属于本地版；在线数据只随仓库静态库及网页工作流更新。输出目录只覆盖网页资源、被引用的图标、`data.json` 和 `.nojekyll`，保留其他文件；schema 不匹配时构建报错。部署流程见 `.github/workflows/pages.yml`。
+`codex_pages_seo.py` 从同一公开导出数据生成 `guide/` 分类目录和独立 HTML 详情。属性、标签、各品质效果、材料关联及成就说明直接存在于 HTML，不依赖 JavaScript 抓取。食品与猎物共享条目只生成首个分类下的详情地址，其他分类链接到该页。各页包含独立标题、描述、canonical、Open Graph / Twitter 信息和 WebPage / CollectionPage / BreadcrumbList JSON-LD；游戏菜肴不使用现实食谱的 Recipe 类型。`sitemap.xml` 仅列出首页、目录、分类及独立详情的完整网址，不包含交互图鉴的 hash 状态，不虚构更新时间。
+
+新增 `--site-url` 指定站点的 HTTP(S) 根网址（默认当前在线版），生成 canonical、分享及站点地图地址；参数拒绝片段、查询、登录信息和相对路径段，写入前检查所有页面目标中的符号链接。Actions 默认按仓库生成项目 Pages 网址，仓库变量 `PAGES_SITE_URL` 可覆盖自定义域名和用户主页地址。项目子目录中的 `robots.txt` 不能控制域名根的抓取规则，因此不生成；首页可见目录链接和站点地图提供发现入口，提交到站长平台属于独立操作。
+
+个人完成状态和库存匹配仍属于本地版；在线数据只随仓库静态库及网页工作流更新。输出目录只覆盖网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml` 和当前 `guide/` 页面，保留其他文件；schema 不匹配时构建报错。部署流程见 `.github/workflows/pages.yml`。
 
 ## 成就模块（当前实现）
 

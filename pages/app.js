@@ -389,6 +389,10 @@
     const heading = node("h2", "", entry.name);
     heading.id = "detailName";
     text.append(node("div", "detail-category", titles[state.category] + (entry.hidden ? " / 隐藏成就" : "")), heading, node("div", "detail-id", "ID " + entry.id));
+    const primaryCategory = state.categories.find((item) => item.entries.some((candidate) => candidate.key === entry.key));
+    const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
+    permalink.href = "./guide/" + primaryCategory.id + "/" + entry.id + "/";
+    text.append(permalink);
     hero.append(art(player?.icon || entry.icon, state.category, true), text);
     fragment.append(hero);
     if (state.category === "dish") {
@@ -488,7 +492,7 @@
 
   function render(preserveDetailScroll = false) {
     if (!category()) return;
-    document.title = titles[state.category] + " · 生存日志";
+    if (location.hash) document.title = titles[state.category] + " · 生存日志 Survival Log";
     document.querySelectorAll(".category-button").forEach((button) => {
       const active = button.dataset.category === state.category;
       button.classList.toggle("active", active);

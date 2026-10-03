@@ -178,6 +178,7 @@ a.relation-item:hover { border-color: #80a06b; background: #e6efdb; }
 .page-footer { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 9px; margin-top: 12px; }
 .page-footer a { text-decoration: none; margin-left: 4px; }
 .noscript { padding: 20px; }
+.detail-permalink { display: inline-block; margin-top: 8px; color: var(--green); font-size: 11px; text-underline-offset: 3px; }
 @media (min-width: 1650px) {
   .main-content { padding: 35px 44px 16px; }
   .workspace { grid-template-columns: minmax(0,1fr) 475px; gap: 27px; }

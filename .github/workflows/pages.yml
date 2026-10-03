@@ -7,14 +7,14 @@ on:
       - 'pages/**'
       - 'codex_*.py'
       - 'survival_log_codex.sqlite3'
-      - 'tests/test_pages.py'
+      - 'tests/test_pages*.py'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'pages/**'
       - 'codex_*.py'
       - 'survival_log_codex.sqlite3'
-      - 'tests/test_pages.py'
+      - 'tests/test_pages*.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -34,9 +34,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify static export boundaries
-        run: python -m unittest discover -s tests -p test_pages.py
+        run: python -m unittest discover -s tests -p 'test_pages*.py'
       - name: Build public static codex
-        run: python codex_pages.py --output-dir build/pages
+        env:
+          PAGES_SITE_URL: ${{ vars.PAGES_SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+        run: python codex_pages.py --output-dir build/pages --site-url "$PAGES_SITE_URL"
       - uses: actions/upload-pages-artifact@v4
         with:
           path: build/pages

@@ -14,6 +14,7 @@ from typing import Any
 
 from codex_database import CATEGORY_LABELS, CATEGORY_ORDER, DATABASE_SCHEMA_VERSION
 from codex_parser import FIELD_LABELS, format_scalar
+from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, validate_output_targets
 from codex_server import _achievement_payload, _build_detail_fields
 
 
@@ -21,7 +22,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
-ASSETS = ("index.html", "styles.css", "app.js", "favicon.svg")
+ASSETS = ("index.html", "styles.css", "guide.css", "app.js", "favicon.svg")
 STAT_LABELS = ("饱食", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 
@@ -189,7 +190,8 @@ def export_data(database_path: Path) -> dict[str, Any]:
         connection.close()
 
 
-def build_pages(database_path: Path, output_dir: Path) -> Path:
+def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_SITE_URL) -> Path:
+    site_url = normalize_site_url(site_url)
     output_dir = output_dir.expanduser().resolve()
     database_path = database_path.expanduser().resolve()
     for protected in (DEFAULT_GAME_ROOT.resolve(), SOURCE_DIR.resolve(), database_path):
@@ -198,12 +200,20 @@ def build_pages(database_path: Path, output_dir: Path) -> Path:
     if database_path.is_relative_to(output_dir) or SOURCE_DIR.is_relative_to(output_dir):
         raise ValueError("输出目录不能包含源数据库或网页源码目录")
     payload = export_data(database_path)
+    documents = seo_documents(payload, site_url)
+    validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll", *documents])
     output_dir.mkdir(parents=True, exist_ok=True)
     for name in (*ASSETS, "data.json", ".nojekyll"):
         if (output_dir / name).is_symlink():
             raise ValueError(f"输出文件不能是符号链接：{name}")
     for name in ASSETS:
         shutil.copyfile(SOURCE_DIR / name, output_dir / name)
+    (output_dir / "index.html").write_text(
+        home_seo(payload, (SOURCE_DIR / "index.html").read_text(encoding="utf-8"), site_url), encoding="utf-8")
+    for name, content in documents.items():
+        target = output_dir / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
     icons = {entry.get("icon", "") for category in payload["categories"] for entry in category["entries"]}
     icons.update(product["icon"] for category in payload["categories"] for entry in category["entries"]
                  for product in entry.get("products", []))
@@ -230,9 +240,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="从已公开的静态图鉴数据库构建 GitHub Pages 网页")
     parser.add_argument("--database", type=Path, default=PROJECT_DIR / "survival_log_codex.sqlite3")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_DIR / "build" / "pages")
+    parser.add_argument("--site-url", default=DEFAULT_SITE_URL, help="公开站点的完整根网址，用于 canonical、分享信息和站点地图")
     args = parser.parse_args()
     try:
-        output = build_pages(args.database, args.output_dir)
+        output = build_pages(args.database, args.output_dir, args.site_url)
     except (OSError, sqlite3.Error, ValueError, KeyError) as exc:
         print(f"静态网页构建失败：{exc}", file=sys.stderr)
         return 1

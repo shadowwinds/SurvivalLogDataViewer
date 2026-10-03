@@ -1,0 +1,61 @@
+:root { color-scheme: light; --ink: #243323; --muted: #61705b; --green: #294e39; --line: #dce3d5; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--ink); background: #f5f6ef; font: 16px/1.7 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; }
+a { color: var(--green); text-underline-offset: 3px; }
+a:hover { color: #116242; }
+a:focus-visible, summary:focus-visible { outline: 3px solid #a77539; outline-offset: 4px; }
+.guide-header { background: #294434; color: #fff; padding: 22px max(24px, calc((100vw - 1100px) / 2)); display: flex; justify-content: space-between; gap: 20px; }
+.guide-header a { color: #fff; text-decoration: none; }
+.guide-header a:first-child { font-weight: 700; }
+main, footer { max-width: 1100px; margin: 0 auto; padding: 30px 24px; }
+footer { color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
+h1, h2, h3 { line-height: 1.35; }
+h1 { font-size: clamp(28px, 4vw, 42px); margin: 18px 0; }
+h2 { font-size: 22px; margin-top: 0; }
+h3 { font-size: 19px; }
+section, details { padding: 26px; background: #fff; border: 1px solid var(--line); border-radius: 14px; margin: 24px 0; }
+summary { cursor: pointer; font-weight: 700; }
+.breadcrumbs, .eyebrow, .muted { color: var(--muted); font-size: 13px; }
+.eyebrow { letter-spacing: .08em; }
+.entry-heading { display: flex; gap: 30px; align-items: center; margin: 28px 0 36px; }
+.entry-art { object-fit: contain; flex-shrink: 0; border-radius: 20px; background: #ebf0e2; padding: 12px; }
+.action-link { display: inline-block; padding: 10px 18px; color: #fff; background: var(--green); border-radius: 7px; text-decoration: none; }
+.action-link:hover { color: #fff; background: #35644a; }
+.description, .food-note { white-space: pre-line; }
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 20px 0; }
+.stats div { background: #f1f5eb; padding: 10px; border-radius: 8px; text-align: center; }
+.stats dt { font-size: 13px; color: var(--muted); }
+.stats dd { margin: 0; font-size: 21px; font-weight: 700; }
+.fields { margin: 18px 0 0; }
+.fields > div { display: grid; grid-template-columns: minmax(130px, 24%) 1fr; gap: 20px; padding: 11px 0; border-bottom: 1px solid #edf0e8; }
+.fields dt { font-weight: 600; }
+.fields dd { margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
+.quality-grid, .category-grid, .catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.quality { border: 1px solid var(--line); padding: 20px; border-radius: 10px; }
+.quality p { font-size: 14px; }
+.quality .stats { grid-template-columns: repeat(3, 1fr); }
+.category-card, .catalog-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 24px; text-decoration: none; }
+.category-card:hover, .catalog-card:hover { border-color: #829a76; box-shadow: 0 3px 15px #2944340a; }
+.category-card p, .catalog-card p { color: var(--muted); }
+.category-card span, .catalog-card span { font-size: 13px; }
+.catalog-card { display: flex; align-items: flex-start; gap: 18px; }
+.catalog-card img { object-fit: contain; background: #eff3e8; border-radius: 8px; flex-shrink: 0; }
+.catalog-card h2 { font-size: 19px; margin-bottom: 8px; }
+.catalog-card p { font-size: 13px; margin: 8px 0; }
+.related-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 24px; padding-left: 20px; }
+.related-list span { margin-left: 12px; color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  main, footer { padding: 22px 18px; }
+  .guide-header { padding: 18px; font-size: 14px; }
+  .entry-heading { gap: 18px; align-items: flex-start; }
+  .entry-art { width: 90px; height: 90px; padding: 6px; }
+  .entry-heading h1 { margin: 8px 0; }
+  .eyebrow { font-size: 10px; }
+  section, details, .quality { padding: 18px; }
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .fields > div { grid-template-columns: 1fr; gap: 6px; }
+  .quality-grid, .category-grid, .catalog-grid, .related-list { grid-template-columns: 1fr; }
+  .catalog-card { padding: 18px; gap: 14px; }
+  .catalog-card img { width: 54px; height: 54px; }
+  .action-link { padding: 8px 12px; font-size: 13px; }
+}
