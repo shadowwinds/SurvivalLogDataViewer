@@ -1,0 +1,113 @@
+.guide-header nav { white-space: nowrap; }
+body > main { max-width: 1180px; }
+.rec-hero { display: flex; justify-content: space-between; align-items: center; gap: 30px; border-bottom: 1px solid #735e38; padding: 12px 0 32px; }
+.rec-hero h1 { font-size: clamp(32px, 4vw, 54px); color: #f0be37; text-shadow: 3px 3px #080a06; margin: 10px 0; letter-spacing: .05em; }
+.rec-hero > div > p:not(.eyebrow) { margin: 7px 0; }
+.rec-hero > div > p:nth-of-type(2) { font-size: 20px; color: #eee1bf; letter-spacing: .12em; }
+.rec-subtitle { color: #c3b79c; font-size: 14px; }
+body > main .rec-stamp { min-width: 155px; padding: 18px; text-align: center; font-size: 13px; color: #dece9f; text-decoration: none; border: 1px solid #a08144; background: repeating-linear-gradient(135deg, #66502e18 0 8px, transparent 8px 16px), #29271d; box-shadow: inset 0 0 0 4px #151710; }
+.rec-stamp strong { display: block; color: #f1c14a; font-family: Impact, "Arial Narrow", sans-serif; font-size: 44px; letter-spacing: 2px; }
+.rec-stamp span { font-size: 11px; }
+.rec-controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 22px 0; align-items: end; }
+.rec-controls label { font-size: 12px; color: #c7b897; }
+.rec-controls select, .rec-controls input, .rec-controls button { display: block; padding: 11px; border: 1px solid #7c6842; border-radius: 2px; background: #22251e; color: #f1e6ca; font: inherit; font-size: 14px; min-height: 44px; margin-top: 6px; }
+.rec-controls select:disabled { opacity: .5; }
+.rec-controls button { background: #353124; cursor: pointer; }
+.rec-controls .rec-stage-only { display: flex; gap: 7px; align-items: center; flex: 1 1 100%; font-size: 13px; }
+.rec-controls .rec-stage-only input { display: inline-block; min-height: auto; margin: 0; padding: 0; accent-color: #e1b537; }
+.rec-search { flex: 1; min-width: 180px; }
+.rec-search input { width: 100%; }
+.rec-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+body > main .rec-tabs a { padding: 15px 18px; text-decoration: none; color: #e2d5b7; border: 1px solid #766039; background: linear-gradient(100deg, #393427, #25251d); font-weight: 700; text-align: center; }
+.rec-tabs a span { font-family: Impact, "Arial Narrow", sans-serif; color: #b09351; padding-right: 12px; font-weight: 400; }
+body > main .rec-tabs a.active { color: #272110; background: #e3b434; border-color: #f6ce64; box-shadow: inset 0 -3px #9a721e; }
+.rec-tabs a.active span { color: #72551a; }
+.rec-context { font-size: 13px; color: #c4b89b; margin: 18px 0 6px; }
+#rec-status { color: #e5c780; font-size: 13px; margin: 6px 0; min-height: 22px; }
+body > main .rec-section { border: 0; background: transparent; padding: 20px 0; margin: 0; }
+.rec-section-title { margin-bottom: 20px; }
+.rec-section-title .eyebrow { color: #b5a279; margin: 0 0 6px; }
+.rec-section-title h2 { font-size: 28px; margin: 0 0 7px; color: #efd49b; }
+.rec-section-title > p:last-child { color: #c3b89f; font-size: 14px; margin: 0; }
+.rec-list { display: grid; gap: 14px; }
+.rec-card { background: linear-gradient(110deg, #2f3025, #24261f); border: 1px solid #756541; padding: 20px 24px; position: relative; box-shadow: inset 3px 0 #8d7844; }
+.rec-card:first-child { border-color: #c3a052; box-shadow: inset 3px 0 #ecc24e; }
+.rec-card-top { display: flex; align-items: center; gap: 18px; }
+.rec-rank { color: #a89567; font-family: Impact, "Arial Narrow", sans-serif; font-size: 28px; width: 34px; flex-shrink: 0; }
+.rec-name { flex: 1; min-width: 0; }
+.rec-name > p { font-size: 11px; color: #c5b58e; margin: 0 0 5px; }
+.rec-name h3 { font-size: 20px; margin: 0 0 6px; }
+body > main .rec-name h3 a { color: #ede0bd; text-decoration: none; }
+body > main .rec-name h3 a:hover { color: #f6c647; text-decoration: underline; }
+.rec-name > span { color: #bdb69f; font-size: 12px; display: block; overflow-wrap: anywhere; }
+.rec-score { text-align: right; flex-shrink: 0; min-width: 85px; }
+.rec-score strong { font-size: 35px; color: #efc24f; display: block; font-family: Impact, "Arial Narrow", sans-serif; line-height: 1.2; font-weight: 400; }
+.rec-score > span { color: #c3b48c; font-size: 11px; }
+.rec-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; border-top: 1px solid #55533d; padding-top: 15px; margin: 17px 0 0 124px; }
+.rec-facts > div { border-left: 2px solid #626349; padding-left: 12px; }
+.rec-facts dt { font-size: 11px; color: #bdb49b; }
+.rec-facts dd { font-size: 20px; color: #c9d7a2; margin: 4px 0 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+body > main .rec-card > details { padding: 12px 0 0; margin: 14px 0 0 124px; background: transparent; border: 0; border-top: 1px dashed #61583c; border-radius: 0; font-size: 13px; }
+.rec-card details summary { color: #d2bd86; font-size: 12px; font-weight: 400; }
+.rec-components { padding: 0; list-style: none; max-width: 540px; }
+.rec-components li { display: flex; justify-content: space-between; gap: 15px; border-bottom: 1px solid #57513a; padding: 7px 0; }
+.rec-adverse { margin-left: 10px; padding: 2px 6px; color: #e5ad8f; border: 1px solid #8b6448; font-size: 10px; }
+.rec-unrated { opacity: .85; }
+.rec-unrated .rec-score strong { color: #b8ac8d; }
+body > main .rec-more { padding: 20px; border-color: #625637; background: #20231c; margin: 10px 0; }
+.rec-more .rec-card { margin-top: 12px; }
+.rec-more > p { font-size: 13px; color: #bcb298; }
+.rec-empty { padding: 36px 24px; border: 1px dashed #8a733e; text-align: center; }
+.rec-empty h3 { color: #e0c17c; }
+.rec-empty p { font-size: 13px; color: #bcb298; }
+body > main .rec-method { background: #28281f; border-color: #8a7442; margin-top: 28px; padding: 28px; }
+.rec-method h2 { color: #e8c87b; }
+.rec-method > p { color: #c9bfa5; font-size: 14px; }
+.rec-models { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 24px 0; }
+.rec-models > div { border-top: 2px solid #a58945; padding: 14px 12px; background: #343326; }
+.rec-models h3 { font-size: 16px; margin: 0 0 12px; color: #ead29b; }
+.rec-models p { color: #c8bd9f; font-size: 12px; margin: 8px 0; }
+.rec-models b { color: #efc956; display: inline-block; min-width: 34px; }
+body > main .rec-method details { background: #20231b; border-color: #685c3c; font-size: 13px; padding: 18px; }
+.rec-method li { margin: 10px 0; color: #c2b89e; }
+[hidden] { display: none !important; }
+@media (max-width: 820px) {
+  .rec-controls label { flex: 1 1 135px; }
+  .rec-controls select { width: 100%; }
+  .rec-search { flex-basis: 100% !important; }
+  .rec-models { grid-template-columns: repeat(2, 1fr); }
+  .rec-card { padding: 18px; }
+  .rec-facts, body > main .rec-card > details { margin-left: 0; }
+}
+@media (max-width: 520px) {
+  .guide-header { flex-wrap: wrap; gap: 7px; }
+  .rec-hero { align-items: start; gap: 12px; padding-bottom: 22px; }
+  body > main .rec-stamp { min-width: 86px; padding: 10px 7px; font-size: 10px; margin-top: 16px; }
+  .rec-stamp strong { font-size: 22px; letter-spacing: 0; white-space: nowrap; }
+  .rec-stamp span { font-size: 9px; }
+  .rec-hero h1 { font-size: 29px; letter-spacing: 0; }
+  .rec-hero > div > p:nth-of-type(2) { font-size: 15px; letter-spacing: .04em; }
+  .rec-subtitle { font-size: 12px; }
+  .rec-controls { gap: 8px; padding: 14px 0; }
+  .rec-tabs { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  body > main .rec-tabs a { padding: 12px 9px; font-size: 14px; }
+  .rec-card { padding: 16px 12px; }
+  .rec-card-top { gap: 10px; align-items: start; }
+  .rec-rank { display: none; }
+  .rec-card .guide-item-art.small { width: 54px; height: 54px; }
+  .rec-name h3 { font-size: 17px; }
+  .rec-name > span { font-size: 11px; }
+  .rec-score { min-width: 50px; }
+  .rec-score strong { font-size: 26px; }
+  .rec-score > span { font-size: 9px; }
+  .rec-facts { grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
+  .rec-facts dd { font-size: 18px; }
+  body > main .rec-section { padding-top: 12px; }
+  .rec-section-title .eyebrow { display: none; }
+  .rec-section-title h2 { font-size: 24px; }
+  .rec-adverse { display: inline-block; margin: 3px 0 0 5px; }
+  body > main .rec-method { padding: 20px 14px; }
+  .rec-models { gap: 10px; }
+  body > main .rec-more { padding: 12px; }
+  .rec-components li { font-size: 12px; }
+}

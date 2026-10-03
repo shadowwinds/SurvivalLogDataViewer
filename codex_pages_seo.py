@@ -133,7 +133,7 @@ def page_schema(title: str, description: str, url: str, base: str,
 def directory_links(payload: dict[str, Any], prefix: str = "./") -> str:
     return '<nav class="directory-links" aria-label="完整图鉴分类">' + "".join(
         f'<a href="{h(prefix)}guide/{category["id"]}/">{h(CATEGORY_INTROS[category["id"]][0])}</a>'
-        for category in browse_categories(payload)) + "</nav>"
+        for category in browse_categories(payload)) + f'<a href="{h(prefix)}recommendations/">生存补给计划</a></nav>'
 
 
 def home_seo(payload: dict[str, Any], template: str, base: str) -> str:
@@ -172,7 +172,7 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     <link rel="stylesheet" href="{root}game-theme.css">
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><a href="{root}guide/">完整图鉴</a></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}recommendations/">补给推荐</a> · <a href="{root}guide/">完整图鉴</a></nav></header>
     <main>{breadcrumb}{body}</main>
     <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">打开筛选图鉴</a> · <a href="{root}guide/">浏览分类</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
@@ -295,17 +295,17 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
     return body
 
 
-def seo_documents(payload: dict[str, Any], base: str) -> dict[str, str]:
+def seo_documents(payload: dict[str, Any], base: str, extra_documents: dict[str, str] | None = None) -> dict[str, str]:
     routes = entry_routes(payload)
     version = payload["metadata"].get("game_version", "未提供")
     dishes = next((category["entries"] for category in payload["categories"] if category["id"] == "dish"), [])
-    docs: dict[str, str] = {}
+    docs: dict[str, str] = dict(extra_documents or {})
     crumbs = [(SITE_NAME, base), ("完整图鉴", base + "guide/")]
     categories = browse_categories(payload)
     cards = "".join(f'<a class="category-card" href="{h(base)}guide/{c["id"]}/"><h2>{h(CATEGORY_INTROS[c["id"]][0])}</h2><p>{h(CATEGORY_INTROS[c["id"]][1])}</p><span>{len(c["entries"])} 个条目 →</span></a>'
                     for c in categories)
     docs["guide/index.html"] = shell("生存日志完整图鉴目录 · Survival Log", HOME_DESCRIPTION,
-                                     "guide/", base, '<h1>完整图鉴目录</h1><p>按分类浏览每个条目的属性和关联信息，也可以打开筛选图鉴搜索与比较。</p><div class="category-grid">' + cards + '</div>', crumbs, version, collection=True)
+                                     "guide/", base, '<h1>完整图鉴目录</h1><p>按分类浏览每个条目的属性和关联信息，也可以打开筛选图鉴搜索与比较。</p><p><a href="' + h(base) + 'recommendations/">生存补给计划：比较囤货、菜肴与作物 →</a></p><div class="category-grid">' + cards + '</div>', crumbs, version, collection=True)
     for category in categories:
         category_id = category["id"]
         label, intro = CATEGORY_INTROS[category_id]

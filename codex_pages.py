@@ -16,6 +16,7 @@ from typing import Any
 
 from codex_database import CATEGORY_LABELS, CATEGORY_ORDER, DATABASE_SCHEMA_VERSION
 from codex_parser import FIELD_LABELS, format_scalar
+from codex_pages_recommendations import build_recommendations, recommendation_document
 from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, validate_output_targets
 from codex_server import _achievement_payload, _build_detail_fields
 
@@ -24,7 +25,8 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
-ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg")
+ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
+          "recommendations.css", "recommendations.js")
 STAT_LABELS = ("饱食", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 
@@ -144,6 +146,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
             if target in memberships:
                 relation["link"] = {"category": memberships[target][0], "key": target}
             relations.setdefault(key, []).append(relation)
+        raw_entries = {}
         for row in connection.execute(
             """
             SELECT entry_key, source_table, source_id, name, name_key, description, raw_json
@@ -151,6 +154,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
             """
         ):
             raw = json.loads(row["raw_json"])
+            raw_entries[row["entry_key"]] = raw
             related = relations.get(row["entry_key"], [])
             for category in memberships.get(row["entry_key"], []):
                 highlights, fields, _prefixes = _build_detail_fields(category, raw, related)
@@ -212,7 +216,8 @@ def export_data(database_path: Path) -> dict[str, Any]:
                 }
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})
-        return {"format_version": 1, "metadata": metadata, "categories": categories}
+        recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
+        return {"format_version": 1, "metadata": metadata, "categories": categories, "recommendations": recommendations}
     finally:
         connection.close()
 
@@ -227,7 +232,8 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     if database_path.is_relative_to(output_dir) or SOURCE_DIR.is_relative_to(output_dir):
         raise ValueError("输出目录不能包含源数据库或网页源码目录")
     payload = export_data(database_path)
-    documents = seo_documents(payload, site_url)
+    documents = seo_documents(payload, site_url, {
+        "recommendations/index.html": recommendation_document(payload, site_url)})
     validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll", *documents])
     output_dir.mkdir(parents=True, exist_ok=True)
     for name in (*ASSETS, "data.json", ".nojekyll"):
@@ -256,7 +262,8 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
                 raise ValueError(f"图标输出文件不能是符号链接：{filename}")
             shutil.copyfile(SOURCE_DIR / "icons" / filename, target)
     (output_dir / "data.json").write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+        json.dumps({key: value for key, value in payload.items() if key != "recommendations"},
+                   ensure_ascii=False, separators=(",", ":"), allow_nan=False),
         encoding="utf-8",
     )
     (output_dir / ".nojekyll").write_text("", encoding="ascii")

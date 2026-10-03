@@ -7,6 +7,8 @@
 
 在线版从仓库已公开的静态 SQLite 生成，使用贴近游戏物品栏的深灰、暖棕边框和金黄色界面。食品按可烹饪与否分为“烹饪食材”和“即食食品”，在图标左下角显示每份可烹饪或食用次数，并列出五项属性、食品标签及烹饪分类。菜肴可以切换普通、良好、完美和失败品质；固定食材配方的图标左下角显示整份可吃次数，属性显示每次食用效果；通用配方的次数显示为“可变”，并提供总饱食分份计算。支持按标签、属性增益筛选及属性排序，也能从食材查询相关配方。页面配有从游戏只读提取的物品图标，缺失图标用分类符号占位。
 
+[生存补给计划](https://shadowwinds.github.io/SurvivalLogDataViewer/recommendations/)提供即食囤货、烹饪备料、菜肴和作物推荐。按烹饪 Lv.1／2／3 区分前、中、后期，可切换普通、良好、完美品质，或只看本阶段新增配方；支持名称、食材检索及成本、饱食、时间排序。每个条目公开评分分项、食材用量、整包购买价和每锅摊销价。指数由本站按静态配置计算，通用配方的产量随组合变化，保留条件并单独列出；具体公式与计算边界见页面说明。
+
 六类图鉴及成就仍支持名称/ID 搜索、材料搜索和详情查询。食品标签和烹饪分类分别保留，不用标签替代配方分类；相关配方只是食材用途参考，实际制作仍需满足完整配方与品质要求。数值使用数据库中记录的数据版本，不自动跟随访客本机游戏更新；个人完成状态、存档自动同步和库存菜肴匹配仍由原项目本地版提供。
 
 成就模块在手动导入时读取 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
@@ -126,7 +128,7 @@
 
 ### GitHub Pages 构建与部署
 
-运行 `python codex_pages.py --output-dir build/pages --site-url https://你的用户名.github.io/SurvivalLogDataViewer/` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml` 和 `guide/` 下的当前图鉴页面，保留其他文件。
+运行 `python codex_pages.py --output-dir build/pages --site-url https://你的用户名.github.io/SurvivalLogDataViewer/` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml`、`recommendations/` 推荐页和 `guide/` 下的当前图鉴页面，保留其他文件。
 
 `guide/` 提供无需 JavaScript 的分类目录和独立详情页，包含属性、标签、各品质菜肴效果及关联条目。每页生成独立标题、描述、canonical、Open Graph、Twitter 分享信息和 WebPage / CollectionPage / BreadcrumbList 结构化数据；食品与猎物重叠条目共用一个详情地址。游戏菜肴不标注为现实食谱的 Recipe。站点地图列出真实页面地址，不包含 `#` 筛选状态。
 
@@ -148,6 +150,7 @@
 | `codex_launcher.py` | 独立版启动、存档选择和自动更新 |
 | `codex_update.py` | Steam 游戏发现和资源版本更新 |
 | `codex_pages.py` / `codex_pages_seo.py` | 导出公开在线图鉴与可抓取详情、站点地图 |
+| `codex_pages_recommendations.py` | 根据公开配置计算补给推荐指数、食材摊销与基础种植产出 |
 | `survival_log_codex.spec` | PyInstaller 依赖配置 |
 | `web/` | 静态网页资源 |
 | `snapshots/` | 七份版本化 Markdown 快照 |

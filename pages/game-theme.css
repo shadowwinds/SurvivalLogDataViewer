@@ -20,6 +20,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .category-count { color: #c4b89c; background: #141511; border: 1px solid #514d3c; border-radius: 2px; }
 .category-button.active .category-count { color: #f5cc53; background: #29271d; }
 .sidebar-note { background: #29271e; border: 1px solid #64543a; border-radius: 2px; color: #c5bda7; }
+.supply-link { display: block; padding: 12px 14px; border: 1px solid #93763b; color: #f4c342; background: #332e21; font-weight: 700; text-decoration: none; margin: 12px 0; }
+.supply-link span { display: block; font-size: 11px; font-weight: 400; color: #d5c5a0; margin-top: 3px; }
 .note-marker { color: #e9b72a; }
 .sidebar-bottom { border-color: #504931; }
 .sidebar-bottom a, .game-version { color: #bcb39e; }
