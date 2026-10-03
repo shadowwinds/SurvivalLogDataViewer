@@ -22,7 +22,7 @@
 
 新增 `--site-url` 指定站点的 HTTP(S) 根网址（默认当前在线版），生成 canonical、分享及站点地图地址；参数拒绝片段、查询、登录信息和相对路径段，写入前检查所有页面目标中的符号链接。Actions 默认按仓库生成项目 Pages 网址，仓库变量 `PAGES_SITE_URL` 可覆盖自定义域名和用户主页地址。项目子目录中的 `robots.txt` 不能控制域名根的抓取规则，因此不生成；首页可见目录链接和站点地图提供发现入口，提交到站长平台属于独立操作。
 
-个人完成状态和库存匹配仍属于本地版；在线数据只随仓库静态库及网页工作流更新。输出目录只覆盖网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml` 和当前 `guide/` 页面，保留其他文件；schema 不匹配时构建报错。部署流程见 `.github/workflows/pages.yml`。
+个人完成状态和库存匹配仍属于本地版；在线数据只随仓库静态库及网页工作流更新。输出目录只覆盖网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml`、`recommendations/` 推荐页和当前 `guide/` 页面，保留其他文件；schema 不匹配时构建报错。部署流程见 `.github/workflows/pages.yml`。
 
 ### 补给推荐
 
