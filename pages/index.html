@@ -23,8 +23,6 @@
         </a>
         <div class="sidebar-caption">安全屋物资手册 / FIELD GUIDE</div>
         <nav id="categoryNav" class="category-nav" aria-label="图鉴分类"></nav>
-        <a class="supply-link" href="./recommendations/">生存补给计划 <span>囤货 · 烹饪 · 种植 →</span></a>
-        <div class="sidebar-note"><span class="note-marker">小提示</span><p>标签决定搭配，品质影响效果。<br>先查食材，再选一道值得做的菜。</p></div>
         <div class="sidebar-bottom">
           <span class="edition-label"><span class="status-dot"></span>在线图鉴</span>
           <div id="gameVersion" class="game-version">读取数据版本…</div>
@@ -36,8 +34,9 @@
       <main class="main-content">
         <header class="page-header">
           <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">烹饪食材</h1><p id="categoryIntro">看属性、查标签，掌握每份食材的可用次数。</p></div>
-          <div class="header-emblem" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M14 29h36a18 18 0 0 1-36 0zM9 29h46M25 52h14M24 18c-6-6 5-7 0-13m16 13c-6-6 5-7 0-13"/></svg><span>吃好 · 活下去</span></div>
+          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>标签决定搭配，品质影响效果。先查食材，再选一道值得做的菜。</p></details></div>
         </header>
+        <div class="query-tools">
         <form id="searchForm" class="search-toolbar" role="search">
           <label class="search-field"><span id="searchLabel">找食材</span><div class="input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="nameSearch" type="search" placeholder="搜索名称、标签或效果说明" autocomplete="off" disabled><kbd aria-hidden="true">/</kbd></div></label>
           <label class="search-field" id="materialField" hidden><span>我想用这些材料</span><div class="input-wrap"><input id="materialSearch" type="search" placeholder="例如：松茸、鸡蛋" autocomplete="off" disabled></div></label>
@@ -50,6 +49,7 @@
           <label id="cookableField" class="check-filter"><input id="cookableOnly" type="checkbox">只看可烹饪</label>
         </div>
         <div class="results-toolbar"><div><strong id="resultCount" role="status">正在读取图鉴…</strong><span id="filterSummary"></span></div><label>排序<select id="sortSelect" aria-label="条目排序"><option value="default">图鉴顺序</option></select></label></div>
+        </div>
         <div class="workspace">
           <section class="entries-panel" aria-label="条目列表">
             <div id="entryList" class="entry-list" aria-busy="true"><div class="loading-state">正在整理生存手册…</div></div>
