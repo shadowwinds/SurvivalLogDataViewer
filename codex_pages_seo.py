@@ -15,9 +15,10 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 DEFAULT_SITE_URL = "https://shadowwinds.github.io/SurvivalLogDataViewer/"
 SITE_NAME = "生存日志 · 幸存者图鉴"
 HOME_TITLE = "生存日志图鉴｜食材属性、食品标签与菜肴效果 · Survival Log"
-HOME_DESCRIPTION = "Survival Log 生存日志玩家图鉴：查询食材的饱食、心态、精力、健康、生命属性与食品标签，比较完美、良好、普通、失败品质的菜肴效果，并查找植物、猎物、制造、家具和成就。"
+HOME_DESCRIPTION = "Survival Log 生存日志玩家图鉴：查询烹饪食材、即食食品的每份使用次数、饱食、心态、精力、健康、生命属性与标签，比较菜肴各品质的可吃次数和每次效果，查找植物、猎物、制造、家具和成就。"
 CATEGORY_INTROS = {
-    "food": ("食材与食品", "查询食材的五项食用属性、食品标签、烹饪分类与可用菜肴。"),
+    "food": ("烹饪食材", "查询可烹饪食材的每份使用次数、五项属性、食品标签与可用菜肴。"),
+    "ready-food": ("即食食品", "查询不能用于烹饪的食品与饮品，查看每份食用次数、属性与标签。"),
     "dish": ("菜肴与效果", "查看配方食材和制作要求，比较完美、良好、普通、失败品质的成品效果。"),
     "plant": ("植物", "查看植物、种子、收获物与各等级配置。"),
     "prey": ("猎物", "查看猎物的属性、食品标签与关联配置。"),
@@ -25,6 +26,18 @@ CATEGORY_INTROS = {
     "furniture": ("家具", "查看家具功能、材料及相关配置。"),
     "achievements": ("成就", "查询成就完成条件、方法、角色限制和注意事项。"),
 }
+
+
+def browse_categories(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    categories = []
+    for category in payload["categories"]:
+        if category["id"] == "food":
+            categories.append({**category, "entries": [e for e in category["entries"] if e["food"]["cookable"]]})
+            categories.append({"id": "ready-food", "label": "即食食品",
+                               "entries": [e for e in category["entries"] if not e["food"]["cookable"]]})
+        else:
+            categories.append(category)
+    return categories
 
 
 def normalize_site_url(value: str) -> str:
@@ -120,7 +133,7 @@ def page_schema(title: str, description: str, url: str, base: str,
 def directory_links(payload: dict[str, Any], prefix: str = "./") -> str:
     return '<nav class="directory-links" aria-label="完整图鉴分类">' + "".join(
         f'<a href="{h(prefix)}guide/{category["id"]}/">{h(CATEGORY_INTROS[category["id"]][0])}</a>'
-        for category in payload["categories"]) + "</nav>"
+        for category in browse_categories(payload)) + "</nav>"
 
 
 def home_seo(payload: dict[str, Any], template: str, base: str) -> str:
@@ -156,6 +169,7 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     {head}
     <link rel="icon" href="{root}favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="{root}guide.css">
+    <link rel="stylesheet" href="{root}game-theme.css">
   </head>
   <body>
     <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><a href="{root}guide/">完整图鉴</a></header>
@@ -169,11 +183,37 @@ def shell(title: str, description: str, path: str, base: str, body: str,
 def profile_html(profile: dict[str, Any]) -> str:
     stats = '<dl class="stats">' + "".join(
         f'<div><dt>{h(stat["label"])}</dt><dd>{h(stat_value(stat["value"]))}</dd></div>'
-        for stat in profile["stats"]) + "</dl>"
+        for stat in (profile.get("per_use_stats") or profile["stats"])) + "</dl>"
     tags = "、".join(clean_text(tag["name"]) + (f' ×{tag["count"]}' if tag["count"] > 1 else "")
                      for tag in profile["tags"]) or "无"
     return stats + f'<p>食品标签：{h(tags)}</p>' + (
         f'<p class="food-note">{h(profile["note"])}</p>' if profile["note"] else "")
+
+
+def item_art(name: str, icon: str, base: str, profile: dict[str, Any] | None = None,
+             *, is_dish: bool = False, fixed: bool = False, small: bool = False) -> str:
+    image = public_image(base, icon)
+    if not image and profile is None:
+        return ""
+    alt = name + ("游戏图标" if image else "图标占位")
+    image = image or base + "favicon.svg"
+    size = 72 if small else 192
+    badge = ""
+    if profile is not None:
+        count = profile.get("serving_count" if is_dish else "use_times")
+        usable = is_dish or profile.get("cookable") or profile.get("can_use") is not False
+        known = usable and isinstance(count, int) and count > 0
+        label = f"{count}次" if known else "可变" if is_dish and not fixed else "—"
+        if is_dish:
+            usage = f"整份可吃 {count} 次" if known else "食用次数未提供" if fixed else "食用次数随食材变化"
+        else:
+            usage = (f'每份可{"烹饪" if profile.get("cookable") else "食用"} {count} 次' if known
+                     else "不可直接食用" if not usable else "配置未提供有效使用次数")
+        badge = f'<span class="icon-uses" title="{h(usage)}" aria-label="{h(usage)}">{h(label)}</span>'
+    loading = ' loading="lazy"' if small else ""
+    return (f'<span class="guide-item-art{" small" if small else ""}">'
+            f'<img class="entry-art" src="{h(image)}" width="{size}" height="{size}"'
+            f'{loading} alt="{h(alt)}">{badge}</span>')
 
 
 def fields_html(fields: list[dict[str, Any]]) -> str:
@@ -188,7 +228,9 @@ def entry_description(entry: dict[str, Any], label: str) -> str:
         food = entry["food"]
         stats = "、".join(clean_text(stat["label"]) + stat_value(stat["value"]) for stat in food["stats"])
         tags = "、".join(clean_text(tag["name"]) for tag in food["tags"]) or "无"
-        return f"生存日志 {name}的食用属性：{stats}。食品标签：{tags}。查看烹饪分类、食用说明和可用菜肴。"
+        uses = food.get("use_times")
+        usage = f'每份可{"烹饪" if food["cookable"] else "食用"}{uses}次。' if isinstance(uses, int) and uses > 0 else ""
+        return f"生存日志 {name}。{usage}食用属性：{stats}。食品标签：{tags}。查看烹饪分类、说明和可用菜肴。"
     if "products" in entry:
         ingredients = next((clean_text(field["value"]) for field in entry["highlights"]
                             if field["field"] == "ingredients"), "")
@@ -201,8 +243,7 @@ def entry_description(entry: dict[str, Any], label: str) -> str:
 def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], base: str,
                dishes: list[dict[str, Any]]) -> str:
     name = h(entry["name"])
-    icon = public_image(base, entry.get("icon", ""))
-    art = f'<img class="entry-art" src="{h(icon)}" width="192" height="192" alt="{name}游戏图标">' if icon else ""
+    art = item_art(entry["name"], entry.get("icon", ""), base, entry.get("food"))
     interactive = base + "#" + category + "/" + quote(entry["key"], safe="")
     body = f'<div class="entry-heading">{art}<div><p class="eyebrow">SURVIVAL LOG · {h(CATEGORY_INTROS[category][0])}</p><h1>{name}</h1><p>配置 ID：{entry["id"]}</p><a class="action-link" href="{h(interactive)}">在图鉴中筛选与比较 →</a></div></div>'
     if entry["description"]:
@@ -225,8 +266,14 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
     if "products" in entry:
         body += '<section><h2>各品质菜肴效果</h2><div class="quality-grid">'
         for product in entry["products"]:
-            body += f'<article class="quality"><h3>{h(product["quality"])}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p>' + profile_html(product) + '</article>'
+            art = item_art(product["name"], product.get("icon", ""), base, product,
+                           is_dish=True, fixed=entry.get("portion_model", {}).get("mode") == "fixed", small=True)
+            caption = "每次食用属性" if product.get("per_use_stats") else "配置参考属性"
+            body += f'<article class="quality">{art}<h3>{h(product["quality"])}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p><p class="portion-note">{caption}</p>' + profile_html(product) + '</article>'
         body += '</div></section>'
+        threshold = entry.get("portion_model", {}).get("threshold")
+        if threshold:
+            body += f'<p>分份标准：{h(threshold)} 饱食 / 次。可吃次数按整份总饱食除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
     if entry["highlights"]:
         heading = "完成条件与方法" if category == "achievements" else "制作要求与主要信息" if category in {"dish", "craft"} else "主要信息"
         body += f'<section><h2>{heading}</h2>' + fields_html(entry["highlights"]) + '</section>'
@@ -254,24 +301,30 @@ def seo_documents(payload: dict[str, Any], base: str) -> dict[str, str]:
     dishes = next((category["entries"] for category in payload["categories"] if category["id"] == "dish"), [])
     docs: dict[str, str] = {}
     crumbs = [(SITE_NAME, base), ("完整图鉴", base + "guide/")]
+    categories = browse_categories(payload)
     cards = "".join(f'<a class="category-card" href="{h(base)}guide/{c["id"]}/"><h2>{h(CATEGORY_INTROS[c["id"]][0])}</h2><p>{h(CATEGORY_INTROS[c["id"]][1])}</p><span>{len(c["entries"])} 个条目 →</span></a>'
-                    for c in payload["categories"])
+                    for c in categories)
     docs["guide/index.html"] = shell("生存日志完整图鉴目录 · Survival Log", HOME_DESCRIPTION,
                                      "guide/", base, '<h1>完整图鉴目录</h1><p>按分类浏览每个条目的属性和关联信息，也可以打开筛选图鉴搜索与比较。</p><div class="category-grid">' + cards + '</div>', crumbs, version, collection=True)
-    for category in payload["categories"]:
+    for category in categories:
         category_id = category["id"]
         label, intro = CATEGORY_INTROS[category_id]
-        name_counts = Counter(clean_text(entry["name"]) for entry in category["entries"])
+        source_entries = next(c["entries"] for c in payload["categories"] if c["id"] == "food") if category_id in {"food", "ready-food"} else category["entries"]
+        name_counts = Counter(clean_text(entry["name"]) for entry in source_entries)
         path = f"guide/{category_id}/"
         category_crumbs = [*crumbs, (label, base + path)]
         cards = ""
         for entry in category["entries"]:
-            icon = public_image(base, entry.get("icon", ""))
-            art = f'<img src="{h(icon)}" width="72" height="72" loading="lazy" alt="{h(entry["name"])}游戏图标">' if icon else ""
-            cards += f'<a class="catalog-card" href="{h(base + routes[entry["key"]])}">{art}<div><h2>{h(entry["name"])}</h2><p>{h(entry_description(entry, label))}</p><span>ID:{entry["id"]}</span></div></a>'
+            product = next((p for p in entry.get("products", []) if p["quality"] == "普通"), None)
+            profile = entry.get("food") or product
+            art = item_art(entry["name"], (profile or {}).get("icon") or entry.get("icon", ""), base,
+                           profile, is_dish=product is not None,
+                           fixed=entry.get("portion_model", {}).get("mode") == "fixed", small=True)
+            quality = " · 普通品质" if product else ""
+            cards += f'<a class="catalog-card" href="{h(base + routes[entry["key"]])}">{art}<div><h2>{h(entry["name"])}</h2><p>{h(entry_description(entry, label))}</p><span>ID:{entry["id"]}{quality}</span></div></a>'
             route = routes[entry["key"]]
             if route + "index.html" not in docs:
-                topic = "属性与标签" if category_id in {"food", "prey"} else "配方与各品质效果" if category_id == "dish" else "条件与方法" if category_id == "achievements" else f" · {label}图鉴"
+                topic = "属性与标签" if category_id in {"food", "ready-food", "prey"} else "配方与各品质效果" if category_id == "dish" else "条件与方法" if category_id == "achievements" else f" · {label}图鉴"
                 name = clean_text(entry["name"])
                 qualifier = f'（ID:{entry["id"]}）' if name_counts[name] > 1 else ""
                 title = f'{name}{qualifier}{topic} | 生存日志 Survival Log'

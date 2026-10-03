@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import shutil
 import sqlite3
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,7 +24,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
-ASSETS = ("index.html", "styles.css", "guide.css", "app.js", "favicon.svg")
+ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg")
 STAT_LABELS = ("饱食", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 
@@ -54,9 +56,28 @@ def food_profile(raw: dict[str, Any], tags: dict[int, str], groups: dict[int, st
         "sub_category_id": raw.get("SubCategory", 0),
         "sub_category": groups.get(raw.get("SubCategory", 0), f"ID:{raw['SubCategory']}" if raw.get("SubCategory") else "未分类"),
         "cookable": raw.get("CanCook", False),
+        "use_times": raw.get("UseTimes"),
+        "can_use": not raw["CantUse"] if "CantUse" in raw else None,
         "note": raw.get("ItemDes2_Local") or raw.get("ItemDes2") or "",
         "icon": public_icon(raw.get("Icon") or ""),
     }
+
+
+def dish_servings(product: dict[str, Any], threshold: int | None, fixed: bool) -> tuple[int | None, list[dict[str, Any]] | None]:
+    stats = product["stats"]
+    if not fixed or not isinstance(threshold, int) or threshold <= 0:
+        return None, None
+    total = stats[0]["value"]
+    if not isinstance(total, (int, float)) or not math.isfinite(total):
+        return None, None
+    # Native CalcProductVD ceilings each value; CalcSplit divides float32 values.
+    rounded = math.ceil(total)
+    quotient = struct.unpack("<f", struct.pack("<f", rounded / threshold))[0]
+    count = max(1, math.ceil(quotient))
+    per_use = [{**stat, "value": struct.unpack("<f", struct.pack("<f", math.ceil(stat["value"]) / count))[0]
+                if isinstance(stat["value"], (int, float)) and math.isfinite(stat["value"]) else None}
+               for stat in stats]
+    return count, per_use
 
 
 def config_fields(raw: dict[str, Any]) -> list[dict[str, str]]:
@@ -148,14 +169,20 @@ def export_data(database_path: Path) -> dict[str, Any]:
                 if category in {"food", "prey"}:
                     entry["food"] = food_profile(raw, tags, groups)
                 elif category == "dish":
+                    fixed = (bool(raw.get("SpecificItems")) or
+                             ("TagCombo" in raw and not raw["TagCombo"]) or
+                             any(r["relation_type"] == "具体食材" for r in related))
+                    threshold = raw.get("SatietyStandard")
+                    entry["portion_model"] = {"mode": "fixed" if fixed else "ingredients", "threshold": threshold}
                     entry["products"] = []
                     for field, quality in PRODUCT_FIELDS:
                         item_id = raw.get(field, 0)
                         if not item_id:
                             continue
                         name, product = items.get(item_id, (f"ID:{item_id}", {}))
-                        entry["products"].append({"id": item_id, "quality": quality, "name": name,
-                                                  **food_profile(product, tags, groups)})
+                        result = {"id": item_id, "quality": quality, "name": name, **food_profile(product, tags, groups)}
+                        result["serving_count"], result["per_use_stats"] = dish_servings(result, threshold, fixed)
+                        entry["products"].append(result)
                     entry["icon"] = next((product["icon"] for product in entry["products"] if product["icon"]), "")
                 category_map[category]["entries"].append(entry)
         achievements = []

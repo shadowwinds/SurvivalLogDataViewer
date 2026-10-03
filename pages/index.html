@@ -3,12 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#191916">
     <meta name="description" content="生存日志玩家图鉴：看食材属性和标签，按品质比较菜肴效果，查找食材能做的料理。">
     <title>生存日志 · 幸存者图鉴</title>
     <!-- SEO_HEAD -->
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./game-theme.css">
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -19,7 +21,7 @@
           <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 11h18l-2 13H9zM5 11h22M12 7c-3-3 3-3 0-6m8 6c-3-3 3-3 0-6M12 28h8"/></svg></span>
           <span class="brand-text">SURVIVAL LOG<strong>幸存者图鉴</strong></span>
         </a>
-        <div class="sidebar-caption">生存，从吃好一餐开始。</div>
+        <div class="sidebar-caption">安全屋物资手册 / FIELD GUIDE</div>
         <nav id="categoryNav" class="category-nav" aria-label="图鉴分类"></nav>
         <div class="sidebar-note"><span class="note-marker">小提示</span><p>标签决定搭配，品质影响效果。<br>先查食材，再选一道值得做的菜。</p></div>
         <div class="sidebar-bottom">
@@ -32,7 +34,7 @@
       </aside>
       <main class="main-content">
         <header class="page-header">
-          <div><div class="eyebrow">THE SURVIVOR'S HANDBOOK</div><h1 id="categoryTitle">食材与食品</h1><p id="categoryIntro">看属性、查标签，找到食材的好去处。</p></div>
+          <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">烹饪食材</h1><p id="categoryIntro">看属性、查标签，掌握每份食材的可用次数。</p></div>
           <div class="header-emblem" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M14 29h36a18 18 0 0 1-36 0zM9 29h46M25 52h14M24 18c-6-6 5-7 0-13m16 13c-6-6 5-7 0-13"/></svg><span>吃好 · 活下去</span></div>
         </header>
         <form id="searchForm" class="search-toolbar" role="search">

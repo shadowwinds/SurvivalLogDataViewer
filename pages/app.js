@@ -6,9 +6,10 @@
   const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱食", "心态", "精力", "健康", "生命"];
-  const titles = { food: "食材与食品", dish: "料理与效果", plant: "种植手册", prey: "猎物图鉴", craft: "制造手册", furniture: "家具与设施", achievements: "成就指南" };
+  const titles = { food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", plant: "种植手册", prey: "猎物图鉴", craft: "制造手册", furniture: "家具与设施", achievements: "成就指南" };
   const intros = {
-    food: "看属性、查标签，找到食材的好去处。",
+    food: "看属性、查标签，掌握每份食材的可用次数。",
+    "ready-food": "不用于烹饪的食品与饮品，直接查看食用次数与效果。",
     dish: "先看吃完的效果，再决定今天做什么。",
     plant: "了解生长条件，把收获留给下一餐。",
     prey: "查找猎物的属性与获取信息。",
@@ -52,8 +53,10 @@
     const wrapper = node("span", "entry-art" + (detail ? " detail-art" : ""));
     wrapper.setAttribute("aria-hidden", "true");
     const fallback = () => {
+      const badge = wrapper.querySelector(".icon-uses");
       wrapper.replaceChildren(icon(categoryId));
-      wrapper.title = "暂无物品图标";
+      if (badge) wrapper.append(badge);
+      wrapper.title = badge?.title || "暂无物品图标";
     };
     if (/^\.\/icons\/[a-f0-9]{20}\.png$/.test(src || "")) {
       const image = node("img");
@@ -80,11 +83,33 @@
   }
 
   function profile(entry) {
-    return entry.food || entry.products?.find((product) => product.quality === $("qualitySelect").value);
+    if (entry.food) return entry.food;
+    const product = entry.products?.find((item) => item.quality === $("qualitySelect").value);
+    return product?.per_use_stats ? { ...product, stats: product.per_use_stats } : product;
   }
 
   function statValue(entry, field) {
     return profile(entry)?.stats.find((stat) => stat.field === field)?.value;
+  }
+
+  function usageText(player, isDish = false, fixed = false) {
+    if (!player) return "次数未提供";
+    if (isDish) return Number.isInteger(player.serving_count) ? "整份可食用 " + player.serving_count + " 次" : fixed ? "食用次数未提供" : "食用份数随材料变化";
+    if (!player.cookable && player.can_use === false) return "不可直接食用";
+    const times = player.use_times;
+    return Number.isInteger(times) && times > 0 ? "每份可" + (player.cookable ? "烹饪 " : "食用 ") + times + " 次" : "次数未提供";
+  }
+
+  function addUsage(picture, player, isDish = false, fixed = false) {
+    if (!player) return picture;
+    const times = isDish ? player.serving_count : player.use_times;
+    const usable = isDish || player.cookable || player.can_use !== false;
+    const label = usable && Number.isInteger(times) && times > 0 ? times + "次" : isDish && !fixed ? "可变" : "—";
+    const badge = node("span", "icon-uses", label);
+    badge.title = usageText(player, isDish, fixed);
+    picture.title = badge.title;
+    picture.append(badge);
+    return picture;
   }
 
   function signed(value) {
@@ -132,7 +157,7 @@
 
   function buildNav() {
     const fragment = document.createDocumentFragment();
-    for (const id of ["food", "dish", "plant", "prey", "craft", "furniture", "achievements"]) {
+    for (const id of ["food", "ready-food", "dish", "plant", "prey", "craft", "furniture", "achievements"]) {
       const item = category(id);
       if (!item) continue;
       if (id === "food" || id === "plant") fragment.append(node("div", "nav-caption", id === "food" ? "吃什么 · 怎么做" : "更多生存手册"));
@@ -151,18 +176,18 @@
   }
 
   function configureControls() {
-    const isFood = ["food", "prey"].includes(state.category);
+    const isFood = ["food", "ready-food", "prey"].includes(state.category);
     const isDish = state.category === "dish";
     $("categoryTitle").textContent = titles[state.category];
     $("categoryIntro").textContent = intros[state.category];
-    $("searchLabel").textContent = isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
+    $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
     $("materialField").hidden = !["dish", "craft", "furniture"].includes(state.category);
     $("materialSearch").placeholder = isDish ? "食材名称 / 分类，可用逗号组合" : "材料名称或 ID";
     $("qualityField").hidden = !isDish;
     $("playerFilters").hidden = !isFood && !isDish;
     $("tagField").hidden = !isFood;
-    $("cookableField").hidden = !isFood;
+    $("cookableField").hidden = state.category !== "prey";
     const tags = new Map();
     category().entries.forEach((entry) => entry.food?.tags.forEach((tag) => tags.set(tag.id, tag.name)));
     const tagOptions = [node("option", "", "全部标签")];
@@ -250,7 +275,7 @@
       button.setAttribute("aria-pressed", String(entry.key === state.key));
       const player = profile(entry);
       const statsText = player?.stats.map((stat) => stat.label + signed(stat.value)).join("，");
-      button.setAttribute("aria-label", entry.name + (statsText ? "，" + statsText : "") + "，查看详情");
+      button.setAttribute("aria-label", entry.name + (player ? "，" + usageText(player, state.category === "dish", entry.portion_model?.mode === "fixed") : "") + (statsText ? "，" + statsText : "") + "，查看详情");
       const top = node("span", "card-top");
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
@@ -258,7 +283,7 @@
       if (state.category === "dish") meta.append(node("span", "quality-label", $("qualitySelect").value + "品质"));
       else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
       heading.append(node("span", "entry-name", entry.name), meta);
-      top.append(art(player?.icon || entry.icon), heading);
+      top.append(addUsage(art(player?.icon || entry.icon), player, state.category === "dish", entry.portion_model?.mode === "fixed"), heading);
       button.append(top);
       if (player) {
         const tags = tagList(player.tags);
@@ -275,7 +300,7 @@
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" : ["food", "prey"].includes(state.category) ? "绿色为增益 · 橙色为减益" : "";
+    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
   }
 
   function section(title, caption = "") {
@@ -313,7 +338,7 @@
       const values = node("div", "relation-values");
       for (const relation of relationsById.values()) {
         const item = node(relation.link ? "a" : "span", "relation-item");
-        const target = category(relation.link?.category)?.entries.find((entry) => entry.key === relation.link?.key);
+        const target = state.categories.flatMap((item) => item.entries).find((entry) => entry.key === relation.link?.key);
         if (target?.icon) item.append(art(target.icon, relation.link.category));
         item.append(node("span", "", (relation.target_name || "ID:" + relation.target_id) + (relation.quantity > 1 ? " × " + relation.quantity : "")));
         item.title = relation.target_table + " / ID " + relation.target_id;
@@ -349,8 +374,8 @@
         const name = node("span", "recipe-name", dish.name);
         name.append(node("span", "recipe-hint", exact ? "配方指定食材" : "符合食材分类 · 仍需搭配"));
         const product = dish.products?.find((item) => item.quality === $("qualitySelect").value);
-        const satiety = product?.stats.find((stat) => stat.field === "ValueDisplay1")?.value;
-        link.append(name, node("span", "recipe-effect", "饱食 " + signed(satiety) + " ↗"));
+        const satiety = (product?.per_use_stats || product?.stats)?.find((stat) => stat.field === "ValueDisplay1")?.value;
+        link.append(name, node("span", "recipe-effect", (product?.per_use_stats ? "每次 " : "参考 ") + signed(satiety) + " 饱食 ↗"));
         block.append(link);
       }
       block.append(node("p", "stat-help", $("qualitySelect").value + "品质效果。分类配方还需满足其余食材及档位要求；指定食材配方优先。"));
@@ -389,14 +414,15 @@
     const heading = node("h2", "", entry.name);
     heading.id = "detailName";
     text.append(node("div", "detail-category", titles[state.category] + (entry.hidden ? " / 隐藏成就" : "")), heading, node("div", "detail-id", "ID " + entry.id));
-    const primaryCategory = state.categories.find((item) => item.entries.some((candidate) => candidate.key === entry.key));
     const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
-    permalink.href = "./guide/" + primaryCategory.id + "/" + entry.id + "/";
+    permalink.href = entry.detailPath;
     text.append(permalink);
-    hero.append(art(player?.icon || entry.icon, state.category, true), text);
+    if (player) text.append(node("span", "sr-only", usageText(player, state.category === "dish", entry.portion_model?.mode === "fixed")));
+    hero.append(addUsage(art(player?.icon || entry.icon, state.category, true), player, state.category === "dish", entry.portion_model?.mode === "fixed"), text);
     fragment.append(hero);
     if (state.category === "dish") {
-      const block = section("吃完有什么效果", "按成品品质查看");
+      const fixed = entry.portion_model?.mode === "fixed";
+      const block = section(fixed ? "每次食用的效果" : "配置参考效果", "按成品品质查看");
       const tabs = node("div", "quality-tabs");
       tabs.setAttribute("role", "group");
       tabs.setAttribute("aria-label", "成品品质");
@@ -419,7 +445,25 @@
         block.append(node("div", "product-caption", player.name), statGrid(player.stats));
         if (player.note) block.append(node("p", "food-note", player.note));
       } else block.append(node("p", "stat-help", "当前数据未提供这一品质的成品效果。"));
-      block.append(node("p", "stat-help", "数值来自成品的五维展示属性；未叠加角色、技能或食物状态修正。"));
+      block.append(node("p", "stat-help", fixed ? "按整份属性与可吃次数分摊，显示每次食用的基础效果；未叠加角色或状态修正。" : "通用配方的整份属性由实际食材、档位与品质生成；这里是成品配置参考值，不能作为固定食用次数。"));
+      const threshold = entry.portion_model?.threshold;
+      if (Number.isInteger(threshold) && threshold > 0) {
+        block.append(node("p", "stat-help", "分份标准：" + threshold + " 饱食 / 次。次数 = 整份总饱食 ÷ " + threshold + "，向上取整，至少 1 次。"));
+        if (!fixed) {
+          const form = node("div", "portion-form");
+          const label = node("label", "", "整份总饱食");
+          const input = node("input");
+          input.type = "number"; input.min = "0"; input.max = "2147483647"; input.step = "1"; input.placeholder = "例如 60";
+          input.setAttribute("aria-label", "整份总饱食");
+          const result = node("output", "portion-result", "输入总饱食，计算可吃次数");
+          result.setAttribute("aria-live", "polite");
+          input.addEventListener("input", () => {
+            const value = input.valueAsNumber;
+            result.textContent = input.value && input.validity.valid && Number.isFinite(value) ? "整份可吃 " + Math.max(1, Math.ceil(Math.fround(value / threshold))) + " 次" : "输入总饱食，计算可吃次数";
+          });
+          label.append(input); form.append(label, result); block.append(form);
+        }
+      }
       fragment.append(block);
       renderRelations(fragment, entry.relations.filter((r) => ["具体食材", "食材分类"].includes(r.relation_type)), "怎么做这道菜");
     } else if (player) {
@@ -521,6 +565,7 @@
     try {
       [categoryId, key] = location.hash.slice(1).split("/").map(decodeURIComponent);
     } catch { categoryId = "food"; }
+    if (categoryId === "food" && key && category("ready-food")?.entries.some((entry) => entry.key === key)) categoryId = "ready-food";
     if (!state.categories.some((item) => item.id === categoryId)) categoryId = "food";
     if (categoryId !== state.category) {
       clearFilters();
@@ -543,7 +588,15 @@
       if (!response.ok) throw new Error("数据请求失败（HTTP " + response.status + "）");
       const data = await response.json();
       if (data.format_version !== 1 || !Array.isArray(data.categories) || !data.categories.length) throw new Error("图鉴数据格式不匹配");
-      state.categories = data.categories;
+      const detailPaths = new Map();
+      for (const item of data.categories) for (const entry of item.entries) {
+        if (!detailPaths.has(entry.key)) detailPaths.set(entry.key, "./guide/" + item.id + "/" + entry.id + "/");
+        entry.detailPath = detailPaths.get(entry.key);
+      }
+      state.categories = data.categories.flatMap((item) => item.id === "food" ? [
+        { ...item, entries: item.entries.filter((entry) => entry.food?.cookable) },
+        { id: "ready-food", label: "即食食品", entries: item.entries.filter((entry) => !entry.food?.cookable) },
+      ] : [item]);
       const foods = category("food")?.entries || [];
       for (const item of state.categories) {
         for (const entry of item.entries) {

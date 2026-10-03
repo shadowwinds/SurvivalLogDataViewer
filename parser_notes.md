@@ -8,6 +8,14 @@
 
 菜肴通过 `PerfectItemID`、`GoodItemID`、`NormalItemID`、`FailItemID` 引用静态库 `recipe_items` 中的成品，按品质展示五维属性和 `ItemDes2_Local` 食用说明，不使用配方的 `SatietyStandard` 冒充食用效果。只导出被引用成品的属性、标签、分类、说明和图标，不发布 `recipe_items` 全集。页面支持标签/可烹饪/正属性筛选和属性降序。食材关联菜肴以具体物品 ID 或烹饪子分类识别，分类匹配仅表示可以占用该类槽位，不能据此声称完整组合必定能做出该菜肴；仍需满足其余食材、档位和特色配方优先规则。
 
+在线浏览将食品按 `CanCook` 分为烹饪食材（124）和即食食品（49）；这只是浏览分区，不修改原六类分类注册表、食品/猎物映射或数据库。旧 `#food/物品键` 链接会自动进入正确分区，既有 `/guide/food/ID/` 详情地址保留。`Config_Item.UseTimes` 用作食品每份的配置使用次数，`CantUse` 用于区别不可直接食用；缺失值显示未提供，不默认填 1。生态香米每份 7 次，90 压缩饼干每份 10 次。页面与静态详情采用游戏物品栏的深灰、暖棕与金黄视觉，次数统一以白色数字显示在物品图标左下角；这是整份可用总次数，不模拟库存剩余量。菜肴次数随品质切换，通用配方标为“可变”，未知配置标为“—”。独立分类目录的菜肴图标显示普通品质次数并标注品质，各品质详情分别展示。
+
+菜肴成品的配置 `UseTimes` 不能直接当作实际可吃次数。只读核对当前 `1.1.18293` 的 IL2CPP v31 元数据与 native 方法确认：`ItemValueDisplayHelper.GetEffectiveMaxUseTimes` 优先使用实例 `MaxUseTimes`，否则回退配置 `UseTimes`；`SettleCookingResult` 将配方 `SatietyStandard` 传给 `CookingFormula.CalcSplit`。`CalcProductVD` 对固定食材配方取成品配置五项属性并分别向上取整；通用配方按参与食材、档位、品质与基础饱食奖励计算整份属性。`CalcSplit` 在总饱食超过正阈值时执行 float32 除法并向上取整，至少 1 份，之后按份数分摊五项属性。固定配方据此导出 `serving_count` 和 `per_use_stats`，同时保留原始 `stats`；佛跳墙完美/良好各 2 次，普通/失败各 1 次。通用配方不发布伪固定次数，显示配置参考属性、分份标准和总饱食计算入口。配置阈值或成品属性缺失时不猜测。
+
+无 `TagCombo` 条件的兜底菜肴在 `SettleCookingResult` 的兜底分支同样按 `isExact=true` 使用配置属性，按固定属性计算次数；字段本身缺失时不假定为兜底。正式数据的黑暗料理由此显示可吃 1 次，而不是伪标为随食材变化。
+
+本次只在隔离的内存 schema 中核对新版 `Config_Item`：元数据明确在 `UseAction` 前新增 `TradeSellRate: Single`，全表 61 字段及 EOF 校验通过；菜肴引用成品的 `UseTimes` 和配方分份阈值与跟踪库一致，少数成品属性已在新版变更。未修改正式解析器的 60 字段 schema，也未更新跟踪数据库或将临时 native/元数据导出物发布。网页按明示的静态库版本计算次数与每次属性，不混入新版部分数值。
+
 `codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理公开图鉴条目及其菜肴产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标来自本机游戏 `1.1.18293 / catalog 2.3.1`，图鉴数值仍使用静态库记录版本，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
 
 `codex_pages_seo.py` 从同一公开导出数据生成 `guide/` 分类目录和独立 HTML 详情。属性、标签、各品质效果、材料关联及成就说明直接存在于 HTML，不依赖 JavaScript 抓取。食品与猎物共享条目只生成首个分类下的详情地址，其他分类链接到该页。各页包含独立标题、描述、canonical、Open Graph / Twitter 信息和 WebPage / CollectionPage / BreadcrumbList JSON-LD；游戏菜肴不使用现实食谱的 Recipe 类型。`sitemap.xml` 仅列出首页、目录、分类及独立详情的完整网址，不包含交互图鉴的 hash 状态，不虚构更新时间。

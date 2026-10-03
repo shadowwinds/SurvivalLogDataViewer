@@ -12,8 +12,8 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from codex_database import CATEGORY_LABELS, DATABASE_SCHEMA_VERSION, STATIC_SCHEMA_SQL
-from codex_pages import SOURCE_DIR, build_pages, export_data
-from codex_pages_seo import normalize_site_url
+from codex_pages import SOURCE_DIR, build_pages, dish_servings, export_data
+from codex_pages_seo import browse_categories, normalize_site_url
 
 
 class PageHTML(HTMLParser):
@@ -260,6 +260,62 @@ class PagesExportTests(unittest.TestCase):
             text = (output / "guide" / path / "index.html").read_text(encoding="utf-8")
             title = text.split("<title>", 1)[1].split("</title>", 1)[0]
             self.assertIn(qualifier, title)
+
+    def test_ready_food_view_partitions_food_without_changing_original_memberships_or_urls(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("INSERT INTO codex_entries VALUES ('Config_Item:3','Config_Item',3,'即食食品','','','',?,1)",
+                               (json.dumps({"ID": 3, "CanCook": False, "UseTimes": 2, "CantUse": False}),))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_Item:3','food',3)")
+        payload = export_data(self.database)
+        self.assertEqual(next(c for c in payload["categories"] if c["id"] == "food")["entries"][-1]["id"], 3)
+        views = {c["id"]: c for c in browse_categories(payload)}
+        self.assertEqual([e["id"] for e in views["food"]["entries"]], [1])
+        self.assertEqual([e["id"] for e in views["ready-food"]["entries"]], [3])
+        self.assertEqual(views["ready-food"]["entries"][0]["food"]["use_times"], 2)
+        output = self.root / "output"
+        base = "https://example.org/project/"
+        build_pages(self.database, output, base)
+        index = PageHTML((output / "guide/ready-food/index.html").read_text(encoding="utf-8"))
+        self.assertIn(base + "guide/food/3/", index.links)
+        detail = (output / "guide/food/3/index.html").read_text(encoding="utf-8")
+        self.assertIn("每份可食用 2 次", detail)
+        self.assertIn('class="icon-uses"', detail)
+        self.assertIn('>2次</span>', detail)
+        self.assertIn("#ready-food/Config_Item%3A3", detail)
+
+    def test_fixed_dish_servings_follow_native_ceiling_split_and_show_per_use_stats(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            raw = {"ID": 10, "SpecificItems": [1], "SatietyStandard": 40,
+                   "PerfectItemID": 101, "GoodItemID": 102, "NormalItemID": 103, "FailItemID": 104}
+            connection.execute("UPDATE codex_entries SET raw_json=? WHERE entry_key='Config_CookingRecipe:10'", (json.dumps(raw),))
+        products = next(c for c in export_data(self.database)["categories"] if c["id"] == "dish")["entries"][0]["products"]
+        self.assertEqual([p["serving_count"] for p in products], [2, 2, 1, None])
+        self.assertEqual([p["per_use_stats"][0]["value"] if p["per_use_stats"] else None for p in products], [30, 25, 40, None])
+        self.assertEqual(products[0]["stats"][0]["value"], 60)
+        self.assertEqual(products[0]["per_use_stats"][1]["value"], -1.5)
+        output = self.root / "output"
+        build_pages(self.database, output)
+        html = (output / "guide/dish/10/index.html").read_text(encoding="utf-8")
+        self.assertIn("整份可吃 2 次", html)
+        self.assertIn("每次食用属性", html)
+        self.assertEqual(html.count('class="icon-uses"'), 4)
+
+    def test_split_boundaries_and_unknown_generic_counts_are_not_fixed_to_config_use_times(self) -> None:
+        products = next(c for c in export_data(self.database)["categories"] if c["id"] == "dish")["entries"][0]["products"]
+        self.assertTrue(all(p["serving_count"] is None and p["per_use_stats"] is None for p in products))
+        for value, expected in ((0, 1), (40, 1), (41, 2), (60, 2), (80, 2), (81, 3), (None, None)):
+            profile = {"stats": [{"label": "饱食", "value": value}]}
+            with self.subTest(value=value):
+                self.assertEqual(dish_servings(profile, 40, True)[0], expected)
+        self.assertEqual(dish_servings(products[0], 0, True), (None, None))
+
+    def test_explicit_empty_combo_fallback_uses_configured_product_split(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            raw = {"ID": 10, "TagCombo": [], "SpecificItems": [], "SatietyStandard": 40, "PerfectItemID": 101}
+            connection.execute("UPDATE codex_entries SET raw_json=? WHERE entry_key='Config_CookingRecipe:10'", (json.dumps(raw),))
+        dish = next(c for c in export_data(self.database)["categories"] if c["id"] == "dish")["entries"][0]
+        self.assertEqual(dish["portion_model"]["mode"], "fixed")
+        self.assertEqual(dish["products"][0]["serving_count"], 2)
 
 
 if __name__ == "__main__":
