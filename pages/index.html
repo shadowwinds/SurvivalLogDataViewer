@@ -28,13 +28,12 @@
           <div id="gameVersion" class="game-version">读取数据版本…</div>
           <a href="https://github.com/tianwaiyan/SurvivalLogDataViewer" target="_blank" rel="noopener noreferrer">原项目 <span aria-hidden="true">↗</span></a>
           <a href="https://github.com/shadowwinds/SurvivalLogDataViewer" target="_blank" rel="noopener noreferrer">网页源码 <span aria-hidden="true">↗</span></a>
-          <a href="./guide/">完整图鉴目录 <span aria-hidden="true">→</span></a>
         </div>
       </aside>
       <main class="main-content">
         <header class="page-header">
           <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">烹饪食材</h1><p id="categoryIntro">看属性、查标签，掌握每份食材的可用次数。</p></div>
-          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>标签决定搭配，品质影响效果。先查食材，再选一道值得做的菜。</p></details></div>
+          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>配方按烹饪分类或指定食材匹配，食品标签按游戏配置展示。品质影响食用效果。</p></details></div>
         </header>
         <div class="query-tools">
         <form id="searchForm" class="search-toolbar" role="search">
@@ -47,6 +46,7 @@
           <label id="tagField" class="filter-select"><span>食品标签</span><select id="tagSelect" aria-label="食品标签"><option value="">全部标签</option></select></label>
           <div id="effectFilters" class="effect-filters" role="group" aria-label="按属性增益筛选"></div>
           <label id="cookableField" class="check-filter"><input id="cookableOnly" type="checkbox">只看可烹饪</label>
+          <label id="specificRecipeField" class="check-filter" hidden title="只显示明确指定所查食材的配方，排除仅按食材分类匹配的通用配方；未填写食材时显示全部专用菜谱。"><input id="specificRecipesOnly" type="checkbox">仅专用菜谱</label>
         </div>
         <div class="results-toolbar"><div><strong id="resultCount" role="status">正在读取图鉴…</strong><span id="filterSummary"></span></div><label>排序<select id="sortSelect" aria-label="条目排序"><option value="default">图鉴顺序</option></select></label></div>
         </div>
@@ -64,6 +64,6 @@
         <footer class="page-footer"><span id="footerVersion">Survival Log · 生存日志</span><span>存档与库存匹配请使用<a href="https://github.com/tianwaiyan/SurvivalLogDataViewer" target="_blank" rel="noopener noreferrer">本地版 ↗</a></span></footer>
       </main>
     </div>
-    <noscript><style>body { overflow: auto; } .app-shell { display: none; } .directory-links { display: flex; flex-wrap: wrap; gap: 20px; }</style><div class="noscript"><h1>生存日志 · 幸存者图鉴</h1><p>无需 JavaScript 也可以浏览每个食材的属性、标签和各品质菜肴效果。</p><!-- SEO_DIRECTORY --></div></noscript>
+    <noscript><style>body { overflow: auto; } .app-shell { display: none; } .directory-links { display: flex; flex-wrap: wrap; gap: 20px; } .noscript details { margin: 20px 0; } .noscript summary { cursor: pointer; }</style><div class="noscript"><h1>生存日志 · 幸存者图鉴</h1><p>查询工具需要 JavaScript；也可以在此展开分类，直接查看条目详情。</p><!-- SEO_DIRECTORY --></div></noscript>
   </body>
 </html>

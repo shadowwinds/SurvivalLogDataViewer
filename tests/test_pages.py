@@ -189,6 +189,8 @@ class PagesExportTests(unittest.TestCase):
         self.assertEqual(len(urls), len(set(urls)))
         self.assertIn(base + "guide/food/1/", urls)
         self.assertNotIn(base + "guide/prey/1/", urls)
+        self.assertNotIn(base + "guide/", urls)
+        self.assertNotIn(base + "guide/prey/", urls)
         self.assertTrue(all(url.startswith(base) and "#" not in url for url in urls))
         for url in urls:
             source = output / url.removeprefix(base) / "index.html"
@@ -199,7 +201,9 @@ class PagesExportTests(unittest.TestCase):
             self.assertTrue(document.schemas)
             self.assertNotIn("PRIVATE_", source.read_text(encoding="utf-8"))
         prey = PageHTML((output / "guide/prey/index.html").read_text(encoding="utf-8"))
-        self.assertIn(base + "guide/food/1/", prey.links)
+        self.assertIn(base + "#prey/", prey.links)
+        self.assertEqual(prey.meta["robots"], "noindex,follow")
+        self.assertIn("./guide/food/1/", PageHTML((output / "index.html").read_text(encoding="utf-8")).links)
 
     def test_static_details_show_stats_tags_and_all_qualities_without_javascript(self) -> None:
         output = self.root / "output"
@@ -276,7 +280,7 @@ class PagesExportTests(unittest.TestCase):
         base = "https://example.org/project/"
         build_pages(self.database, output, base)
         index = PageHTML((output / "guide/ready-food/index.html").read_text(encoding="utf-8"))
-        self.assertIn(base + "guide/food/3/", index.links)
+        self.assertIn(base + "#ready-food/", index.links)
         detail = (output / "guide/food/3/index.html").read_text(encoding="utf-8")
         self.assertIn("每份可食用 2 次", detail)
         self.assertIn('class="icon-uses"', detail)

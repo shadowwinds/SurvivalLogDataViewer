@@ -131,9 +131,12 @@ def page_schema(title: str, description: str, url: str, base: str,
 
 
 def directory_links(payload: dict[str, Any], prefix: str = "./") -> str:
-    return '<nav class="directory-links" aria-label="完整图鉴分类">' + "".join(
-        f'<a href="{h(prefix)}guide/{category["id"]}/">{h(CATEGORY_INTROS[category["id"]][0])}</a>'
-        for category in browse_categories(payload)) + f'<a href="{h(prefix)}recommendations/">生存补给计划</a></nav>'
+    routes = entry_routes(payload)
+    return f'<p><a href="{h(prefix)}recommendations/">生存补给计划</a></p>' + "".join(
+        f'<details><summary>{h(CATEGORY_INTROS[category["id"]][0])}</summary><nav class="directory-links">' + "".join(
+            f'<a href="{h(prefix + routes[entry["key"]])}">{h(entry["name"])}</a>'
+            for entry in category["entries"]) + '</nav></details>'
+        for category in browse_categories(payload))
 
 
 def home_seo(payload: dict[str, Any], template: str, base: str) -> str:
@@ -172,9 +175,9 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     <link rel="stylesheet" href="{root}game-theme.css">
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}recommendations/">补给推荐</a> · <a href="{root}guide/">完整图鉴</a></nav></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a></nav></header>
     <main>{breadcrumb}{body}</main>
-    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">打开筛选图鉴</a> · <a href="{root}guide/">浏览分类</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
+    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
 </html>
 '''
@@ -269,7 +272,7 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
             art = item_art(product["name"], product.get("icon", ""), base, product,
                            is_dish=True, fixed=entry.get("portion_model", {}).get("mode") == "fixed", small=True)
             caption = "每次食用属性" if product.get("per_use_stats") else "配置参考属性"
-            body += f'<article class="quality">{art}<h3>{h(product["quality"])}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p><p class="portion-note">{caption}</p>' + profile_html(product) + '</article>'
+            body += f'<article class="quality">{art}<h3>{h(product["quality"])}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p><p>成品分类：{h(product["sub_category"])}</p><p class="portion-note">{caption}</p>' + profile_html(product) + '</article>'
         body += '</div></section>'
         threshold = entry.get("portion_model", {}).get("threshold")
         if threshold:
@@ -295,33 +298,30 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
     return body
 
 
+def query_redirect(base: str, category: str = "") -> str:
+    target = base + (f"#{category}/" if category else "")
+    return f'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图鉴查询 · Survival Log</title><meta name="robots" content="noindex,follow">
+<link rel="canonical" href="{h(base)}"><meta http-equiv="refresh" content="0;url={h(target)}"></head>
+<body><p><a href="{h(target)}">进入图鉴查询</a></p></body></html>
+'''
+
+
 def seo_documents(payload: dict[str, Any], base: str, extra_documents: dict[str, str] | None = None) -> dict[str, str]:
     routes = entry_routes(payload)
     version = payload["metadata"].get("game_version", "未提供")
     dishes = next((category["entries"] for category in payload["categories"] if category["id"] == "dish"), [])
     docs: dict[str, str] = dict(extra_documents or {})
-    crumbs = [(SITE_NAME, base), ("完整图鉴", base + "guide/")]
+    crumbs = [(SITE_NAME, base)]
     categories = browse_categories(payload)
-    cards = "".join(f'<a class="category-card" href="{h(base)}guide/{c["id"]}/"><h2>{h(CATEGORY_INTROS[c["id"]][0])}</h2><p>{h(CATEGORY_INTROS[c["id"]][1])}</p><span>{len(c["entries"])} 个条目 →</span></a>'
-                    for c in categories)
-    docs["guide/index.html"] = shell("生存日志完整图鉴目录 · Survival Log", HOME_DESCRIPTION,
-                                     "guide/", base, '<h1>完整图鉴目录</h1><p>按分类浏览每个条目的属性和关联信息，也可以打开筛选图鉴搜索与比较。</p><p><a href="' + h(base) + 'recommendations/">生存补给计划：比较囤货、菜肴与作物 →</a></p><div class="category-grid">' + cards + '</div>', crumbs, version, collection=True)
     for category in categories:
         category_id = category["id"]
-        label, intro = CATEGORY_INTROS[category_id]
+        label = CATEGORY_INTROS[category_id][0]
         source_entries = next(c["entries"] for c in payload["categories"] if c["id"] == "food") if category_id in {"food", "ready-food"} else category["entries"]
         name_counts = Counter(clean_text(entry["name"]) for entry in source_entries)
-        path = f"guide/{category_id}/"
-        category_crumbs = [*crumbs, (label, base + path)]
-        cards = ""
+        category_crumbs = [*crumbs, (label, base + f"#{category_id}/")]
         for entry in category["entries"]:
-            product = next((p for p in entry.get("products", []) if p["quality"] == "普通"), None)
-            profile = entry.get("food") or product
-            art = item_art(entry["name"], (profile or {}).get("icon") or entry.get("icon", ""), base,
-                           profile, is_dish=product is not None,
-                           fixed=entry.get("portion_model", {}).get("mode") == "fixed", small=True)
-            quality = " · 普通品质" if product else ""
-            cards += f'<a class="catalog-card" href="{h(base + routes[entry["key"]])}">{art}<div><h2>{h(entry["name"])}</h2><p>{h(entry_description(entry, label))}</p><span>ID:{entry["id"]}{quality}</span></div></a>'
             route = routes[entry["key"]]
             if route + "index.html" not in docs:
                 topic = "属性与标签" if category_id in {"food", "ready-food", "prey"} else "配方与各品质效果" if category_id == "dish" else "条件与方法" if category_id == "achievements" else f" · {label}图鉴"
@@ -331,14 +331,16 @@ def seo_documents(payload: dict[str, Any], base: str, extra_documents: dict[str,
                 docs[route + "index.html"] = shell(title, entry_description(entry, label), route, base,
                     entry_body(entry, category_id, routes, base, dishes),
                     [*category_crumbs, (entry["name"], base + route)], version, entry.get("icon", ""))
-        docs[path + "index.html"] = shell(f'{label}图鉴 | 生存日志 Survival Log', f'生存日志 {label}完整图鉴。{intro}',
-            path, base, f'<h1>{h(label)}</h1><p>{h(intro)}</p><p>{len(category["entries"])} 个条目</p><div class="catalog-grid">{cards}</div>', category_crumbs, version, collection=True)
     namespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
     sitemap = Element("urlset", xmlns=namespace)
     urls = [base, *(base + name.removesuffix("index.html") for name in docs)]
     for url in urls:
         SubElement(SubElement(sitemap, "url"), "loc").text = url
     docs["sitemap.xml"] = tostring(sitemap, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    # Replace former directories without breaking bookmarks or indexing duplicate lists.
+    docs["guide/index.html"] = query_redirect(base)
+    for category in categories:
+        docs[f'guide/{category["id"]}/index.html'] = query_redirect(base, category["id"])
     return docs
 
 

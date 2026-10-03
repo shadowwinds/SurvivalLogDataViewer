@@ -102,6 +102,7 @@ input[type="checkbox"] { accent-color: var(--green); width: 14px; height: 14px; 
 button.tag:hover { border-color: #7e9e61; background: #e0ebd2; }
 .tag-count { font: 11px Georgia, serif; margin-left: 4px; color: #62734b; }
 .card-tags { min-height: 23px; margin-bottom: 12px; }
+.card-tag-label { align-self: center; color: var(--muted); font-size: 10px; margin-right: 3px; }
 .card-stats { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border-top: 1px solid #e5eadf; padding-top: 10px; gap: 4px; }
 .card-stat { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--muted); }
 .card-stat b { font: 600 16px Georgia, serif; color: #396952; }

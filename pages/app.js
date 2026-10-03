@@ -124,10 +124,11 @@
 
   function tagList(tags, interactive = false) {
     const list = node("div", "tag-list");
+    list.setAttribute("aria-label", "食品标签");
     for (const tag of tags || []) {
       const badge = node(interactive ? "button" : "span", "tag", tag.name);
       if (tag.count > 1) badge.append(node("span", "tag-count", "×" + tag.count));
-      badge.title = "食品标签中的重复次数；烹饪配方使用食材分类进行匹配";
+      badge.title = "游戏配置的食品标签，与物品分类分别展示；× 数字表示标签重复次数";
       if (interactive) {
         badge.type = "button";
         badge.addEventListener("click", () => {
@@ -188,6 +189,7 @@
     $("playerFilters").hidden = !isFood && !isDish;
     $("tagField").hidden = !isFood;
     $("cookableField").hidden = state.category !== "prey";
+    $("specificRecipeField").hidden = !isDish;
     const tags = new Map();
     category().entries.forEach((entry) => entry.food?.tags.forEach((tag) => tags.set(tag.id, tag.name)));
     const tagOptions = [node("option", "", "全部标签")];
@@ -219,6 +221,11 @@
       sorts.push(option);
     });
     $("sortSelect").replaceChildren(...sorts);
+    $("sortSelect").value = defaultSort();
+  }
+
+  function defaultSort() {
+    return ["food", "ready-food", "dish", "prey"].includes(state.category) ? "ValueDisplay1" : "default";
   }
 
   function clearFilters() {
@@ -227,7 +234,8 @@
     $("materialSearch").value = "";
     $("tagSelect").value = "";
     $("cookableOnly").checked = false;
-    $("sortSelect").value = "default";
+    $("specificRecipesOnly").checked = false;
+    $("sortSelect").value = defaultSort();
     state.effect = "";
   }
 
@@ -236,7 +244,9 @@
     const materials = $("materialField").hidden ? [] : normalize($("materialSearch").value).split(/[\s,，、]+/).filter(Boolean);
     const tag = $("tagField").hidden ? "" : $("tagSelect").value;
     const cookable = !$("cookableField").hidden && $("cookableOnly").checked;
+    const specificOnly = state.category === "dish" && $("specificRecipesOnly").checked;
     const entries = category().entries.filter((entry) =>
+      (!specificOnly || entry.hasSpecificIngredients) &&
       entry.nameIndex.includes(name) && (state.category === "dish" ? matchesMaterialSlots(entry, materials) : materials.every((term) => entry.materialIndex.includes(term))) &&
       (!tag || entry.food?.tags.some((item) => String(item.id) === tag)) &&
       (!cookable || entry.food?.cookable) && (!state.effect || statValue(entry, state.effect) > 0));
@@ -279,7 +289,7 @@
       const top = node("span", "card-top");
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
-      meta.append(node("span", "", player?.sub_category || (entry.hidden ? "隐藏成就" : entry.group || category().label)));
+      meta.append(node("span", "", player ? "分类：" + player.sub_category : entry.hidden ? "隐藏成就" : entry.group || category().label));
       if (state.category === "dish") meta.append(node("span", "quality-label", $("qualitySelect").value + "品质"));
       else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
       heading.append(node("span", "entry-name", entry.name), meta);
@@ -288,6 +298,7 @@
       if (player) {
         const tags = tagList(player.tags);
         tags.classList.add("card-tags");
+        if (player.tags.length) tags.prepend(node("span", "card-tag-label", "食品标签"));
         button.append(tags, statGrid(player.stats, true));
         if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
       } else {
@@ -300,7 +311,7 @@
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
+    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
   }
 
   function section(title, caption = "") {
@@ -465,6 +476,13 @@
         }
       }
       fragment.append(block);
+      if (player) {
+        const tags = section("成品分类与食品标签");
+        tags.append(node("p", "product-caption", "成品分类：" + player.sub_category), tagList(player.tags));
+        if (!player.tags.length) tags.append(node("p", "stat-help", "没有食品标签"));
+        tags.append(node("p", "stat-help", "分类与食品标签是两个独立字段，不一定相同；标签按游戏配置展示。"));
+        fragment.append(tags);
+      }
       renderRelations(fragment, entry.relations.filter((r) => ["具体食材", "食材分类"].includes(r.relation_type)), "怎么做这道菜");
     } else if (player) {
       const block = section("直接食用的属性", "增益 + / 减益 −");
@@ -604,6 +622,7 @@
             ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)].join(" "));
           const materialRelations = entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type));
           const specific = materialRelations.filter((relation) => relation.relation_type === "具体食材");
+          entry.hasSpecificIngredients = specific.length > 0;
           const groups = new Set(materialRelations.filter((relation) => relation.relation_type === "食材分类").map((relation) => relation.target_id));
           const eligible = specific.length ? foods.filter((food) => specific.some((r) => r.target_id === food.id)) :
             foods.filter((food) => food.food?.cookable && groups.has(food.food.sub_category_id));
@@ -634,7 +653,7 @@
     clearTimeout(state.debounce);
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
-  ["tagSelect", "cookableOnly", "sortSelect", "qualitySelect"].forEach((id) => $(id).addEventListener("change", () => render()));
+  ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect"].forEach((id) => $(id).addEventListener("change", () => render()));
   $("searchForm").addEventListener("submit", (event) => event.preventDefault());
   $("resetSearch").addEventListener("click", resetSearch);
   $("emptyReset").addEventListener("click", resetSearch);
