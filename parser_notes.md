@@ -1,5 +1,11 @@
 # Survival Log 图鉴离线解析说明
 
+## GitHub Pages 静态浏览
+
+`codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。
+
+在线版提供名称/ID、菜肴食材和制造/家具材料检索，并使用相对路径适配 Pages 项目子目录。个人完成状态和库存匹配仍属于本地版；在线数据只随仓库静态库及网页工作流更新。输出目录只覆盖网页资源、`data.json` 和 `.nojekyll`，保留其他文件；schema 不匹配时构建报错。部署流程见 `.github/workflows/pages.yml`。
+
 ## 成就模块（当前实现）
 
 手动导入成就时，当前资源中的 `Config_Achievement` 按 21 字段 MemoryPack schema 读取，并以配置 ID 为主键写入静态库 `achievements` 表；`achievement_conditions.json` 保存全部成就的分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项。条件文件的 `source_version` 仅记录人工整理时参考的资源版本，不参与自动更新版本判断；手动导入仍校验 ID 集合、名称和隐藏标记。自动更新六类图鉴时跳过 `Config_Achievement` 和条件文件，保留已有成就内容及完成状态。

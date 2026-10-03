@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="Survival Log 生存日志在线图鉴：查询食品、菜肴、植物、猎物、制造、家具和成就的配置与获取方法。">
+    <title>生存日志 · 在线图鉴</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#nameSearch">跳到搜索</a>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="./" aria-label="生存日志图鉴首页">
+          <span class="brand-symbol" aria-hidden="true">SL<span>生存手册</span></span>
+          <span class="brand-text">生存日志<strong>在线图鉴</strong></span>
+        </a>
+        <div class="sidebar-caption"><span>目录 / INDEX</span><span>01—07</span></div>
+        <nav id="categoryNav" class="category-nav" aria-label="图鉴分类"></nav>
+        <div class="sidebar-bottom">
+          <div class="edition-label"><span class="status-dot"></span>公开配置 · 静态版</div>
+          <div id="gameVersion" class="game-version">读取数据版本…</div>
+          <p>查询配方、材料与获取方法。个人存档同步请使用原项目本地版。</p>
+          <a href="https://github.com/tianwaiyan/SurvivalLogDataViewer" target="_blank" rel="noopener noreferrer">原项目 / tianwaiyan <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/shadowwinds/SurvivalLogDataViewer" target="_blank" rel="noopener noreferrer">网页源码 <span aria-hidden="true">↗</span></a>
+        </div>
+      </aside>
+      <main class="main-content">
+        <header class="page-header">
+          <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">图鉴</h1></div>
+          <div class="page-number"><strong id="categoryTotal">—</strong><span>收录条目</span></div>
+        </header>
+        <form id="searchForm" class="search-toolbar" role="search">
+          <label class="search-field"><span>名称 / ID</span><input id="nameSearch" type="search" placeholder="查找名称、名称键或 ID" autocomplete="off" disabled></label>
+          <label class="search-field" id="materialField"><span>材料</span><input id="materialSearch" type="search" placeholder="食材、材料名称或 ID" autocomplete="off" disabled></label>
+          <button class="reset-button" id="resetSearch" type="button" disabled>清除筛选 <span aria-hidden="true">↺</span></button>
+          <div class="search-summary"><span id="resultCount" role="status">正在读取图鉴…</span><span class="hint">名称与材料可同时筛选</span></div>
+        </form>
+        <div class="workspace">
+          <section class="entries-panel" aria-label="条目列表">
+            <div class="panel-heading"><span>条目 / ENTRIES</span><span>ID ↑</span></div>
+            <div id="entryList" class="entry-list" aria-busy="true"></div>
+            <div id="emptyState" class="empty-state" hidden><span aria-hidden="true">∅</span><h2>没有找到条目</h2><p>试试更短的关键词，或清除材料筛选。</p><button type="button" id="emptyReset">清除筛选</button></div>
+          </section>
+          <dialog id="detailPanel" class="detail-panel" open aria-label="图鉴详情">
+            <div class="detail-toolbar"><span id="detailPosition">条目详情 / DETAIL</span><button id="closeDetail" class="close-detail" type="button">返回列表 <span aria-hidden="true">×</span></button></div>
+            <div id="detailContent" class="detail-content"><div class="detail-placeholder"><span aria-hidden="true">SL</span><p>选择条目，查看图鉴详情。</p></div></div>
+          </dialog>
+        </div>
+        <div id="loadError" class="load-error" role="alert" hidden><h2>图鉴暂时未能加载</h2><p id="errorMessage"></p><button id="retryLoad" type="button">重新加载</button></div>
+        <footer class="page-footer"><span id="footerVersion">Survival Log · 生存日志</span><span>数据由原项目公开静态配置生成</span></footer>
+      </main>
+    </div>
+    <noscript><p class="noscript">请启用 JavaScript 以浏览和搜索图鉴。</p></noscript>
+  </body>
+</html>

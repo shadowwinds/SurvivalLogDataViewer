@@ -1,0 +1,55 @@
+name: Build and deploy online codex
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pages/**'
+      - 'codex_*.py'
+      - 'survival_log_codex.sqlite3'
+      - 'tests/test_pages.py'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'pages/**'
+      - 'codex_*.py'
+      - 'survival_log_codex.sqlite3'
+      - 'tests/test_pages.py'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify static export boundaries
+        run: python -m unittest discover -s tests -p test_pages.py
+      - name: Build public static codex
+        run: python codex_pages.py --output-dir build/pages
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/pages
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -1,6 +1,12 @@
 <!-- BEGIN USER GUIDE -->
 # Survival Log Data Viewer
 
+### 在线静态图鉴
+
+本 fork 的在线版：[生存日志在线图鉴](https://shadowwinds.github.io/SurvivalLogDataViewer/)。原项目来自 [tianwaiyan/SurvivalLogDataViewer](https://github.com/tianwaiyan/SurvivalLogDataViewer)。
+
+在线版从仓库已公开的静态 SQLite 生成，支持六类图鉴及成就的分类浏览、名称/ID 搜索、材料搜索和详情查询。它使用数据库中记录的数据版本，不自动跟随访客本机游戏更新；个人完成状态、存档自动同步和库存菜肴匹配仍由原项目本地版提供。
+
 成就模块在手动导入时读取 `Config_Achievement`，并在侧边栏“成就”中单独展示。完成状态来自全局 `HistoryData.UnlockedAchievementIds`，不按当前选中的子存档区分；隐藏成就也会显示。详情包含完成条件、完成方法、角色限制、数值门槛、排除项、注意事项、配置引用和原始配置字段。
 
 条件说明来自随程序发布的 `achievement_conditions.json`，其中的 `source_version` 仅记录人工整理时参考的资源版本，不参与自动更新判断。自动更新只校验并重建原有六类图鉴，跳过 `Config_Achievement` 和人工条件说明，并保留数据库中已有的成就内容及完成状态；仅在数据库尚无成就数据时，才会在初始化阶段导入当前手工说明。成就同步与其他完成状态共用约 5 秒轮询，主存档和 `.bak` 都无法解析，或旧存档格式无法确认 `UnlockedAchievementIds` 时，保留上一次有效成就状态。
@@ -115,6 +121,12 @@
 
 <!-- BEGIN DEVELOPER GUIDE -->
 ## 面向开发者
+
+### GitHub Pages 构建与部署
+
+运行 `python codex_pages.py --output-dir build/pages` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、`data.json` 和 `.nojekyll`。
+
+自己的公开 fork 也可以部署：在仓库 `Settings → Pages → Source` 选择 `GitHub Actions`，然后运行 `Build and deploy online codex` 工作流。后续主分支的相关代码或静态库更新会自动重新构建和发布。
 
 ### 项目结构
 
