@@ -267,3 +267,28 @@ body > footer a, body > main a { color: #e4c77f; }
   .catalog-card .guide-item-art.small { width: 54px; height: 54px; }
 }
 @media (prefers-reduced-motion: reduce) { .entry-card:hover { transform: none; } }
+.cooking-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 8px 0; }
+.cooking-mode label { display: flex; gap: 10px; align-items: center; color: #d7cba9; font-size: 12px; }
+.cooking-mode select { background: #303126; color: #f1dfa6; border: 1px solid #97783d; padding: 8px; font: inherit; }
+.cooking-mode p, .cooking-rules p { color: #c3baa2; font-size: 11px; line-height: 1.7; margin: 3px 0; }
+.cooking-rules { padding: 6px 0 10px; color: #ddc181; font-size: 11px; }
+.cooking-rules p { max-width: 900px; margin-top: 10px; }
+.cooking-thresholds { overflow-x: auto; margin-top: 10px; }
+.cooking-thresholds table { border-collapse: collapse; color: #d4c8aa; }
+.cooking-thresholds th, .cooking-thresholds td { padding: 5px 18px 5px 0; border-bottom: 1px solid #544d3a; text-align: left; }
+.pantry-materials { display: flex; flex-wrap: wrap; gap: 6px; max-height: 102px; overflow-y: auto; padding: 6px 0; }
+.pantry-item { display: flex; align-items: center; gap: 6px; padding: 6px; background: #303128; border: 1px solid #746547; border-radius: 2px; font-size: 11px; }
+.pantry-item .entry-art { width: 30px; height: 30px; flex-shrink: 0; }
+.pantry-item label { display: flex; align-items: center; gap: 6px; }
+.pantry-item input { width: 56px; background: #191b16; border: 1px solid #827345; color: #f5dea2; font: inherit; padding: 6px 3px; }
+.pantry-item button { background: transparent; border: 0; color: #bbae91; cursor: pointer; padding: 5px; }
+.pantry-summary { display: block; color: #ebca77; font-size: 11px; padding: 5px 0; line-height: 1.7; }
+.pantry-recipe { color: #e4c36f; font-size: 11px; line-height: 1.7; display: block; border-top: 1px solid #655839; padding-top: 9px; margin-top: 10px; }
+.pantry-recipe small { display: block; color: #bdb49d; margin-top: 3px; }
+@media (max-width: 720px) {
+  body:has(#cookingModeField:not([hidden])) .query-tools { position: static; }
+  .pantry-materials { max-height: 210px; }
+  .pantry-item { flex: 1 1 100%; min-width: 0; }
+  .pantry-item label { flex: 1; justify-content: space-between; min-width: 0; }
+  .pantry-item label > span { overflow-wrap: anywhere; }
+}

@@ -22,6 +22,7 @@ const sandbox = {document: {getElementById: get, addEventListener() {}}, window:
   matchMedia: () => ({matches: false, addEventListener() {}}), setTimeout, clearTimeout};
 const source = fs.readFileSync(process.argv[1], 'utf8');
 vm.runInNewContext(fs.readFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]), 'planting.js'), 'utf8'), sandbox);
+vm.runInNewContext(fs.readFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]), 'cooking.js'), 'utf8'), sandbox);
 vm.runInNewContext(source.replace(/  load\(\);\s*\}\)\(\);\s*$/, '  globalThis.api = {state, matchesSelectedMaterials, filteredEntries};\n})();'), sandbox);
 const {state, matchesSelectedMaterials: matches, filteredEntries: filtered} = sandbox.api;
 state.category = 'dish';
@@ -31,7 +32,7 @@ state.ingredients = [
   {id: 4, sub_category_id: 11, tier: 3}, {id: 5, sub_category_id: 11, tier: 1},
   {id: 6, sub_category_id: 11, tier: 2},
 ];
-const recipe = (id, tier, tags, specifics = [], level = 0) => ({id, nameIndex: '', materialIndex: '',
+const recipe = (id, tier, tags, specifics = [], level = 0) => ({id, key: 'r' + id, nameIndex: '', materialIndex: '',
   hasSpecificIngredients: specifics.length > 0, recipe: {tier, tag_combo: tags, specific_items: specifics, min_level: level}});
 const low = recipe(100, 3, [1, 2, 11]), mid = recipe(101, 2, [1, 2, 11], [], 1),
   high = recipe(102, 1, [1, 2, 11], [], 2), duplicate = recipe(103, 1, [11, 1, 2], [], 2),
@@ -67,6 +68,26 @@ assert.deepEqual(Array.from(filtered(), e => e.id), [200]);
 get('specificRecipesOnly').checked = true;
 state.materials = [];
 assert.deepEqual(Array.from(filtered(), e => e.id), [200]);
+// Fridge stock selects a subset rather than requiring every registered ingredient in one pot.
+get('specificRecipesOnly').checked = false;
+get('cookingMode').value = 'pantry'; get('sortSelect').value = 'ValueDisplay1';
+get('cookingLevelSelect').value = '2';
+state.materials = select(6); // Independent exact-query selection must not constrain pantry mode.
+state.stock = {1: 2, 2: 1, 3: 1, 4: 1, 5: 1};
+state.cookingModel = {tier_coefficients: {1: 1.7, 2: 1.4, 3: 1.1}, quality_coefficients: {'普通': .9}, base_satiety_per_ingredient: 2, split_threshold: 40};
+get('qualitySelect').value = '普通';
+for (const ingredient of state.ingredients) ingredient.stats = [10, 0, 0, 0, 0];
+for (const entry of state.categories[0].entries) {
+  entry.portion_model = {mode: entry.recipe.specific_items.length ? 'fixed' : 'ingredients', threshold: 40};
+  entry.products = [{quality: '普通', stats: [1,2,3,4,5].map(index => ({field:'ValueDisplay' + index, value:0}))}];
+}
+assert.deepEqual(Array.from(filtered(), e => e.id), [102, 100]); // Exact pair is short by one use.
+get('cookingLevelSelect').value = '0';
+assert.deepEqual(Array.from(filtered(), e => e.id), [100]);
+state.stock = {}; get('cookingLevelSelect').value = '';
+assert.deepEqual(Array.from(filtered(), e => e.id), []);
+get('cookingMode').value = 'recipes'; get('sortSelect').value = 'default';
+state.materials = []; get('specificRecipesOnly').checked = true;
 state.category = 'food';
 state.categories.push({id: 'food', entries: [
   {id: 10, nameIndex: '', materialIndex: '', sources: [{category: 'plant'}], food: {sub_category_id: 11, tier: 1}},

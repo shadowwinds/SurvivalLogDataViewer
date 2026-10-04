@@ -270,7 +270,18 @@ class PagesExportTests(unittest.TestCase):
                                    (item_id, f"菌菇{expected}", json.dumps(raw)))
         ingredients = export_data(self.database)["cooking_ingredients"]
         self.assertEqual([(item["id"], item["tier"]) for item in ingredients], [(201, 3), (202, 2), (203, 1)])
+        self.assertEqual(ingredients[0]["tier_thresholds"], {"high": 15, "mid": 6})
+        self.assertEqual(ingredients[0]["price"], 5)
+        self.assertEqual(ingredients[0]["stats"], [None] * 5)
+        self.assertIsNone(ingredients[0]["use_times"])
         self.assertNotIn("PRIVATE_", json.dumps(ingredients))
+
+    def test_cooking_parameters_are_used_only_for_the_matching_static_game_version(self) -> None:
+        self.assertIsNone(export_data(self.database)["cooking_model"])
+        model = json.loads((SOURCE_DIR / "cooking-model.json").read_text(encoding="utf-8"))
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("UPDATE metadata SET value=? WHERE key='game_version'", (model["game_version"],))
+        self.assertEqual(export_data(self.database)["cooking_model"], model)
 
     def test_unknown_food_tags_keep_id_and_do_not_resolve_through_food_type(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection, connection:

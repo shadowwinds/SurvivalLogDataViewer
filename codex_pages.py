@@ -27,7 +27,7 @@ SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "i18n.js", "planting.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -144,7 +144,12 @@ def export_data(database_path: Path) -> dict[str, Any]:
             "SELECT sub_category, high_threshold, mid_low_threshold FROM recipe_tier_rules")}
         ingredients = [{"id": item_id, "name": name, "sub_category_id": raw.get("SubCategory", 0),
                         "sub_category": groups.get(raw.get("SubCategory"), f"ID:{raw.get('SubCategory', 0)}"),
-                        "tier": ingredient_tier(raw, rules), "icon": public_icon(icon_asset(raw))}
+                        "tier": ingredient_tier(raw, rules), "icon": public_icon(icon_asset(raw)),
+                        "stats": [raw.get(f"ValueDisplay{index}") for index in range(1, 6)],
+                        "use_times": raw.get("UseTimes"), "price": raw.get("price"),
+                        "tier_thresholds": {"high": rules[raw["SubCategory"]]["high_threshold"],
+                                            "mid": rules[raw["SubCategory"]]["mid_low_threshold"]}
+                        if raw.get("SubCategory") in rules else None}
                        for item_id, (name, raw) in items.items() if raw.get("Category") == 1 and raw.get("CanCook") is True]
         memberships: dict[str, list[str]] = {}
         for row in connection.execute(
@@ -267,9 +272,12 @@ def export_data(database_path: Path) -> dict[str, Any]:
         environment = json.loads((SOURCE_DIR / "planting-environment.json").read_text(encoding="utf-8"))
         if environment["format_version"] != 1 or environment["game_version"] != metadata.get("game_version"):
             environment = None
+        cooking_model = json.loads((SOURCE_DIR / "cooking-model.json").read_text(encoding="utf-8"))
+        if cooking_model["format_version"] != 1 or cooking_model["game_version"] != metadata.get("game_version"):
+            cooking_model = None
         recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
         return {"format_version": 1, "metadata": metadata, "categories": categories,
-                "cooking_ingredients": ingredients, "planters": planters, "planting_environment": environment,
+                "cooking_ingredients": ingredients, "cooking_model": cooking_model, "planters": planters, "planting_environment": environment,
                 "recommendations": recommendations}
     finally:
         connection.close()

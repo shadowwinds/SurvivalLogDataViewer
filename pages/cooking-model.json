@@ -1,0 +1,17 @@
+{
+  "format_version": 1,
+  "game_version": "1.1.18293 / catalog 2.3.1",
+  "tier_coefficients": {
+    "1": 1.7000000476837158,
+    "2": 1.399999976158142,
+    "3": 1.100000023841858
+  },
+  "quality_coefficients": {
+    "失败": 0.5,
+    "普通": 0.8999999761581421,
+    "良好": 1.2000000476837158,
+    "完美": 1.5
+  },
+  "base_satiety_per_ingredient": 2.0,
+  "split_threshold": 40.0
+}

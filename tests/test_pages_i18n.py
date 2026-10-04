@@ -53,6 +53,11 @@ async function setup(query, saved, browser, disabled = false, failed = false) {
   assert.equal(state.textNode.nodeValue, 'High tier');
   assert.equal(state.i18n.text('已选 2 份 · 继续添加'), '2 uses selected · Add more');
   assert.equal(state.i18n.text('任意菌菇'), 'Any Mushrooms');
+  assert.equal(state.i18n.text('按冰箱食材配餐'), 'Plan from fridge ingredients');
+  assert.equal(state.i18n.text('已登记 12 种 · 添加食材'), '12 ingredients recorded · Add more');
+  assert.equal(state.i18n.text('这组材料最多可做 3 锅'), 'Maximum pots with these ingredients: 3');
+  assert.equal(state.i18n.text('花椰菜 · 高档 · 配置基价 30；高档 ≥ 30，中档 ≥ 16'), 'Cauliflower · High tier · Base price 30; high ≥ 30, mid ≥ 16');
+  assert.equal(state.i18n.text('配置基价 30；高档 ≥ 30，中档 ≥ 16'), 'Base price 30; high ≥ 30, mid ≥ 16');
   assert.equal(state.i18n.text('分份标准：30 饱腹 / 次。次数 = 整份总饱腹 ÷ 30，向上取整，至少 1 次。'),
     'Serving threshold: 30 satiety per use. Uses = total satiety ÷ 30, rounded up, with a minimum of 1.');
   assert.equal(state.i18n.text('ID:1234'), 'ID:1234');

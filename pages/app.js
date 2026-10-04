@@ -5,7 +5,7 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [], plantingEnvironment: null };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "" };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
@@ -97,8 +97,90 @@
 
   function profile(entry) {
     if (entry.food) return entry.food;
+    const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
+    if (estimate) return {...estimate.product, stats: estimate.total.map((value, index) => ({field: "ValueDisplay" + (index + 1), label: statLabels[index], value})),
+      per_use_stats: estimate.perUse.map((value, index) => ({field: "ValueDisplay" + (index + 1), label: statLabels[index], value})), serving_count: estimate.servings};
     const product = entry.products?.find((item) => item.quality === $("qualitySelect").value);
     return product?.per_use_stats ? { ...product, stats: product.per_use_stats } : product;
+  }
+
+  function isPantry() { return state.category === "dish" && $("cookingMode").value === "pantry"; }
+
+  function savePantry() {
+    try { localStorage.setItem("survival-log-pantry-v1", JSON.stringify(state.stock)); } catch { /* Storage is optional. */ }
+  }
+
+  function restorePantry() {
+    try {
+      const stored = JSON.parse(localStorage.getItem("survival-log-pantry-v1") || "{}");
+      for (const item of state.ingredients) if (Number.isInteger(stored?.[item.id]) && stored[item.id] > 0 && stored[item.id] <= 9999) state.stock[item.id] = stored[item.id];
+    } catch { /* A damaged local preference does not prevent loading. */ }
+  }
+
+  function preparePantry() {
+    if (!isPantry()) return;
+    const goal = Math.max(0, statLabels.findIndex((_, index) => $("sortSelect").value === "ValueDisplay" + (index + 1)));
+    const cacheKey = JSON.stringify([state.stock, $("qualitySelect").value, goal, $("tierFloorSelect").value]);
+    if (cacheKey === state.pantryPlanKey) return;
+    state.pantryPlans = window.Cooking.plan(category("dish").entries, state.ingredients, state.stock,
+      $("qualitySelect").value, goal, Number($("tierFloorSelect").value), state.cookingModel);
+    state.pantryPlanKey = cacheKey;
+  }
+
+  function comboText(estimate) {
+    const counts = new Map();
+    for (const item of estimate.ingredients) counts.set(item.id, {item, count: (counts.get(item.id)?.count || 0) + 1});
+    return [...counts.values()].map(({item, count}) => (i18n?.language === "en" ? i18n.english(item.name) : item.name) + " × " + count).join(" + ");
+  }
+
+  function possiblePots(estimate) {
+    const counts = new Map();
+    for (const item of estimate.ingredients) counts.set(item.id, (counts.get(item.id) || 0) + 1);
+    return Math.min(...[...counts].map(([id, count]) => Math.floor(state.stock[id] / count)));
+  }
+
+  function renderPantry() {
+    const active = isPantry();
+    $("pantryMaterials").hidden = !active;
+    $("pantrySummary").hidden = !active;
+    $("ingredientFieldLabel").textContent = active ? "冰箱里有哪些食材" : "我想用这些材料";
+    $("cookingModeHelp").textContent = active ? "登记两台冰箱的食材与剩余可烹饪次数，自动选组合；排序比较每锅总恢复。" : "所选材料都要用进这一锅；未选满时，结果包含需要补齐的配方。";
+    if (!active) return;
+    const stocked = state.ingredients.filter(item => state.stock[item.id] > 0);
+    $("ingredientSummary").textContent = stocked.length ? "已登记 " + stocked.length + " 种 · 添加食材" : "登记冰箱食材";
+    const chips = [];
+    for (const item of stocked) {
+      const row = node("div", "pantry-item"), label = node("label"), input = node("input");
+      input.type = "number"; input.min = "1"; input.max = "9999"; input.step = "1"; input.value = state.stock[item.id];
+      input.setAttribute("aria-label", item.name + "可烹饪次数");
+      input.addEventListener("input", () => {
+        if (!input.validity.valid || !Number.isInteger(input.valueAsNumber)) return;
+        state.stock[item.id] = input.valueAsNumber; savePantry(); render(false, true);
+      });
+      input.addEventListener("change", () => {
+        if (!input.validity.valid || !Number.isInteger(input.valueAsNumber)) { input.value = state.stock[item.id]; return; }
+      });
+      const remove = node("button", "", "×"); remove.type = "button"; remove.setAttribute("aria-label", "移除" + item.name);
+      remove.addEventListener("click", () => { delete state.stock[item.id]; savePantry(); render(); renderIngredientOptions(); });
+      label.append(node("span", "", item.name), input); row.append(art(item.icon, "food"), label, remove); chips.push(row);
+    }
+    if (stocked.length) {
+      const clear = node("button", "material-chip", "清空冰箱登记"); clear.type = "button";
+      clear.addEventListener("click", () => { state.stock = {}; savePantry(); render(); renderIngredientOptions(); }); chips.push(clear);
+    }
+    $("pantryMaterials").replaceChildren(...chips);
+    $("pantrySummary").textContent = stocked.length ? "数量填剩余可烹饪次数，例：野兔 2/3 填 2。各道菜独立比较，共用食材没有扣减；品质按所选情景估算。" : "先登记手头食材，再选烹饪等级和想恢复的属性；食材登记自动保存在本机。";
+    if (!state.cookingModel) $("pantrySummary").append(node("span", "", "通用配方计算参数版本不匹配，当前仅推荐效果可确定的专用配方。"));
+  }
+
+  function renderCookingRules() {
+    const groups = new Map(state.ingredients.filter(item => item.tier_thresholds).map(item => [item.sub_category_id, item]));
+    $("cookingThresholds").replaceChildren(...[...groups.values()].sort((a, b) => a.sub_category_id - b.sub_category_id).map(item => {
+      const row = node("tr");
+      row.append(node("td", "", item.sub_category), node("td", "", item.tier_thresholds.high), node("td", "", item.tier_thresholds.mid));
+      return row;
+    }));
+    $("cookingCoefficients").textContent = state.cookingModel ? "档位系数：高档 1.7 / 中档 1.4 / 低档 1.1；品质系数：失败 0.5 / 普通 0.9 / 优良 1.2 / 完美 1.5。先按游戏 float32 运算再取整，分份后每次属性 = 总属性 ÷ 食用次数。" : "通用配方计算参数版本不匹配，当前仅推荐效果可确定的专用配方。";
   }
 
   function statValue(entry, field) {
@@ -218,13 +300,14 @@
       if (ingredient) text.append(tierBadge(ingredient.tier));
       button.append(text);
       button.addEventListener("click", () => {
-        state.materials.push(material);
+        if (isPantry()) { state.stock[ingredient.id] = Math.min(9999, (state.stock[ingredient.id] || 0) + 1); savePantry(); }
+        else state.materials.push(material);
         $("entryList").scrollTop = 0;
         render();
       });
       options.push(button);
     };
-    for (const [id, name] of groups) if ((!groupFilter || id === Number(groupFilter)) && !tierFilter && searchIndex([name]).includes(query)) {
+    for (const [id, name] of groups) if (!isPantry() && (!groupFilter || id === Number(groupFilter)) && !tierFilter && searchIndex([name]).includes(query)) {
       addOption({ key: "group:" + id, group: id, name: "任意" + name }, "任意" + name, "按分类选择");
     }
     for (const item of state.ingredients) if ((!groupFilter || item.sub_category_id === Number(groupFilter)) &&
@@ -293,7 +376,8 @@
 
   function renderSelectedMaterials() {
     const isDish = state.category === "dish";
-    $("selectedMaterials").hidden = !isDish || !state.materials.length;
+    $("selectedMaterials").hidden = !isDish || isPantry() || !state.materials.length;
+    if (isPantry()) return;
     $("ingredientSummary").textContent = state.materials.length ? "已选 " + state.materials.length + " 份 · 继续添加" : "选择食材或分类";
     const counts = new Map();
     state.materials.forEach((material) => counts.set(material.key, { ...material, count: (counts.get(material.key)?.count || 0) + 1 }));
@@ -384,6 +468,8 @@
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
     $("materialField").hidden = !["craft", "furniture"].includes(state.category);
     $("ingredientField").hidden = !isDish;
+    $("cookingModeField").hidden = !isDish;
+    $("cookingRules").hidden = !isDish;
     $("materialSearch").placeholder = "材料名称或 ID";
     $("qualityField").hidden = !isDish;
     $("playerFilters").hidden = !isFood && !isDish;
@@ -421,6 +507,7 @@
       button.setAttribute("aria-pressed", "false");
       button.addEventListener("click", () => {
         state.effect = state.effect === button.dataset.effect ? "" : button.dataset.effect;
+        if (isPantry() && state.effect) $("sortSelect").value = state.effect;
         render();
       });
       return button;
@@ -539,6 +626,7 @@
   const growthHours = seconds => Number.isFinite(seconds) ? number(seconds / 3600) : "未提供";
 
   function filteredEntries() {
+    preparePantry();
     const name = normalize($("nameSearch").value);
     const materials = $("materialField").hidden ? [] : normalize($("materialSearch").value).split(/[\s,，、]+/).filter(Boolean);
     const tag = $("tagField").hidden ? "" : $("tagSelect").value;
@@ -553,7 +641,7 @@
       (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
       (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
       (!specificOnly || entry.hasSpecificIngredients) &&
-      entry.nameIndex.includes(name) && (state.category === "dish" ? matchesSelectedMaterials(entry) : materials.every((term) => entry.materialIndex.includes(term))) &&
+      entry.nameIndex.includes(name) && (state.category === "dish" ? (isPantry() ? state.pantryPlans.has(entry.key) : matchesSelectedMaterials(entry)) : materials.every((term) => entry.materialIndex.includes(term))) &&
       (state.category !== "dish" || level === "" || (Number.isInteger(entry.recipe?.min_level) && entry.recipe.min_level <= Number(level))) &&
       (!tag || entry.food?.tags.some((item) => item.key === tag)) &&
       (!cookable || entry.food?.cookable) && (!state.effect || statValue(entry, state.effect) > 0));
@@ -596,8 +684,13 @@
       button.append(top);
       if (player) {
         button.append(node("span", "card-tags", foodTagLine(player)),
-          node("span", "card-stat-caption", state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
-        if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
+          node("span", "card-stat-caption", isPantry() ? "每锅总恢复" : state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
+        if (state.category === "dish") {
+          const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
+          if (estimate) button.append(node("span", "pantry-recipe", comboText(estimate)),
+            node("span", "entry-description", "这组材料最多可做 " + possiblePots(estimate) + " 锅"));
+          else button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
+        }
       } else if (entry.plant) {
         const reasons = window.Planting.problems(entry, plantingConditions());
         button.append(node("span", "plant-verdict " + (reasons.length ? "blocked" : "suitable"),
@@ -616,8 +709,9 @@
     $("entryList").replaceChildren(fragment);
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
+    $("emptyState").querySelector("p").textContent = isPantry() ? "先添加冰箱食材和剩余用量；没有结果时，检查烹饪等级、品质或其他筛选条件。" : "换个关键词，或减少标签和属性筛选。";
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
+    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
   }
 
   function section(title, caption = "") {
@@ -737,6 +831,7 @@
       more.addEventListener("click", () => {
         if (mobile.matches) $("detailPanel").close();
         state.category = "dish";
+        $("cookingMode").value = "recipes";
         clearFilters();
         configureControls();
         state.materials = [{ key: "item:" + entry.id, id: entry.id, name: entry.name }];
@@ -780,7 +875,18 @@
     if (player) fragment.append(foodFacts(player, state.category === "dish", entry.portion_model?.mode === "fixed"));
     if (state.category === "dish") {
       const fixed = entry.portion_model?.mode === "fixed";
-      const block = section(fixed ? "每次食用的效果" : "配置参考效果", "按成品品质查看");
+      const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
+      if (estimate) {
+        const method = section("这锅怎么做", "这组材料最多可做 " + possiblePots(estimate) + " 锅");
+        method.append(node("p", "food-note", comboText(estimate)));
+        for (const item of [...new Map(estimate.ingredients.map(item => [item.id, item])).values()]) {
+          method.append(node("p", "stat-help", item.name + " · " + (tierLabels[item.tier] || "不影响档位") +
+            (item.tier_thresholds ? " · 配置基价 " + item.price + "；高档 ≥ " + item.tier_thresholds.high + "，中档 ≥ " + item.tier_thresholds.mid : "")));
+        }
+        method.append(node("p", "stat-help", fixed ? "命中指定食材的专用配方，效果取该品质成品配置。" : "按分类匹配；最高参与档位决定菜名，技能与状态保底按所选条件应用。"));
+        fragment.append(method);
+      }
+      const block = section(estimate ? "每锅总恢复" : fixed ? "每次食用的效果" : "配置参考效果", "按成品品质查看");
       const tabs = node("div", "quality-tabs");
       tabs.setAttribute("role", "group");
       tabs.setAttribute("aria-label", "成品品质");
@@ -802,13 +908,15 @@
       if (player) {
         block.append(node("div", "product-caption", player.name), statGrid(player.stats));
         addFullStats(block, player.stats);
+        if (estimate) block.append(node("h4", "", "每次食用"), statGrid(player.per_use_stats),
+          node("p", "stat-help", "整份可食用 " + estimate.servings + " 次"));
         if (player.note) block.append(node("p", "food-note", player.note));
       } else block.append(node("p", "stat-help", "当前数据未提供这一品质的成品效果。"));
-      block.append(node("p", "stat-help", fixed ? "按整份属性与可吃次数分摊，显示每次食用的基础效果；未叠加角色或状态修正。" : "通用配方的整份属性由实际食材、档位与品质生成；这里是成品配置参考值，不能作为固定食用次数。"));
+      block.append(node("p", "stat-help", estimate ? "按所选材料与品质计算基础效果，未叠加角色、状态或设施修正；所选品质不代表必定做出该品质。" : fixed ? "按整份属性与可吃次数分摊，显示每次食用的基础效果；未叠加角色或状态修正。" : "通用配方的整份属性由实际食材、档位与品质生成；这里是成品配置参考值，不能作为固定食用次数。"));
       const threshold = entry.portion_model?.threshold;
       if (Number.isInteger(threshold) && threshold > 0) {
         block.append(node("p", "stat-help", "分份标准：" + threshold + " 饱腹 / 次。次数 = 整份总饱腹 ÷ " + threshold + "，向上取整，至少 1 次。"));
-        if (!fixed) {
+        if (!fixed && !estimate) {
           const form = node("div", "portion-form");
           const label = node("label", "", "整份总饱腹");
           const input = node("input");
@@ -828,7 +936,7 @@
       renderRelations(fragment, entry.relations.filter((r) => ["具体食材", "食材分类"].includes(r.relation_type)), "怎么做这道菜");
       if (entry.recipe?.tag_combo?.length) {
         const block = section("食材档位", tierLabels[entry.recipe.tier] || "未提供");
-        block.append(node("p", "stat-help", "同类食材也分档位。取参与计算的食材中最高档，主食等分类不影响档位；选择完整材料后按该档位筛选，指定食材配方优先。"));
+        block.append(node("p", "stat-help", "取参与食材中的最高档；只要一个高档食材就可决定高档结果，其余可以是中档或低档。主食等不影响档位，指定食材配方优先。"));
         fragment.append(block);
       }
     } else if (player) {
@@ -911,7 +1019,7 @@
     if (mobile.matches && openMobile && !$("detailPanel").open) $("detailPanel").showModal();
   }
 
-  function render(preserveDetailScroll = false) {
+  function render(preserveDetailScroll = false, preservePantryInputs = false) {
     if (!category()) return;
     if (location.hash) document.title = titles[state.category] + " · 生存日志 Survival Log";
     document.querySelectorAll(".category-button").forEach((button) => {
@@ -926,6 +1034,7 @@
     });
     state.entries = filteredEntries();
     renderSelectedMaterials();
+    if (!preservePantryInputs) renderPantry();
     if (!state.entries.some((entry) => entry.key === state.key)) state.key = state.entries[0]?.key || "";
     setUrl();
     renderList();
@@ -956,6 +1065,7 @@
     }
     state.key = key || "";
     if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) {
+      if (state.category === "dish") $("cookingMode").value = "recipes";
       clearFilters();
       if (state.category === "plant") $("plantOnlySuitable").checked = false;
     }
@@ -983,6 +1093,10 @@
         { id: "ready-food", label: "即食食品", entries: item.entries.filter((entry) => !entry.food?.cookable) },
       ] : [item]);
       state.ingredients = data.cooking_ingredients || [];
+      state.cookingModel = data.cooking_model || null;
+      state.stock = {}; state.pantryPlanKey = "";
+      restorePantry();
+      renderCookingRules();
       state.planters = data.planters || [];
       state.plantingEnvironment = data.planting_environment || null;
       const planterOptions = [node("option", "", "不限容器")];
@@ -1037,6 +1151,7 @@
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
   $("ingredientSearch").addEventListener("input", renderIngredientOptions);
+  $("cookingMode").addEventListener("change", () => { renderIngredientOptions(); $("entryList").scrollTop = 0; render(); });
   ["ingredientGroupSelect", "ingredientTierSelect"].forEach(id => $(id).addEventListener("change", renderIngredientOptions));
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
