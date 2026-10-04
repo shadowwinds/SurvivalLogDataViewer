@@ -473,5 +473,6 @@
   "图片：{name}（收获物）": "Image: {name} (harvest)",
   "获取来源": "How to obtain",
   "种植：{name}": "Grow: {name}",
-  "捕获图鉴：{name}": "Prey guide: {name}"
+  "捕获图鉴：{name}": "Prey guide: {name}",
+  "仅可种植 / 捕捉": "Growable / catchable only"
 }

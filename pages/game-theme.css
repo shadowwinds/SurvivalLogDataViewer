@@ -20,8 +20,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .category-count { color: #c4b89c; background: #141511; border: 1px solid #514d3c; border-radius: 2px; }
 .category-button.active .category-count { color: #f5cc53; background: #29271d; }
 .supply-link { display: inline-block; padding: 7px 10px; border: 1px solid #93763b; color: #f4c342; background: #332e21; font-weight: 700; font-size: 11px; text-decoration: none; white-space: nowrap; }
-.page-help summary { color: #d8bd77; }
-.page-help p { color: #dfd1ae; background: #2c2a20; border-color: #8a7445; }
+.header-title { min-width: 0; }
+.title-row { display: flex; align-items: center; gap: 12px; }
+.title-row h1 { min-width: 0; }
+.page-help { flex-shrink: 0; }
+.page-help summary { display: grid; place-items: center; width: 32px; height: 32px; color: #d8bd77; border: 1px solid transparent; border-radius: 50%; list-style: none; }
+.page-help summary::-webkit-details-marker { display: none; }
+.page-help summary:hover, .page-help[open] summary { color: #f4c342; border-color: #93763b; background: #332e21; }
+.page-help svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.page-header .page-help p { top: calc(100% + 8px); left: 0; right: auto; width: 280px; color: #dfd1ae; background: #2c2a20; border-color: #8a7445; }
+.page-help[open]::after { content: ""; position: absolute; left: 12px; top: calc(100% + 4px); width: 7px; height: 7px; background: #2c2a20; border: solid #8a7445; border-width: 1px 0 0 1px; transform: rotate(45deg); z-index: 11; }
+.page-header { position: relative; z-index: 3; }
+#renewableOnly { accent-color: var(--amber); }
 .category-nav { scrollbar-color: #8a7751 #1d1e19; }
 .sidebar-bottom { border-color: #504931; }
 .sidebar-bottom a, .game-version { color: #bcb39e; }
@@ -111,6 +121,13 @@ html[lang="en"] .facet-row > span { flex-basis: 92px; }
 html[lang="en"] .page-header h1 { font-size: 29px; }
 html[lang="en"] .category-label { white-space: normal; }
 @media (max-width: 720px) {
+  .page-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .page-header .header-actions { width: 100%; max-width: none; justify-content: space-between; }
+  .title-row { position: relative; gap: 8px; }
+  .page-help { position: static; }
+  .page-help summary { width: 28px; height: 28px; }
+  .page-header .page-help p { top: calc(100% + 6px); width: min(320px, 100%); }
+  .page-help[open]::after { display: none; }
   .language-switch { font-size: 8px; }
   .language-switch select { padding: 5px; font-size: 11px; }
   .header-actions { max-width: 160px; }

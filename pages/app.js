@@ -387,6 +387,7 @@
     $("plantingFilters").hidden = state.category !== "plant";
     $("tagField").hidden = !isFood;
     $("cookableField").hidden = state.category !== "prey";
+    $("renewableField").hidden = state.category !== "food";
     $("specificRecipeField").hidden = !isDish;
     $("cookingLevelField").hidden = !isDish;
     $("tierFloorField").hidden = !isDish;
@@ -457,6 +458,7 @@
     renderIngredientOptions();
     $("tagSelect").value = "";
     $("cookableOnly").checked = false;
+    $("renewableOnly").checked = false;
     $("specificRecipesOnly").checked = false;
     $("sortSelect").value = defaultSort();
     state.effect = "";
@@ -511,10 +513,12 @@
     const tag = $("tagField").hidden ? "" : $("tagSelect").value;
     const cookable = !$("cookableField").hidden && $("cookableOnly").checked;
     const specificOnly = state.category === "dish" && $("specificRecipesOnly").checked;
+    const renewableOnly = state.category === "food" && $("renewableOnly").checked;
     const level = $("cookingLevelSelect").value;
     const planting = state.category === "plant" ? plantingConditions() : null;
     const entries = category().entries.filter((entry) =>
       (!planting || matchesPlanting(entry, planting)) &&
+      (!renewableOnly || entry.sources?.some(source => ["plant", "prey"].includes(source.category))) &&
       (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
       (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
       (!specificOnly || entry.hasSpecificIngredients) &&
@@ -991,14 +995,18 @@
   ["ingredientGroupSelect", "ingredientTierSelect"].forEach(id => $(id).addEventListener("change", renderIngredientOptions));
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
-  ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
+  ["tagSelect", "cookableOnly", "renewableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
   ["planterSelect", "planterPower"].forEach(id => $(id).addEventListener("change", () => { $("entryList").scrollTop = 0; render(); }));
   ["plantLight", "plantCold"].forEach(id => $(id).addEventListener("input", () => { $("entryList").scrollTop = 0; render(); }));
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
   });
+  $("pageHelp").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { $("pageHelp").open = false; $("pageHelp").querySelector("summary").focus(); }
+  });
   document.addEventListener("click", (event) => {
     if (!$("ingredientField").contains(event.target)) $("ingredientPicker").open = false;
+    if (!$("pageHelp").contains(event.target)) $("pageHelp").open = false;
   });
   $("searchForm").addEventListener("submit", (event) => event.preventDefault());
   $("resetSearch").addEventListener("click", resetSearch);

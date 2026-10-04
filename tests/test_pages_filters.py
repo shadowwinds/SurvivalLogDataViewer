@@ -68,10 +68,10 @@ state.materials = [];
 assert.deepEqual(Array.from(filtered(), e => e.id), [200]);
 state.category = 'food';
 state.categories.push({id: 'food', entries: [
-  {id: 10, nameIndex: '', materialIndex: '', food: {sub_category_id: 11, tier: 1}},
+  {id: 10, nameIndex: '', materialIndex: '', sources: [{category: 'plant'}], food: {sub_category_id: 11, tier: 1}},
   {id: 11, nameIndex: '', materialIndex: '', food: {sub_category_id: 11, tier: 3}},
-  {id: 12, nameIndex: '', materialIndex: '', food: {sub_category_id: 2, tier: 2}},
-  {id: 13, nameIndex: '', materialIndex: '', food: {sub_category_id: 1, tier: null}},
+  {id: 12, nameIndex: '', materialIndex: '', sources: [{category: 'prey'}], food: {sub_category_id: 2, tier: 2}},
+  {id: 13, nameIndex: '', materialIndex: '', sources: [{category: 'craft'}], food: {sub_category_id: 1, tier: null}},
 ]});
 state.group = '11';
 assert.deepEqual(Array.from(filtered(), e => e.id), [10, 11]);
@@ -81,6 +81,16 @@ state.group = '2';
 assert.deepEqual(Array.from(filtered(), e => e.id), []);
 state.group = ''; state.tier = 'none';
 assert.deepEqual(Array.from(filtered(), e => e.id), [13]);
+state.tier = ''; get('renewableOnly').checked = true;
+assert.deepEqual(Array.from(filtered(), e => e.id), [10, 12]);
+state.group = '11';
+assert.deepEqual(Array.from(filtered(), e => e.id), [10]); // Sources combine with other ingredient facets.
+state.tier = '3';
+assert.deepEqual(Array.from(filtered(), e => e.id), []);
+state.group = ''; state.tier = '';
+get('renewableOnly').checked = false;
+assert.deepEqual(Array.from(filtered(), e => e.id), [10, 11, 12, 13]);
+get('renewableOnly').checked = true; // Hidden source filter must not affect other categories.
 state.category = 'plant';
 const plant = (id, size, light, cold) => ({id, nameIndex: '', materialIndex: '',
   plant: {size, light_need: light, cold_resistance: cold}});

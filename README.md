@@ -140,7 +140,7 @@
 
 `--site-url` 用于所有公开网址，默认指向当前在线版；本地预览可传 `http://127.0.0.1:8502/pages/`。Actions 按当前仓库生成 Pages 网址，绑定自定义域名或使用用户主页仓库时需设置仓库变量 `PAGES_SITE_URL`。可将公开的 `sitemap.xml` 提交到搜索引擎站长平台；GitHub 项目站点不能通过子目录中的 `robots.txt` 控制整个域名，因此构建不生成这种无效的规则文件。
 
-图标提取是独立的本地步骤：安装 UnityPy 后运行 `python codex_pages_icons.py --game-root "游戏安装目录" --output-dir pages/icons`。脚本只从 catalog 定位图鉴条目及菜肴成品引用的图标，复用现有 bundle 解密，将 PNG 缩略图和不含本机路径的版本清单写入指定输出目录，不输出配置全集或修改游戏。Pages 工作流直接使用仓库图标，不需要游戏或 UnityPy。
+图标提取是独立的本地步骤：安装 UnityPy 后运行 `python codex_pages_icons.py --game-root "游戏安装目录" --output-dir pages/icons`。脚本只从 catalog 定位图鉴条目及菜肴成品引用的图标，复用现有 bundle 解密；缺失引用按同一配置的 `WebIcon` 使用游戏自带网页中的食物 PNG。将缩略图和不含本机路径的版本清单写入指定输出目录，不输出配置全集或修改游戏。Pages 工作流直接使用仓库图标，不需要游戏或 UnityPy；图标验证使用 Pillow。
 
 自己的公开 fork 也可以部署：在仓库 `Settings → Pages → Source` 选择 `GitHub Actions`，然后运行 `Build and deploy online codex` 工作流。后续主分支的相关代码或静态库更新会自动重新构建和发布。
 

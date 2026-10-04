@@ -34,7 +34,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify static export boundaries
-        run: python -m unittest discover -s tests -p 'test_pages*.py'
+        run: |
+          python -m pip install Pillow
+          python -m unittest discover -s tests -p 'test_pages*.py'
       - name: Build public static codex
         env:
           PAGES_SITE_URL: ${{ vars.PAGES_SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
