@@ -285,6 +285,11 @@ body > footer a, body > main a { color: #e4c77f; }
 .pantry-summary { display: block; color: #ebca77; font-size: 11px; padding: 5px 0; line-height: 1.7; }
 .pantry-recipe { color: #e4c36f; font-size: 11px; line-height: 1.7; display: block; border-top: 1px solid #655839; padding-top: 9px; margin-top: 10px; }
 .pantry-recipe small { display: block; color: #bdb49d; margin-top: 3px; }
+@media (min-width: 721px) {
+  .app-shell:has(#pantryMaterials:not([hidden])) { height: auto; min-height: 100dvh; }
+  body:has(#pantryMaterials:not([hidden])) .main-content { height: auto; }
+  body:has(#pantryMaterials:not([hidden])) .workspace { flex: none; height: 65dvh; min-height: 420px; }
+}
 @media (max-width: 720px) {
   body:has(#cookingModeField:not([hidden])) .query-tools { position: static; }
   .pantry-materials { max-height: 210px; }
