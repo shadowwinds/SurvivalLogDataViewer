@@ -308,7 +308,7 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
     body = '''<div class="rec-hero"><div><p class="eyebrow">SURVIVAL LOG / SUPPLY PLAN</p><h1>生存补给计划</h1><p>囤什么 · 做什么 · 种什么</p><p class="rec-subtitle">把整包价格、每锅产出和土地时间放在一起比较。</p></div><a class="rec-stamp" href="#method">公开评分依据<br><strong>0—100</strong><span>相对推荐指数</span></a></div>
 <form id="rec-controls" class="rec-controls" hidden>
 <label>生存阶段<select id="rec-stage"><option value="1">前期 · 烹饪 Lv.1</option><option value="2">中期 · 烹饪 Lv.2</option><option value="3">后期 · 烹饪 Lv.3</option></select></label>
-<label>成品品质<select id="rec-quality"><option>普通</option><option>良好</option><option>完美</option></select></label>
+<label>成品品质<select id="rec-quality"><option value="普通">普通</option><option value="良好">优良</option><option value="完美">完美</option></select></label>
 <label id="rec-life-label">基础保质值至少<select id="rec-life"><option value="0">不限制</option><option value="7" selected>7</option><option value="30">30</option><option value="90">90</option></select></label>
 <label class="rec-search">找物品或食材<input id="rec-search" type="search" placeholder="例如：米、土豆、鸡蛋" autocomplete="off"></label>
 <label>排序<select id="rec-sort"><option value="score">综合指数</option><option value="cost">价格优势</option><option value="satiety">总饱食</option><option value="time">时间优势</option></select></label>

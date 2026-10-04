@@ -238,7 +238,9 @@ class PagesExportTests(unittest.TestCase):
         dish = " ".join(PageHTML((output / "guide/dish/10/index.html").read_text(encoding="utf-8")).text)
         for value in ("完美品质", "优良品质", "普通品质", "失败品质", "+60", "+50", "+40", "ID:104", "食用说明", "未提供"):
             self.assertIn(value, dish)
-        self.assertNotIn('<script src=', (output / "guide/dish/10/index.html").read_text(encoding="utf-8"))
+        document = (output / "guide/dish/10/index.html").read_text(encoding="utf-8")
+        self.assertIn('../../../i18n.js', document)
+        self.assertNotIn('app.js', document)
 
     def test_game_text_is_escaped_in_html_and_jsonld(self) -> None:
         malicious = '</script><img src=x onerror="alert(1)"> & 食材'

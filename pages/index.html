@@ -11,6 +11,7 @@
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
     <link rel="stylesheet" href="./game-theme.css">
+    <script src="./i18n.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -33,17 +34,18 @@
       <main class="main-content">
         <header class="page-header">
           <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">烹饪食材</h1><p id="categoryIntro">看属性、查标签，掌握每份食材的可用次数。</p></div>
-          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>选择食材查配方；同种食材可重复添加。完整组合按食材档位匹配，专用配方优先。品质影响效果；技能与状态的档位保底另行选择。</p></details></div>
+          <div class="header-actions"><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>选择食材查配方；同种食材可重复添加。完整组合按食材档位匹配，专用配方优先。品质影响效果；技能与状态的档位保底另行选择。</p></details></div>
         </header>
         <div class="query-tools">
         <form id="searchForm" class="search-toolbar" role="search">
           <label class="search-field"><span id="searchLabel">找食材</span><div class="input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="nameSearch" type="search" placeholder="搜索名称、标签或效果说明" autocomplete="off" disabled><kbd aria-hidden="true">/</kbd></div></label>
           <label class="search-field" id="materialField" hidden><span>材料名称</span><div class="input-wrap"><input id="materialSearch" type="search" placeholder="材料名称或 ID" autocomplete="off" disabled></div></label>
-          <div class="search-field ingredient-field" id="ingredientField" hidden><span>我想用这些材料</span><details id="ingredientPicker"><summary id="ingredientSummary">选择食材或分类</summary><div class="ingredient-menu"><label class="input-wrap"><input id="ingredientSearch" type="search" aria-label="搜索可选食材" placeholder="搜索食材名称或 ID" autocomplete="off" disabled></label><div id="ingredientOptions" class="ingredient-options" role="group" aria-label="可选食材"></div></div></details></div>
+          <div class="search-field ingredient-field" id="ingredientField" hidden><span>我想用这些材料</span><details id="ingredientPicker"><summary id="ingredientSummary">选择食材或分类</summary><div class="ingredient-menu"><label class="input-wrap"><input id="ingredientSearch" type="search" aria-label="搜索可选食材" placeholder="搜索食材名称或 ID" autocomplete="off" disabled></label><div class="picker-filters"><label>食材分类<select id="ingredientGroupSelect" aria-label="筛选食材分类"><option value="">全部分类</option></select></label><label>食材档位<select id="ingredientTierSelect" aria-label="筛选食材档位"><option value="">全部档位</option><option value="1">高档</option><option value="2">中档</option><option value="3">低档</option><option value="none">不影响档位</option></select></label></div><div id="ingredientOptions" class="ingredient-options" role="group" aria-label="可选食材"></div></div></details></div>
           <label class="select-field" id="qualityField" hidden><span>成品品质</span><select id="qualitySelect"><option value="普通">普通</option><option value="良好">优良</option><option value="完美">完美</option><option value="失败">失败</option></select></label>
           <button class="reset-button" id="resetSearch" type="button" disabled>重置</button>
         </form>
         <div id="selectedMaterials" class="selected-materials" role="group" aria-label="已选材料" hidden></div>
+        <div id="ingredientFacets" class="ingredient-facets" hidden><div class="facet-row"><span>食材分类</span><select id="ingredientGroupFilter" class="facet-select" aria-label="筛选食材分类"><option value="">全部分类</option></select><div id="ingredientCategories" class="facet-options" role="group" aria-label="筛选食材分类"></div></div><div class="facet-row"><span>食材档位</span><select id="ingredientTierFilter" class="facet-select" aria-label="筛选食材档位"><option value="">全部档位</option><option value="1">高档</option><option value="2">中档</option><option value="3">低档</option><option value="none">不影响档位</option></select><div id="ingredientTiers" class="facet-options" role="group" aria-label="筛选食材档位"></div></div></div>
         <div id="playerFilters" class="player-filters">
           <label id="tagField" class="filter-select"><span>食用标签</span><select id="tagSelect" aria-label="食用标签"><option value="">全部标签</option></select></label>
           <label id="cookingLevelField" class="filter-select" hidden><span>我的烹饪等级</span><select id="cookingLevelSelect" aria-label="我的烹饪等级"><option value="">不限等级</option></select></label>

@@ -26,7 +26,7 @@ SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js")
+          "recommendations.css", "recommendations.js", "i18n.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 
@@ -129,7 +129,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
             "SELECT sub_category, high_threshold, mid_low_threshold FROM recipe_tier_rules")}
         ingredients = [{"id": item_id, "name": name, "sub_category_id": raw.get("SubCategory", 0),
                         "sub_category": groups.get(raw.get("SubCategory"), f"ID:{raw.get('SubCategory', 0)}"),
-                        "tier": ingredient_tier(raw, rules)}
+                        "tier": ingredient_tier(raw, rules), "icon": public_icon(raw.get("Icon") or "")}
                        for item_id, (name, raw) in items.items() if raw.get("Category") == 1 and raw.get("CanCook") is True]
         memberships: dict[str, list[str]] = {}
         for row in connection.execute(
@@ -261,6 +261,7 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
         if (output_dir / name).is_symlink():
             raise ValueError(f"输出文件不能是符号链接：{name}")
     for name in ASSETS:
+        (output_dir / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(SOURCE_DIR / name, output_dir / name)
     (output_dir / "index.html").write_text(
         home_seo(payload, (SOURCE_DIR / "index.html").read_text(encoding="utf-8"), site_url), encoding="utf-8")
@@ -271,6 +272,7 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     icons = {entry.get("icon", "") for category in payload["categories"] for entry in category["entries"]}
     icons.update(product["icon"] for category in payload["categories"] for entry in category["entries"]
                  for product in entry.get("products", []))
+    icons.update(item["icon"] for item in payload["cooking_ingredients"])
     if icons - {""}:
         icon_dir = output_dir / "icons"
         if icon_dir.is_symlink() or (icon_dir.exists() and not icon_dir.is_dir()):

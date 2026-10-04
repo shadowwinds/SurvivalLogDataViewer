@@ -1,6 +1,8 @@
 "use strict";
 
-(() => {
+(async () => {
+  const i18n = window.I18n;
+  await i18n?.ready;
   const data = JSON.parse(document.getElementById("rec-data").textContent);
   const labels = {stock: "即食囤货", ingredients: "烹饪备料", dishes: "菜肴推荐", crops: "作物种植"};
   const controls = document.getElementById("rec-controls");
@@ -13,7 +15,7 @@
   const tabs = [...document.querySelectorAll("[data-view]")];
   const sections = [...document.querySelectorAll(".rec-section")];
   const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[char]));
-  const format = value => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("zh-CN", {maximumFractionDigits: 2}) : "—";
+  const format = value => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString(i18n?.locale || "zh-CN", {maximumFractionDigits: 2}) : "—";
   const link = (path, name) => path ? `<a href="../${escape(path)}">${escape(name)}</a>` : escape(name);
   const statLabels = ["饱食", "心态", "精力", "健康", "生命"];
   const restoreStats = stats => statLabels.map((label, index) => `${label} ${format(stats[index])}`).join(" · ");
@@ -84,7 +86,7 @@
   function updateUrl() {
     const url = new URL(location.href);
     url.hash = view;
-    url.search = "";
+    for (const key of ["stage", "quality", "life", "q", "sort", "new"]) url.searchParams.delete(key);
     if (stageInput.value !== "1") url.searchParams.set("stage", stageInput.value);
     if (qualityInput.value !== "普通") url.searchParams.set("quality", qualityInput.value);
     if (lifeInput.value !== "7") url.searchParams.set("life", lifeInput.value);
@@ -100,7 +102,9 @@
       if (view === "dishes" && row.level !== null && row.level > Number(stageInput.value)) return false;
       if (view === "dishes" && stageOnly.checked && row.level !== Number(stageInput.value)) return false;
       if ((view === "stock" || view === "ingredients") && row.life !== null && row.life > 0 && row.life < Number(lifeInput.value)) return false;
-      return !phrase || JSON.stringify([row.name, row.id, row.group, row.tags, row.ingredients?.map(i => i.name), row.groups, row.harvest?.map(i => i.name)]).toLocaleLowerCase().includes(phrase);
+      const values = [row.name, row.id, row.group, ...(row.tags || []),
+        ...(row.ingredients || []).map(i => i.name), ...(row.groups || []).map(i => i.name), ...(row.harvest || []).map(i => i.name)];
+      return !phrase || values.flatMap(value => [value, i18n?.english(value) || value]).join(" ").toLocaleLowerCase().includes(phrase);
     });
     const ranked = rows.filter(row => rating(row).score !== null).sort((a, b) => (sorting(b) ?? -Infinity) - (sorting(a) ?? -Infinity) || a.id - b.id);
     const unranked = rows.filter(row => rating(row).score === null).sort((a, b) => a.id - b.id);
@@ -122,6 +126,7 @@
       (unranked.length ? `<details class="rec-more"><summary>通用配方、专项物品与数据不足候选（${unranked.length}）</summary><p>以下条目保留条件与来源；缺失数据不按零成本或固定产量处理。</p>${unranked.map((row, index) => card(row, index + 1)).join("")}</details>` : "");
     for (const img of list.querySelectorAll("img")) img.addEventListener("error", () => { img.src = "../favicon.svg"; }, {once: true});
     if (syncUrl) updateUrl();
+    i18n?.apply();
   }
 
   function loadState() {
@@ -146,5 +151,13 @@
   });
   for (const tab of tabs) tab.addEventListener("click", event => { event.preventDefault(); view = tab.dataset.view; render(); });
   window.addEventListener("popstate", loadState);
+  window.addEventListener("languagechange", () => {
+    const expanded = [...document.querySelectorAll(`#${view} .rec-card`)].filter(card => card.querySelector("details").open)
+      .map(card => card.querySelector(".rec-name a")?.pathname);
+    render(false);
+    for (const card of document.querySelectorAll(`#${view} .rec-card`)) {
+      card.querySelector("details").open = expanded.includes(card.querySelector(".rec-name a")?.pathname);
+    }
+  });
   loadState();
 })();

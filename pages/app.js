@@ -2,8 +2,10 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  const i18n = window.I18n;
+  const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [] };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "" };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
@@ -35,6 +37,15 @@
 
   function normalize(value) {
     return clean(value).normalize("NFKC").toLocaleLowerCase("zh-CN").trim();
+  }
+
+  function searchIndex(values) {
+    return normalize(values.filter(value => value !== undefined && value !== null)
+      .flatMap(value => [value, i18n?.english(value) || value]).join(" "));
+  }
+
+  function tierBadge(tier) {
+    return node("span", "tier-badge tier-" + (tier || "none"), tierLabels[tier] || "不影响档位");
   }
 
   function node(tag, className, text) {
@@ -116,7 +127,7 @@
 
   function signed(value) {
     if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-    const text = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+    const text = new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(value);
     return value > 0 ? "+" + text : text;
   }
 
@@ -192,14 +203,20 @@
 
   function renderIngredientOptions() {
     const query = normalize($("ingredientSearch").value);
+    const groupFilter = $("ingredientGroupSelect").value;
+    const tierFilter = $("ingredientTierSelect").value;
     const options = [];
     const groups = new Map(state.ingredients.map((item) => [item.sub_category_id, item.sub_category]));
-    const addOption = (material, label, caption) => {
+    const addOption = (material, label, caption, ingredient = null) => {
       const button = node("button", "ingredient-option");
       button.type = "button";
       button.dataset.material = material.key;
       button.setAttribute("aria-label", "添加" + label);
-      button.append(node("span", "", label), node("small", "", caption));
+      if (ingredient) button.append(art(ingredient.icon, "food"));
+      const text = node("span", "ingredient-option-text");
+      text.append(node("span", "", label), node("small", "", caption));
+      if (ingredient) text.append(tierBadge(ingredient.tier));
+      button.append(text);
       button.addEventListener("click", () => {
         state.materials.push(material);
         $("entryList").scrollTop = 0;
@@ -207,15 +224,71 @@
       });
       options.push(button);
     };
-    for (const [id, name] of groups) if (normalize(name).includes(query)) {
+    for (const [id, name] of groups) if ((!groupFilter || id === Number(groupFilter)) && !tierFilter && searchIndex([name]).includes(query)) {
       addOption({ key: "group:" + id, group: id, name: "任意" + name }, "任意" + name, "按分类选择");
     }
-    for (const item of state.ingredients) if (normalize(item.name + " " + item.id + " " + item.sub_category).includes(query)) {
+    for (const item of state.ingredients) if ((!groupFilter || item.sub_category_id === Number(groupFilter)) &&
+        (!tierFilter || (tierFilter === "none" ? item.tier === null : item.tier === Number(tierFilter))) &&
+        searchIndex([item.name, item.id, item.sub_category]).includes(query)) {
       addOption({ key: "item:" + item.id, id: item.id, name: item.name }, item.name,
-        item.sub_category + " · " + (tierLabels[item.tier] || "不影响档位"));
+        item.sub_category, item);
     }
     if (!options.length) options.push(node("p", "stat-help", "没有找到食材，试试名称、分类或 ID。"));
     $("ingredientOptions").replaceChildren(...options);
+    i18n?.apply($("ingredientOptions"));
+  }
+
+  function renderFacets() {
+    const visible = state.category === "food";
+    $("ingredientFacets").hidden = !visible;
+    if (!visible) return;
+    const focus = document.activeElement?.dataset.facet;
+    const groupScroll = $("ingredientCategories").scrollLeft;
+    const tierScroll = $("ingredientTiers").scrollLeft;
+    const entries = category().entries;
+    const groups = new Map();
+    for (const entry of entries) {
+      const food = entry.food;
+      const group = groups.get(food.sub_category_id) || {name: food.sub_category, count: 0};
+      group.count += 1;
+      groups.set(food.sub_category_id, group);
+    }
+    const chip = (label, count, active, action, extra = "") => {
+      const button = node("button", "facet-chip " + extra);
+      button.type = "button";
+      button.dataset.facet = label;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      button.append(node("span", "", label), node("small", "", count));
+      button.addEventListener("click", action);
+      return button;
+    };
+    const groupChips = [chip("全部分类", entries.length, !state.group, () => { state.group = ""; render(); })];
+    for (const [id, group] of [...groups].sort((a, b) => a[0] - b[0])) {
+      groupChips.push(chip(group.name, group.count, state.group === String(id), () => {
+        state.group = state.group === String(id) ? "" : String(id); render();
+      }));
+    }
+    $("ingredientCategories").replaceChildren(...groupChips);
+    const groupOptions = [node("option", "", "全部分类")]; groupOptions[0].value = "";
+    for (const [id, group] of [...groups].sort((a, b) => a[0] - b[0])) {
+      const option = node("option", "", group.name); option.value = id; groupOptions.push(option);
+    }
+    $("ingredientGroupFilter").replaceChildren(...groupOptions);
+    $("ingredientGroupFilter").value = state.group;
+    $("ingredientTierFilter").value = state.tier;
+    const inGroup = entries.filter(entry => !state.group || entry.food.sub_category_id === Number(state.group));
+    const tierChips = [chip("全部档位", inGroup.length, !state.tier, () => { state.tier = ""; render(); })];
+    for (const tier of [1, 2, 3, "none"]) {
+      const count = inGroup.filter(entry => tier === "none" ? entry.food.tier === null : entry.food.tier === tier).length;
+      if (count) tierChips.push(chip(tierLabels[tier] || "不影响档位", count, state.tier === String(tier), () => {
+        state.tier = state.tier === String(tier) ? "" : String(tier); render();
+      }, "tier-" + tier));
+    }
+    $("ingredientTiers").replaceChildren(...tierChips);
+    $("ingredientCategories").scrollLeft = groupScroll;
+    $("ingredientTiers").scrollLeft = tierScroll;
+    if (focus) [...$("ingredientFacets").querySelectorAll("button")].find(button => button.dataset.facet === focus)?.focus({preventScroll: true});
   }
 
   function renderSelectedMaterials() {
@@ -368,6 +441,10 @@
     $("nameSearch").value = "";
     $("materialSearch").value = "";
     $("ingredientSearch").value = "";
+    $("ingredientGroupSelect").value = "";
+    $("ingredientTierSelect").value = "";
+    state.group = "";
+    state.tier = "";
     $("ingredientPicker").open = false;
     $("cookingLevelSelect").value = "";
     $("tierFloorSelect").value = "0";
@@ -388,6 +465,8 @@
     const specificOnly = state.category === "dish" && $("specificRecipesOnly").checked;
     const level = $("cookingLevelSelect").value;
     const entries = category().entries.filter((entry) =>
+      (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
+      (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
       (!specificOnly || entry.hasSpecificIngredients) &&
       entry.nameIndex.includes(name) && (state.category === "dish" ? matchesSelectedMaterials(entry) : materials.every((term) => entry.materialIndex.includes(term))) &&
       (state.category !== "dish" || level === "" || (Number.isInteger(entry.recipe?.min_level) && entry.recipe.min_level <= Number(level))) &&
@@ -422,13 +501,15 @@
         if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
       }
       else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
-      heading.append(node("span", "entry-name", entry.name), meta);
+      const name = node("span", "entry-name-row");
+      name.append(node("span", "entry-name", entry.name));
+      if (entry.food?.cookable) name.append(tierBadge(entry.food.tier));
+      heading.append(name, meta);
       top.append(addUsage(art(player?.icon || entry.icon), player, state.category === "dish", entry.portion_model?.mode === "fixed"), heading);
       button.append(top);
       if (player) {
         button.append(node("span", "card-tags", foodTagLine(player)),
           node("span", "card-stat-caption", state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
-        if (entry.food?.tier) button.append(node("span", "tier-label", tierLabels[entry.food.tier] + "食材"));
         if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
       } else {
         button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
@@ -538,6 +619,8 @@
 
   function renderDetail(preserveScroll = false) {
     const scroll = $("detailContent").scrollTop;
+    const expanded = preserveScroll ? [...$("detailContent").querySelectorAll("details[open]")].map(element => element.className) : [];
+    const portion = preserveScroll ? $("detailContent").querySelector(".portion-form input")?.value : undefined;
     const entry = state.entries.find((item) => item.key === state.key);
     if (!entry) {
       const placeholder = node("div", "detail-placeholder");
@@ -602,6 +685,7 @@
           input.addEventListener("input", () => {
             const value = input.valueAsNumber;
             result.textContent = input.value && input.validity.valid && Number.isFinite(value) ? "整份可吃 " + Math.max(1, Math.ceil(Math.fround(value / threshold))) + " 次" : "输入总饱腹，计算可吃次数";
+            i18n?.apply(form);
           });
           label.append(input); form.append(label, result); block.append(form);
         }
@@ -658,7 +742,7 @@
     const fields = node("dl", "config-fields");
     entry.fields.forEach((field) => {
       const row = node("div", "config-row");
-      const label = node("dt", "", field.label);
+      const label = node("dt", "", i18n?.language === "en" ? field.field.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2") : field.label);
       if (field.field !== field.label) label.append(node("small", "", field.field));
       row.append(label, node("dd", "", field.value));
       fields.append(row);
@@ -666,6 +750,12 @@
     details.append(fields);
     fragment.append(details, node("div", "detail-source", entry.source_table + " / " + (entry.name_key || "ID:" + entry.id) + (entry.source_version ? " · 说明参考版本 " + entry.source_version : "")));
     $("detailContent").replaceChildren(fragment);
+    for (const details of $("detailContent").querySelectorAll("details")) details.open = expanded.includes(details.className);
+    const portionInput = $("detailContent").querySelector(".portion-form input");
+    if (portionInput && portion !== undefined) {
+      portionInput.value = portion;
+      portionInput.dispatchEvent(new Event("input"));
+    }
     $("detailPanel").setAttribute("aria-labelledby", "detailName");
     $("detailContent").scrollTop = preserveScroll ? scroll : 0;
     $("detailPosition").textContent = state.category === "dish" ? "料理笔记 · " + qualityName($("qualitySelect").value) + "品质" : state.category === "food" ? "食材笔记 · 属性与用途" : category().label + " · 条目详情";
@@ -680,6 +770,7 @@
       button.setAttribute("aria-pressed", String(active));
     });
     renderDetail();
+    i18n?.apply();
     if (mobile.matches && openMobile && !$("detailPanel").open) $("detailPanel").showModal();
   }
 
@@ -702,6 +793,8 @@
     setUrl();
     renderList();
     renderDetail(preserveDetailScroll);
+    renderFacets();
+    i18n?.apply();
   }
 
   function resetSearch() {
@@ -734,6 +827,7 @@
     $("resultCount").textContent = "正在读取图鉴…";
     $("entryList").setAttribute("aria-busy", "true");
     try {
+      await i18n?.ready;
       const response = await fetch(new URL("./data.json", location.href));
       if (!response.ok) throw new Error("数据请求失败（HTTP " + response.status + "）");
       const data = await response.json();
@@ -748,12 +842,18 @@
         { id: "ready-food", label: "即食食品", entries: item.entries.filter((entry) => !entry.food?.cookable) },
       ] : [item]);
       state.ingredients = data.cooking_ingredients || [];
+      const groupOptions = [node("option", "", "全部分类")];
+      groupOptions[0].value = "";
+      for (const [id, name] of new Map(state.ingredients.map(item => [item.sub_category_id, item.sub_category]))) {
+        const option = node("option", "", name); option.value = id; groupOptions.push(option);
+      }
+      $("ingredientGroupSelect").replaceChildren(...groupOptions);
       state.ingredients.sort((a, b) => a.sub_category_id - b.sub_category_id || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id);
       const foods = state.ingredients;
       for (const item of state.categories) {
         for (const entry of item.entries) {
-          entry.nameIndex = normalize([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
-            ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)].join(" "));
+          entry.nameIndex = searchIndex([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
+            ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)]);
           const materialRelations = entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type));
           const specific = materialRelations.filter((relation) => relation.relation_type === "具体食材");
           entry.hasSpecificIngredients = specific.length > 0;
@@ -761,7 +861,7 @@
           const eligible = specific.length ? foods.filter((food) => specific.some((r) => r.target_id === food.id)) :
             foods.filter((food) => groups.has(food.sub_category_id));
           entry.ingredientIds = new Set([...specific.map((r) => r.target_id), ...eligible.map((food) => food.id)]);
-          entry.materialIndex = normalize([...materialRelations.map((r) => r.target_name + " " + r.target_id), ...eligible.map((food) => food.name + " " + food.id)].join(" "));
+          entry.materialIndex = searchIndex([...materialRelations.flatMap((r) => [r.target_name, r.target_id]), ...eligible.flatMap((food) => [food.name, food.id])]);
         }
       }
       $("gameVersion").textContent = "数据 " + (data.metadata.game_version || "未标注");
@@ -777,6 +877,7 @@
       $("errorMessage").textContent = error.message + "。请稍后重试。";
       $("resultCount").textContent = "加载失败";
       $("entryList").setAttribute("aria-busy", "false");
+      i18n?.apply();
     }
   }
 
@@ -785,6 +886,9 @@
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
   $("ingredientSearch").addEventListener("input", renderIngredientOptions);
+  ["ingredientGroupSelect", "ingredientTierSelect"].forEach(id => $(id).addEventListener("change", renderIngredientOptions));
+  $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
+  $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
   ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
@@ -802,6 +906,13 @@
   });
   $("retryLoad").addEventListener("click", load);
   window.addEventListener("hashchange", () => { if (state.categories.length) readHash(true); });
+  window.addEventListener("languagechange", () => {
+    if (!state.categories.length) return;
+    const listScroll = $("entryList").scrollTop;
+    renderIngredientOptions();
+    render(true);
+    $("entryList").scrollTop = listScroll;
+  });
   window.addEventListener("keydown", (event) => {
     if (event.key === "/" && !event.ctrlKey && !event.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) && !event.target.isContentEditable && !(mobile.matches && $("detailPanel").open)) {
       event.preventDefault();

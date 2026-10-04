@@ -173,9 +173,10 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     <link rel="icon" href="{root}favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="{root}guide.css">
     <link rel="stylesheet" href="{root}game-theme.css">
+    <script src="{root}i18n.js" defer></script>
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a></nav></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
     <main>{breadcrumb}{body}</main>
     <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
@@ -232,7 +233,7 @@ def item_art(name: str, icon: str, base: str, profile: dict[str, Any] | None = N
 
 def fields_html(fields: list[dict[str, Any]]) -> str:
     return '<dl class="fields">' + "".join(
-        f'<div><dt>{h(field["label"])}</dt><dd>{h(field["value"])}</dd></div>'
+        f'<div><dt data-config-label="{h(field["field"])}">{h(field["label"])}</dt><dd>{h(field["value"])}</dd></div>'
         for field in fields) + "</dl>"
 
 

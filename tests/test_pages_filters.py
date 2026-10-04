@@ -66,6 +66,21 @@ assert.deepEqual(Array.from(filtered(), e => e.id), [200]);
 get('specificRecipesOnly').checked = true;
 state.materials = [];
 assert.deepEqual(Array.from(filtered(), e => e.id), [200]);
+state.category = 'food';
+state.categories.push({id: 'food', entries: [
+  {id: 10, nameIndex: '', materialIndex: '', food: {sub_category_id: 11, tier: 1}},
+  {id: 11, nameIndex: '', materialIndex: '', food: {sub_category_id: 11, tier: 3}},
+  {id: 12, nameIndex: '', materialIndex: '', food: {sub_category_id: 2, tier: 2}},
+  {id: 13, nameIndex: '', materialIndex: '', food: {sub_category_id: 1, tier: null}},
+]});
+state.group = '11';
+assert.deepEqual(Array.from(filtered(), e => e.id), [10, 11]);
+state.tier = '1';
+assert.deepEqual(Array.from(filtered(), e => e.id), [10]);
+state.group = '2';
+assert.deepEqual(Array.from(filtered(), e => e.id), []);
+state.group = ''; state.tier = 'none';
+assert.deepEqual(Array.from(filtered(), e => e.id), [13]);
 """
         result = subprocess.run([node, "-e", script, str(Path(__file__).resolve().parents[1] / "pages/app.js")],
                                 capture_output=True, text=True)

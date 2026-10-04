@@ -130,6 +130,10 @@
 
 ### GitHub Pages 构建与部署
 
+在线版支持简体中文和 English，右上角切换后会记住语言，保留当前筛选与已选材料。食材名称旁直接显示档位，分类按钮可组合筛选蔬菜、菌菇等分类及档位；菜肴的选材菜单也可按分类和档位挑选。
+
+官方英文文本的本地刷新命令：`python codex_pages_i18n.py --game-root "游戏安装目录" --output-dir pages/locales`。只提取当前公开条目用到的名称和说明；缺失或歧义文本及尚未翻译的手动成就攻略保留中文。CI 使用仓库内的语言文件，不读取游戏。
+
 运行 `python codex_pages.py --output-dir build/pages --site-url https://你的用户名.github.io/SurvivalLogDataViewer/` 构建网页，再运行 `python -m http.server 8502 --bind 127.0.0.1 --directory build`，访问 `http://127.0.0.1:8502/pages/`。构建只读静态库，不附加 runtime 库，也不读取游戏安装目录或存档；输出仅覆盖所选目录中的网页资源、被引用的图标、`data.json`、`.nojekyll`、`sitemap.xml`、`recommendations/` 推荐页和 `guide/` 下的当前图鉴页面，保留其他文件。
 
 `guide/` 提供无需 JavaScript 的分类目录和独立详情页，包含属性、标签、各品质菜肴效果及关联条目。每页生成独立标题、描述、canonical、Open Graph、Twitter 分享信息和 WebPage / CollectionPage / BreadcrumbList 结构化数据；食品与猎物重叠条目共用一个详情地址。游戏菜肴不标注为现实食谱的 Recipe。站点地图列出真实页面地址，不包含 `#` 筛选状态。
