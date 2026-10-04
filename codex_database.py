@@ -643,7 +643,7 @@ def build_relations(
         if row.table == "Config_Item":
             add_field(row, "SubCategory", "子分类", "Config_ItemSubCategory")
             for field in ("FoodTag1", "FoodTag2", "FoodTag3"):
-                add_field(row, field, field, "Config_FoodType")
+                add_field(row, field, field, field)
             add_field(row, "It_Rot_Product_Id", "腐烂产物", "Config_Item")
             add_field(row, "Plant", "关联植物", "Config_Plant")
             add_field(row, "TargetFurnitureID", "目标家具", "Config_Furniture")

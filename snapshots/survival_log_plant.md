@@ -1,10 +1,10 @@
 # Survival Log 植物（离线解析）
 
-- 生成时间：2026-09-03T17:43:48+08:00
-- 游戏资源版本：1.0.15511 / catalog 2.3.1
+- 生成时间：2026-10-04T13:19:05+08:00
+- 游戏资源版本：1.1.18293 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`G:\SteamLibrary\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\08c65b44cd049c161ee293969c5c2ff9.bundle`
-- 条目数量：34
+- 实际读取文件：`E:\games\Steam\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\36e63204cc1526b87676160b32cf9815.bundle`
+- 条目数量：38
 - 配置表：`Config_Plant`、`Config_PlantLv`、`Config_Item`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：记录 Config_Plant 全部配置，并将收获物、种子和枯萎产物 ID 解析为物品名称；解锁状态不读取存档。
@@ -1060,6 +1060,130 @@
 - 种子产物：`[15040]`；解析：爬山虎种子（ID 15040）
 - 种子率：0.5
 - 枯萎产物：`[15501]`；解析：基础肥料（ID 15501）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 越冬一号（ID 39）
+
+- ID：39
+- 名称键：Plant_Name_39
+- 名称：越冬一号
+- 描述键：Plant_Des_39
+- 描述：研究所育出来的种，针叶又短又硬，霜落上去化了就滑走。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_YueDong01
+- Modle3：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_YueDong02
+- Modle4：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_YueDong03
+- Modle5：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_YueDong04
+- 尺寸：4
+- 生长时间：432000
+- 光照需求：1
+- 耐寒：3
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2550, 2550, 2550, 2550]`；解析：越冬果实（ID 2550）、越冬果实（ID 2550）、越冬果实（ID 2550）、越冬果实（ID 2550）
+- 收获经验：400
+- 完美收获产物：`[2550, 2550, 2550, 2550]`；解析：越冬果实（ID 2550）、越冬果实（ID 2550）、越冬果实（ID 2550）、越冬果实（ID 2550）
+- 完美率：0.2
+- 种子产物：`[15045]`；解析：越冬一号种子（ID 15045）
+- 种子率：0
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 蔷薇（ID 40）
+
+- ID：40
+- 名称键：Plant_Name_40
+- 名称：蔷薇
+- 描述键：Plant_Des_40
+- 描述：带刺的藤，爬上架子要十几天，开起来一整面墙都是。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose04
+- 尺寸：2
+- 生长时间：864000
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2547]`；解析：蔷薇（ID 2547）
+- 收获经验：100
+- 完美收获产物：`[2547, 15042]`；解析：蔷薇（ID 2547）、蔷薇种子（ID 15042）
+- 完美率：0.2
+- 种子产物：`[15042]`；解析：蔷薇种子（ID 15042）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 木香（ID 41）
+
+- ID：41
+- 名称键：Plant_Name_41
+- 名称：木香
+- 描述键：Plant_Des_41
+- 描述：细碎的白花能开满整根藤，长得慢，但开得久。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Rosemuxiang02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Rosemuxiang03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose04
+- 尺寸：2
+- 生长时间：604800
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2548]`；解析：木香（ID 2548）
+- 收获经验：100
+- 完美收获产物：`[2548, 15043]`；解析：木香（ID 2548）、木香种子（ID 15043）
+- 完美率：0.2
+- 种子产物：`[15043]`；解析：木香种子（ID 15043）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
+- 腐烂时间：86400
+- 收获时间：388800
+- 发现经验：200
+- 进入图鉴：是
+
+### 凌霄（ID 42）
+
+- ID：42
+- 名称键：Plant_Name_42
+- 名称：凌霄
+- 描述键：Plant_Des_42
+- 描述：橙红的喇叭花，攀着墙一路往上，越高开得越密。
+- Modle1：Assets/RuntimeAssets/Prefabs/PlantFurniture/P_Herb_00175_small
+- Modle2：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose01
+- Modle3：Assets/RuntimeAssets/Prefabs/Furniture/P_Roselingxiao02
+- Modle4：Assets/RuntimeAssets/Prefabs/Furniture/P_Roselingxiao03
+- Modle5：Assets/RuntimeAssets/Prefabs/Furniture/P_Rose04
+- 尺寸：2
+- 生长时间：734400
+- 光照需求：2
+- 耐寒：1
+- 虫害：0.5
+- 杂草：0.5
+- 干旱：0.2
+- 收获产物：`[2549]`；解析：凌霄（ID 2549）
+- 收获经验：100
+- 完美收获产物：`[2549, 15044]`；解析：凌霄（ID 2549）、凌霄种子（ID 15044）
+- 完美率：0.2
+- 种子产物：`[15044]`；解析：凌霄种子（ID 15044）
+- 种子率：0.5
+- 枯萎产物：`[15502]`；解析：复合肥料（ID 15502）
 - 腐烂时间：86400
 - 收获时间：388800
 - 发现经验：200

@@ -3,9 +3,11 @@
 
   const $ = (id) => document.getElementById(id);
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [] };
   const qualities = ["普通", "良好", "完美", "失败"];
-  const statLabels = ["饱食", "心态", "精力", "健康", "生命"];
+  const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
+  const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
+  const qualityName = (value) => value === "良好" ? "优良" : value;
   const titles = { food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", plant: "种植手册", prey: "猎物图鉴", craft: "制造手册", furniture: "家具与设施", achievements: "成就指南" };
   const intros = {
     food: "看属性、查标签，掌握每份食材的可用次数。",
@@ -124,15 +126,15 @@
 
   function tagList(tags, interactive = false) {
     const list = node("div", "tag-list");
-    list.setAttribute("aria-label", "食品标签");
+    list.setAttribute("aria-label", "食用标签");
     for (const tag of tags || []) {
       const badge = node(interactive ? "button" : "span", "tag", tag.name);
       if (tag.count > 1) badge.append(node("span", "tag-count", "×" + tag.count));
-      badge.title = "游戏配置的食品标签，与物品分类分别展示；× 数字表示标签重复次数";
+      badge.title = tag.field + " / ID " + tag.id;
       if (interactive) {
         badge.type = "button";
         badge.addEventListener("click", () => {
-          $("tagSelect").value = String(tag.id);
+          $("tagSelect").value = tag.key;
           if (mobile.matches) $("detailPanel").close();
           render();
         });
@@ -144,7 +146,9 @@
 
   function statGrid(stats, compact = false) {
     const list = node(compact ? "div" : "dl", compact ? "card-stats" : "stat-grid");
-    for (const stat of stats || []) {
+    const shown = (stats || []).filter((stat) => stat.value !== 0);
+    if (!shown.length) list.append(node("span", "stat-help", "五项属性均为 0"));
+    for (const stat of shown) {
       const row = node(compact ? "span" : "div", compact ? "card-stat" : "stat-tile " + valueClass(stat.value));
       row.dataset.field = stat.field;
       const label = node(compact ? "span" : "dt", "", stat.label);
@@ -154,6 +158,125 @@
       list.append(row);
     }
     return list;
+  }
+
+  function foodFacts(player, isDish = false, fixed = false) {
+    const facts = node("div", "food-facts");
+    const weight = player.weight_grams;
+    const size = player.size;
+    if (typeof weight === "number") facts.append(node("span", "", (weight / 1000).toFixed(2) + " kg"));
+    if (Array.isArray(size) && size.length === 2) facts.append(node("span", "", size.join("×")));
+    facts.append(node("span", "", usageText(player, isDish, fixed)));
+    const life = player.shelf_life_days;
+    if (typeof life === "number") facts.append(node("span", "", life > 0 ? "基础保质期 " + life + " 天" : "无保质期"));
+    if (player.cookable && player.tier) facts.append(node("b", "tier-label", tierLabels[player.tier] + "食材"));
+    return facts;
+  }
+
+  function foodTagLine(player) {
+    return ["食物", player.sub_category, ...player.tags.map((tag) => tag.name)].join(" · ");
+  }
+
+  function addFullStats(container, stats) {
+    const details = node("details", "secondary-stats");
+    details.append(node("summary", "", "查看全部五项属性"));
+    const list = node("dl", "highlights");
+    for (const stat of stats || []) {
+      const row = node("div", "highlight-row");
+      row.append(node("dt", "", stat.label), node("dd", "", signed(stat.value)));
+      list.append(row);
+    }
+    details.append(list);
+    container.append(details);
+  }
+
+  function renderIngredientOptions() {
+    const query = normalize($("ingredientSearch").value);
+    const options = [];
+    const groups = new Map(state.ingredients.map((item) => [item.sub_category_id, item.sub_category]));
+    const addOption = (material, label, caption) => {
+      const button = node("button", "ingredient-option");
+      button.type = "button";
+      button.dataset.material = material.key;
+      button.setAttribute("aria-label", "添加" + label);
+      button.append(node("span", "", label), node("small", "", caption));
+      button.addEventListener("click", () => {
+        state.materials.push(material);
+        $("entryList").scrollTop = 0;
+        render();
+      });
+      options.push(button);
+    };
+    for (const [id, name] of groups) if (normalize(name).includes(query)) {
+      addOption({ key: "group:" + id, group: id, name: "任意" + name }, "任意" + name, "按分类选择");
+    }
+    for (const item of state.ingredients) if (normalize(item.name + " " + item.id + " " + item.sub_category).includes(query)) {
+      addOption({ key: "item:" + item.id, id: item.id, name: item.name }, item.name,
+        item.sub_category + " · " + (tierLabels[item.tier] || "不影响档位"));
+    }
+    if (!options.length) options.push(node("p", "stat-help", "没有找到食材，试试名称、分类或 ID。"));
+    $("ingredientOptions").replaceChildren(...options);
+  }
+
+  function renderSelectedMaterials() {
+    const isDish = state.category === "dish";
+    $("selectedMaterials").hidden = !isDish || !state.materials.length;
+    $("ingredientSummary").textContent = state.materials.length ? "已选 " + state.materials.length + " 份 · 继续添加" : "选择食材或分类";
+    const counts = new Map();
+    state.materials.forEach((material) => counts.set(material.key, { ...material, count: (counts.get(material.key)?.count || 0) + 1 }));
+    const chips = [];
+    for (const material of counts.values()) {
+      const button = node("button", "material-chip", material.name + (material.count > 1 ? " × " + material.count : "") + " −");
+      button.type = "button";
+      button.setAttribute("aria-label", "移除一份" + material.name);
+      button.addEventListener("click", () => {
+        state.materials.splice(state.materials.findIndex((item) => item.key === material.key), 1);
+        render();
+      });
+      chips.push(button);
+    }
+    chips.push(node("span", "material-help", "每份占一个配方槽位，可重复添加"));
+    $("selectedMaterials").replaceChildren(...chips);
+  }
+
+  function matchesSelectedMaterials(entry, materials = state.materials) {
+    if (!materials.length) return true;
+    const recipe = entry.recipe;
+    if (!recipe) return false;
+    const specific = recipe.specific_items?.length > 0;
+    const slots = specific ? recipe.specific_items.map((id) => state.ingredients.filter((item) => item.id === id)) :
+      (recipe.tag_combo || []).map((group) => state.ingredients.filter((item) => item.sub_category_id === group));
+    if (materials.length > slots.length) return false;
+    const floor = Number($("tierFloorSelect").value);
+    const tierFor = (item) => item.tier === null ? null : floor ? Math.min(item.tier, 4 - floor) : item.tier;
+    const assigned = new Map();
+    const matches = (item, material) => material.id !== undefined ? item.id === material.id : item.sub_category_id === material.group;
+    const finish = () => {
+      if (specific) return true;
+      const possible = slots.map((items, index) => (assigned.has(index) ? items.filter((item) => matches(item, assigned.get(index))) : items)
+        .filter((item) => tierFor(item) === null || tierFor(item) >= recipe.tier));
+      if (possible.some((items) => !items.length) || !possible.some((items) => items.some((item) => tierFor(item) === recipe.tier))) return false;
+      if (materials.length === slots.length && materials.every((item) => item.id !== undefined)) {
+        const combo = materials.map((item) => item.id).sort((a, b) => a - b).join(",");
+        if (category("dish").entries.some((dish) => dish.recipe?.specific_items?.length &&
+            [...dish.recipe.specific_items].sort((a, b) => a - b).join(",") === combo)) return false;
+        const tagCombo = [...recipe.tag_combo].sort((a, b) => a - b).join(",");
+        if (category("dish").entries.some((dish) => dish.id < entry.id && dish.recipe?.tier === recipe.tier &&
+            [...(dish.recipe.tag_combo || [])].sort((a, b) => a - b).join(",") === tagCombo)) return false;
+      }
+      return true;
+    };
+    const assign = (index) => {
+      if (index === materials.length) return finish();
+      return slots.some((items, slot) => {
+        if (assigned.has(slot) || !items.some((item) => matches(item, materials[index]))) return false;
+        assigned.set(slot, materials[index]);
+        const result = assign(index + 1);
+        assigned.delete(slot);
+        return result;
+      });
+    };
+    return assign(0);
   }
 
   function buildNav() {
@@ -183,15 +306,27 @@
     $("categoryIntro").textContent = intros[state.category];
     $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
-    $("materialField").hidden = !["dish", "craft", "furniture"].includes(state.category);
-    $("materialSearch").placeholder = isDish ? "食材名称 / 分类，可用逗号组合" : "材料名称或 ID";
+    $("materialField").hidden = !["craft", "furniture"].includes(state.category);
+    $("ingredientField").hidden = !isDish;
+    $("materialSearch").placeholder = "材料名称或 ID";
     $("qualityField").hidden = !isDish;
     $("playerFilters").hidden = !isFood && !isDish;
     $("tagField").hidden = !isFood;
     $("cookableField").hidden = state.category !== "prey";
     $("specificRecipeField").hidden = !isDish;
+    $("cookingLevelField").hidden = !isDish;
+    $("tierFloorField").hidden = !isDish;
+    const levelOptions = [node("option", "", "不限等级")];
+    levelOptions[0].value = "";
+    const maxLevel = Math.max(1, ...category("dish").entries.map((entry) => entry.recipe?.min_level || 0));
+    for (let level = 0; level <= maxLevel; level += 1) {
+      const option = node("option", "", "Lv." + level + " 及以下配方");
+      option.value = level;
+      levelOptions.push(option);
+    }
+    $("cookingLevelSelect").replaceChildren(...levelOptions);
     const tags = new Map();
-    category().entries.forEach((entry) => entry.food?.tags.forEach((tag) => tags.set(tag.id, tag.name)));
+    category().entries.forEach((entry) => entry.food?.tags.forEach((tag) => tags.set(tag.key, tag.name)));
     const tagOptions = [node("option", "", "全部标签")];
     tagOptions[0].value = "";
     for (const [id, name] of tags) {
@@ -232,6 +367,12 @@
     clearTimeout(state.debounce);
     $("nameSearch").value = "";
     $("materialSearch").value = "";
+    $("ingredientSearch").value = "";
+    $("ingredientPicker").open = false;
+    $("cookingLevelSelect").value = "";
+    $("tierFloorSelect").value = "0";
+    state.materials = [];
+    renderIngredientOptions();
     $("tagSelect").value = "";
     $("cookableOnly").checked = false;
     $("specificRecipesOnly").checked = false;
@@ -245,10 +386,12 @@
     const tag = $("tagField").hidden ? "" : $("tagSelect").value;
     const cookable = !$("cookableField").hidden && $("cookableOnly").checked;
     const specificOnly = state.category === "dish" && $("specificRecipesOnly").checked;
+    const level = $("cookingLevelSelect").value;
     const entries = category().entries.filter((entry) =>
       (!specificOnly || entry.hasSpecificIngredients) &&
-      entry.nameIndex.includes(name) && (state.category === "dish" ? matchesMaterialSlots(entry, materials) : materials.every((term) => entry.materialIndex.includes(term))) &&
-      (!tag || entry.food?.tags.some((item) => String(item.id) === tag)) &&
+      entry.nameIndex.includes(name) && (state.category === "dish" ? matchesSelectedMaterials(entry) : materials.every((term) => entry.materialIndex.includes(term))) &&
+      (state.category !== "dish" || level === "" || (Number.isInteger(entry.recipe?.min_level) && entry.recipe.min_level <= Number(level))) &&
+      (!tag || entry.food?.tags.some((item) => item.key === tag)) &&
       (!cookable || entry.food?.cookable) && (!state.effect || statValue(entry, state.effect) > 0));
     const sort = $("sortSelect").value;
     if (sort !== "default") entries.sort((a, b) => {
@@ -257,22 +400,6 @@
       return Number.isNaN(difference) || difference === 0 ? a.id - b.id : difference;
     });
     return entries;
-  }
-
-  function matchesMaterialSlots(entry, terms) {
-    if (!terms.length) return true;
-    const used = new Set();
-    const assign = (index) => {
-      if (index === terms.length) return true;
-      return entry.materialSlots.some((slot, slotIndex) => {
-        if (used.has(slotIndex) || !slot.includes(terms[index])) return false;
-        used.add(slotIndex);
-        if (assign(index + 1)) return true;
-        used.delete(slotIndex);
-        return false;
-      });
-    };
-    return assign(0);
   }
 
   function renderList() {
@@ -290,16 +417,18 @@
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
       meta.append(node("span", "", player ? "分类：" + player.sub_category : entry.hidden ? "隐藏成就" : entry.group || category().label));
-      if (state.category === "dish") meta.append(node("span", "quality-label", $("qualitySelect").value + "品质"));
+      if (state.category === "dish") {
+        meta.append(node("span", "quality-label", qualityName($("qualitySelect").value) + "品质"));
+        if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
+      }
       else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
       heading.append(node("span", "entry-name", entry.name), meta);
       top.append(addUsage(art(player?.icon || entry.icon), player, state.category === "dish", entry.portion_model?.mode === "fixed"), heading);
       button.append(top);
       if (player) {
-        const tags = tagList(player.tags);
-        tags.classList.add("card-tags");
-        if (player.tags.length) tags.prepend(node("span", "card-tag-label", "食品标签"));
-        button.append(tags, statGrid(player.stats, true));
+        button.append(node("span", "card-tags", foodTagLine(player)),
+          node("span", "card-stat-caption", state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
+        if (entry.food?.tier) button.append(node("span", "tier-label", tierLabels[entry.food.tier] + "食材"));
         if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
       } else {
         button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
@@ -311,7 +440,7 @@
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? $("qualitySelect").value + "品质的食用效果" + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
+    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
   }
 
   function section(title, caption = "") {
@@ -364,7 +493,7 @@
 
   function relatedDishes(entry) {
     if (!entry.food?.cookable) return [];
-    return (category("dish")?.entries || []).filter((dish) => dish.ingredientIds.has(entry.id)).sort((a, b) => {
+    return (category("dish")?.entries || []).filter((dish) => dish.ingredientIds.has(entry.id) && matchesSelectedMaterials(dish, [{ id: entry.id }])).sort((a, b) => {
       const exactA = a.relations.some((r) => r.relation_type === "具体食材" && r.target_id === entry.id);
       const exactB = b.relations.some((r) => r.relation_type === "具体食材" && r.target_id === entry.id);
       return Number(exactB) - Number(exactA) || a.id - b.id;
@@ -386,7 +515,7 @@
         name.append(node("span", "recipe-hint", exact ? "配方指定食材" : "符合食材分类 · 仍需搭配"));
         const product = dish.products?.find((item) => item.quality === $("qualitySelect").value);
         const satiety = (product?.per_use_stats || product?.stats)?.find((stat) => stat.field === "ValueDisplay1")?.value;
-        link.append(name, node("span", "recipe-effect", (product?.per_use_stats ? "每次 " : "参考 ") + signed(satiety) + " 饱食 ↗"));
+        link.append(name, node("span", "recipe-effect", (product?.per_use_stats ? "每次 " : "参考 ") + signed(satiety) + " 饱腹 ↗"));
         block.append(link);
       }
       block.append(node("p", "stat-help", $("qualitySelect").value + "品质效果。分类配方还需满足其余食材及档位要求；指定食材配方优先。"));
@@ -397,7 +526,7 @@
         state.category = "dish";
         clearFilters();
         configureControls();
-        $("materialSearch").value = entry.name;
+        state.materials = [{ key: "item:" + entry.id, id: entry.id, name: entry.name }];
         state.key = "";
         render();
         $("entryList").scrollTop = 0;
@@ -428,9 +557,10 @@
     const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
     permalink.href = entry.detailPath;
     text.append(permalink);
-    if (player) text.append(node("span", "sr-only", usageText(player, state.category === "dish", entry.portion_model?.mode === "fixed")));
+    if (player) text.append(node("div", "item-tag-line", foodTagLine(player)));
     hero.append(addUsage(art(player?.icon || entry.icon, state.category, true), player, state.category === "dish", entry.portion_model?.mode === "fixed"), text);
     fragment.append(hero);
+    if (player) fragment.append(foodFacts(player, state.category === "dish", entry.portion_model?.mode === "fixed"));
     if (state.category === "dish") {
       const fixed = entry.portion_model?.mode === "fixed";
       const block = section(fixed ? "每次食用的效果" : "配置参考效果", "按成品品质查看");
@@ -438,7 +568,7 @@
       tabs.setAttribute("role", "group");
       tabs.setAttribute("aria-label", "成品品质");
       for (const quality of qualities) {
-        const button = node("button", "quality-tab", quality);
+        const button = node("button", "quality-tab", qualityName(quality));
         button.type = "button";
         button.dataset.quality = quality;
         button.classList.toggle("active", $("qualitySelect").value === quality);
@@ -454,48 +584,49 @@
       block.append(tabs);
       if (player) {
         block.append(node("div", "product-caption", player.name), statGrid(player.stats));
+        addFullStats(block, player.stats);
         if (player.note) block.append(node("p", "food-note", player.note));
       } else block.append(node("p", "stat-help", "当前数据未提供这一品质的成品效果。"));
       block.append(node("p", "stat-help", fixed ? "按整份属性与可吃次数分摊，显示每次食用的基础效果；未叠加角色或状态修正。" : "通用配方的整份属性由实际食材、档位与品质生成；这里是成品配置参考值，不能作为固定食用次数。"));
       const threshold = entry.portion_model?.threshold;
       if (Number.isInteger(threshold) && threshold > 0) {
-        block.append(node("p", "stat-help", "分份标准：" + threshold + " 饱食 / 次。次数 = 整份总饱食 ÷ " + threshold + "，向上取整，至少 1 次。"));
+        block.append(node("p", "stat-help", "分份标准：" + threshold + " 饱腹 / 次。次数 = 整份总饱腹 ÷ " + threshold + "，向上取整，至少 1 次。"));
         if (!fixed) {
           const form = node("div", "portion-form");
-          const label = node("label", "", "整份总饱食");
+          const label = node("label", "", "整份总饱腹");
           const input = node("input");
           input.type = "number"; input.min = "0"; input.max = "2147483647"; input.step = "1"; input.placeholder = "例如 60";
-          input.setAttribute("aria-label", "整份总饱食");
-          const result = node("output", "portion-result", "输入总饱食，计算可吃次数");
+          input.setAttribute("aria-label", "整份总饱腹");
+          const result = node("output", "portion-result", "输入总饱腹，计算可吃次数");
           result.setAttribute("aria-live", "polite");
           input.addEventListener("input", () => {
             const value = input.valueAsNumber;
-            result.textContent = input.value && input.validity.valid && Number.isFinite(value) ? "整份可吃 " + Math.max(1, Math.ceil(Math.fround(value / threshold))) + " 次" : "输入总饱食，计算可吃次数";
+            result.textContent = input.value && input.validity.valid && Number.isFinite(value) ? "整份可吃 " + Math.max(1, Math.ceil(Math.fround(value / threshold))) + " 次" : "输入总饱腹，计算可吃次数";
           });
           label.append(input); form.append(label, result); block.append(form);
         }
       }
       fragment.append(block);
-      if (player) {
-        const tags = section("成品分类与食品标签");
-        tags.append(node("p", "product-caption", "成品分类：" + player.sub_category), tagList(player.tags));
-        if (!player.tags.length) tags.append(node("p", "stat-help", "没有食品标签"));
-        tags.append(node("p", "stat-help", "分类与食品标签是两个独立字段，不一定相同；标签按游戏配置展示。"));
-        fragment.append(tags);
-      }
       renderRelations(fragment, entry.relations.filter((r) => ["具体食材", "食材分类"].includes(r.relation_type)), "怎么做这道菜");
+      if (entry.recipe?.tag_combo?.length) {
+        const block = section("食材档位", tierLabels[entry.recipe.tier] || "未提供");
+        block.append(node("p", "stat-help", "同类食材也分档位。取参与计算的食材中最高档，主食等分类不影响档位；选择完整材料后按该档位筛选，指定食材配方优先。"));
+        fragment.append(block);
+      }
     } else if (player) {
       const block = section("直接食用的属性", "增益 + / 减益 −");
       block.append(statGrid(player.stats));
+      addFullStats(block, player.stats);
       if (player.note) block.append(node("p", "food-note", player.note));
       block.append(node("p", "stat-help", "配置基础展示值；实际效果可能受角色或食物状态影响。"));
       fragment.append(block);
-      const tags = section("食品标签", "保留重复次数");
+      const tags = section("食用标签");
       tags.append(tagList(player.tags, true));
-      if (!player.tags.length) tags.append(node("p", "stat-help", "没有食品标签"));
+      if (!player.tags.length) tags.append(node("p", "stat-help", "没有食用标签"));
       const info = node("div", "food-info");
       info.append(node("span", "", "烹饪分类：" + player.sub_category), node("b", "", player.cookable ? "可以烹饪" : "不可用于烹饪"));
-      tags.append(info, node("p", "stat-help", "食品标签与烹饪分类分别展示；配方中的分类条件以烹饪分类为准。"));
+      tags.append(info);
+      if (player.tier) tags.append(node("p", "stat-help", tierLabels[player.tier] + "食材；档位按该分类的配置价格阈值判断，不等于成品品质或烹饪等级。"));
       fragment.append(tags);
       showRelatedDishes(fragment, entry);
     }
@@ -537,7 +668,7 @@
     $("detailContent").replaceChildren(fragment);
     $("detailPanel").setAttribute("aria-labelledby", "detailName");
     $("detailContent").scrollTop = preserveScroll ? scroll : 0;
-    $("detailPosition").textContent = state.category === "dish" ? "料理笔记 · " + $("qualitySelect").value + "品质" : state.category === "food" ? "食材笔记 · 属性与用途" : category().label + " · 条目详情";
+    $("detailPosition").textContent = state.category === "dish" ? "料理笔记 · " + qualityName($("qualitySelect").value) + "品质" : state.category === "food" ? "食材笔记 · 属性与用途" : category().label + " · 条目详情";
   }
 
   function selectEntry(key, openMobile = false) {
@@ -566,6 +697,7 @@
       button.setAttribute("aria-pressed", String(button.dataset.effect === state.effect));
     });
     state.entries = filteredEntries();
+    renderSelectedMaterials();
     if (!state.entries.some((entry) => entry.key === state.key)) state.key = state.entries[0]?.key || "";
     setUrl();
     renderList();
@@ -615,7 +747,9 @@
         { ...item, entries: item.entries.filter((entry) => entry.food?.cookable) },
         { id: "ready-food", label: "即食食品", entries: item.entries.filter((entry) => !entry.food?.cookable) },
       ] : [item]);
-      const foods = category("food")?.entries || [];
+      state.ingredients = data.cooking_ingredients || [];
+      state.ingredients.sort((a, b) => a.sub_category_id - b.sub_category_id || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id);
+      const foods = state.ingredients;
       for (const item of state.categories) {
         for (const entry of item.entries) {
           entry.nameIndex = normalize([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
@@ -625,22 +759,19 @@
           entry.hasSpecificIngredients = specific.length > 0;
           const groups = new Set(materialRelations.filter((relation) => relation.relation_type === "食材分类").map((relation) => relation.target_id));
           const eligible = specific.length ? foods.filter((food) => specific.some((r) => r.target_id === food.id)) :
-            foods.filter((food) => food.food?.cookable && groups.has(food.food.sub_category_id));
+            foods.filter((food) => groups.has(food.sub_category_id));
           entry.ingredientIds = new Set([...specific.map((r) => r.target_id), ...eligible.map((food) => food.id)]);
           entry.materialIndex = normalize([...materialRelations.map((r) => r.target_name + " " + r.target_id), ...eligible.map((food) => food.name + " " + food.id)].join(" "));
-          entry.materialSlots = (specific.length ? specific : materialRelations.filter((r) => r.relation_type === "食材分类")).map((relation) => {
-            const candidates = specific.length ? [] : foods.filter((food) => food.food?.cookable && food.food.sub_category_id === relation.target_id);
-            return normalize([relation.target_name, relation.target_id, ...candidates.map((food) => food.name + " " + food.id)].join(" "));
-          });
         }
       }
       $("gameVersion").textContent = "数据 " + (data.metadata.game_version || "未标注");
       $("footerVersion").textContent = "数据版本 " + (data.metadata.game_version || "未标注");
       $("gameVersion").title = "图鉴效果来自仓库静态库；图标单独提取，不会改变图鉴数值";
       buildNav();
+      renderIngredientOptions();
       configureControls();
       readHash(Boolean(location.hash));
-      ["nameSearch", "materialSearch", "resetSearch"].forEach((id) => { $(id).disabled = false; });
+      ["nameSearch", "materialSearch", "ingredientSearch", "resetSearch"].forEach((id) => { $(id).disabled = false; });
     } catch (error) {
       $("loadError").hidden = false;
       $("errorMessage").textContent = error.message + "。请稍后重试。";
@@ -653,7 +784,14 @@
     clearTimeout(state.debounce);
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
-  ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect"].forEach((id) => $(id).addEventListener("change", () => render()));
+  $("ingredientSearch").addEventListener("input", renderIngredientOptions);
+  ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
+  $("ingredientPicker").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
+  });
+  document.addEventListener("click", (event) => {
+    if (!$("ingredientField").contains(event.target)) $("ingredientPicker").open = false;
+  });
   $("searchForm").addEventListener("submit", (event) => event.preventDefault());
   $("resetSearch").addEventListener("click", resetSearch);
   $("emptyReset").addEventListener("click", resetSearch);

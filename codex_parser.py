@@ -241,6 +241,9 @@ class ExtractionContext:
 # These are the serialized backing-field schemas from the current HotUpdate.dll
 # interop metadata. Computed MainKey properties are intentionally not serialized.
 CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
+    "Config_ConstantText": (("ID", "str"), ("Text", "str"), ("Text_Local", "str")),
+    "FoodTag1": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("SourceKey", "str")),
+    "FoodTag2": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("SourceKey", "str")),
     "Config_Item": (
         ("ID", "i32"), ("ItemName", "str"), ("ItemName_Local", "str"),
         ("ItemDes1", "str"), ("ItemDes1_Local", "str"), ("ItemDes2", "str"),
@@ -261,7 +264,7 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("RecommendType", "i32"), ("RecommendWeight", "i32"), ("InCodex", "bool"),
         ("DemoTwoMode", "i32"), ("VaseLife", "i32"), ("VaseMoraleRate", "f32"),
         ("VaseModel", "str"), ("CanBrew", "bool"), ("CutProductId", "i32"),
-        ("UseAction", "i32"),
+        ("TradeSellRate", "f32"), ("UseAction", "i32"),
     ),
     "Config_ItemSubCategory": (
         ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
@@ -293,6 +296,7 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("required_condition", "list_i32"), ("growth_speed_bonus", "f32"),
         ("pest_rate_reduction", "f32"), ("perfect_grow_rate", "f32"),
         ("research_exp", "i32"), ("research_action_id", "i32"),
+        ("unlock_recipes", "list_i32"),
     ),
     "Config_ProductionList": (
         ("ID", "i32"), ("ShopName", "str"), ("ShopName_Local", "str"),
@@ -329,6 +333,7 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("LootRandomGroupId_P2", "i32"), ("LootRandomGroupId_P3", "i32"),
         ("LootRandomGroupId_P4", "i32"), ("LootRandomCount", "i32"),
         ("RotProductOverride", "list_i32"), ("RotSourceSubCategory", "list_i32"),
+        ("BagAcceptCategory", "i32"), ("RobotPlayerID", "i32"),
     ),
     "Config_FurnitureFunc": (
         ("ID", "i32"), ("BtnName", "str"), ("BtnName_Local", "str"), ("BtnTips", "str"),
@@ -361,7 +366,8 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
     ),
     "Config_FurnitureTag": (
         ("ID", "i32"), ("TagName", "str"), ("TagName_Local", "str"),
-        ("IconKey", "str"), ("Color", "str"),
+        ("IconKey", "str"), ("Color", "str"), ("SortPriority", "i32"),
+        ("Dim", "i32"), ("Order", "i32"), ("TagDesc", "str"), ("TagDesc_Local", "str"),
     ),
     "Config_FurniturePartner": (
         ("ID", "i32"), ("TriggerFurnitureId", "i32"), ("PartnerType", "i32"),
@@ -535,7 +541,7 @@ def parse_config_table(raw: bytes, table_name: str) -> list[ConfigRow]:
     if count < 0 or count > 2_000_000:
         raise ValueError(f"{table_name} 行数非法：{count}")
     rows: list[ConfigRow] = []
-    seen_ids: set[int] = set()
+    seen_ids: set[int | str] = set()
     expected_members = len(schema)
     for index in range(count):
         member_count = reader.u8()
@@ -546,9 +552,12 @@ def parse_config_table(raw: bytes, table_name: str) -> list[ConfigRow]:
             )
         values = {name: read_schema_value(reader, kind) for name, kind in schema}
         row = ConfigRow(table_name, values)
-        if row.row_id in seen_ids:
-            raise ValueError(f"{table_name} 出现重复 ID：{row.row_id} at row {index}")
-        seen_ids.add(row.row_id)
+        row_key = values["ID"] if table_name == "Config_ConstantText" else row.row_id
+        if row_key is None or row_key == "":
+            raise ValueError(f"{table_name} row {index} 的 ID 为空")
+        if row_key in seen_ids:
+            raise ValueError(f"{table_name} 出现重复 ID：{row_key} at row {index}")
+        seen_ids.add(row_key)
         rows.append(row)
     if reader.pos != len(raw):
         raise ValueError(
@@ -585,6 +594,7 @@ def build_extraction_context(
         "Config_FurnitureState",
         "Config_FurnitureTag",
         "Config_FurniturePartner",
+        "Config_ConstantText",
     ]
     if include_achievement:
         primary_tables.append("Config_Achievement")
@@ -594,7 +604,16 @@ def build_extraction_context(
     bundle_paths: set[Path] = set()
     for table_name in primary_tables:
         rows, bundle_name, package_version, bundle_path = load_config_table(game_root, table_name)
-        tables[table_name] = rows
+        if table_name == "Config_ConstantText":
+            for field in ("FoodTag1", "FoodTag2"):
+                tables[field] = [ConfigRow(field, {
+                    "ID": int(row.values["ID"].split("_")[-1]),
+                    "Name": row.values["Text"], "Name_Local": row.values["Text_Local"],
+                    "SourceKey": row.values["ID"],
+                }) for row in rows if row.values["ID"].startswith(field + "_")
+                    and row.values["ID"].split("_")[-1].isdigit()]
+        else:
+            tables[table_name] = rows
         bundle_names.add(bundle_name)
         package_versions.add(package_version)
         bundle_paths.add(bundle_path)
@@ -750,6 +769,10 @@ FIELD_LABELS = {
     "RecommendType": "推荐类型", "RecommendWeight": "推荐权重", "InCodex": "进入图鉴",
     "DemoTwoMode": "Demo 模式", "VaseLife": "花瓶寿命", "VaseMoraleRate": "花瓶士气系数",
     "VaseModel": "花瓶模型", "CanBrew": "可酿造", "CutProductId": "切割产物", "UseAction": "使用动作",
+    "TradeSellRate": "出售价格系数", "unlock_recipes": "解锁配方",
+    "BagAcceptCategory": "容器接受物品大类", "RobotPlayerID": "机器人角色 ID",
+    "SortPriority": "排序优先级", "Dim": "维度", "Order": "排序",
+    "TagDesc": "标签说明键", "TagDesc_Local": "标签说明", "SourceKey": "本地化来源键",
     "Name": "名称键", "Name_Local": "名称", "Des": "描述键", "Des_Local": "描述",
     "GrowthTime": "生长时间", "LightNeed": "光照需求", "ColdResistance": "耐寒",
     "Pest": "虫害", "Weed": "杂草", "Dry": "干旱", "Gain": "收获产物",
@@ -937,7 +960,8 @@ def render_config_value(
     if field in {"FoodTag1", "FoodTag2", "FoodTag3"} and isinstance(value, int):
         if not value:
             return "无"
-        return f"{value}；{md_escape(context.food_type_names.get(value) or f'ID:{value}') }"
+        names = {row.row_id: config_row_name(row) for row in context.tables.get(field, [])}
+        return f"{value}；{md_escape(names.get(value) or f'ID:{value}')}"
     if field in {"Plant", "Gain", "Perfect_Gain", "Gain_Seed", "WitheredGain"} and isinstance(value, int):
         return resolve_id(value, plant_names)
     if field in {"TargetFurnitureID", "TriggerFurnitureId"} and isinstance(value, int):
@@ -1097,7 +1121,9 @@ OUTPUT_FILENAMES = {
 
 AUXILIARY_TABLES = (
     ("Config_ItemSubCategory", "物品子分类"),
-    ("Config_FoodType", "食品标签"),
+    ("Config_FoodType", "食品分类"),
+    ("FoodTag1", "食用方式标签（本地化配置）"),
+    ("FoodTag2", "食物特点标签（本地化配置）"),
     ("Config_PlantLv", "植物等级配置"),
     ("Config_ProductionLv", "制造等级配置"),
     ("Config_FurnitureFunc", "家具功能配置"),

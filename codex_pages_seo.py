@@ -14,12 +14,12 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 DEFAULT_SITE_URL = "https://shadowwinds.github.io/SurvivalLogDataViewer/"
 SITE_NAME = "生存日志 · 幸存者图鉴"
-HOME_TITLE = "生存日志图鉴｜食材属性、食品标签与菜肴效果 · Survival Log"
-HOME_DESCRIPTION = "Survival Log 生存日志玩家图鉴：查询烹饪食材、即食食品的每份使用次数、饱食、心态、精力、健康、生命属性与标签，比较菜肴各品质的可吃次数和每次效果，查找植物、猎物、制造、家具和成就。"
+HOME_TITLE = "生存日志图鉴｜食材档位、烹饪配方与菜肴效果 · Survival Log"
+HOME_DESCRIPTION = "Survival Log 生存日志玩家图鉴：按食材档位和烹饪等级查配方，查询食品的使用次数、饱腹、心态、精力、健康、生命属性与食用标签，比较菜肴各品质的可吃次数和每次效果。"
 CATEGORY_INTROS = {
     "food": ("烹饪食材", "查询可烹饪食材的每份使用次数、五项属性、食品标签与可用菜肴。"),
     "ready-food": ("即食食品", "查询不能用于烹饪的食品与饮品，查看每份食用次数、属性与标签。"),
-    "dish": ("菜肴与效果", "查看配方食材和制作要求，比较完美、良好、普通、失败品质的成品效果。"),
+    "dish": ("菜肴与效果", "查看配方食材和制作要求，比较完美、优良、普通、失败品质的成品效果。"),
     "plant": ("植物", "查看植物、种子、收获物与各等级配置。"),
     "prey": ("猎物", "查看猎物的属性、食品标签与关联配置。"),
     "craft": ("制造", "查看制造材料、等级要求、产物与失败产物。"),
@@ -184,12 +184,23 @@ def shell(title: str, description: str, path: str, base: str, body: str,
 
 
 def profile_html(profile: dict[str, Any]) -> str:
+    values = profile.get("per_use_stats") or profile["stats"]
     stats = '<dl class="stats">' + "".join(
         f'<div><dt>{h(stat["label"])}</dt><dd>{h(stat_value(stat["value"]))}</dd></div>'
-        for stat in (profile.get("per_use_stats") or profile["stats"])) + "</dl>"
+        for stat in values if stat["value"] != 0) + "</dl>"
     tags = "、".join(clean_text(tag["name"]) + (f' ×{tag["count"]}' if tag["count"] > 1 else "")
                      for tag in profile["tags"]) or "无"
-    return stats + f'<p>食品标签：{h(tags)}</p>' + (
+    extra = '<details><summary>查看全部五项属性</summary><dl class="fields">' + "".join(
+        f'<div><dt>{h(stat["label"])}</dt><dd>{h(stat_value(stat["value"]))}</dd></div>' for stat in values) + '</dl></details>'
+    facts = []
+    if isinstance(profile.get("weight_grams"), (int, float)):
+        facts.append(f'{profile["weight_grams"] / 1000:.2f} kg')
+    if isinstance(profile.get("size"), list) and len(profile["size"]) == 2:
+        facts.append("×".join(str(value) for value in profile["size"]))
+    life = profile.get("shelf_life_days")
+    if isinstance(life, (int, float)):
+        facts.append(f'基础保质期 {life} 天' if life > 0 else '无保质期')
+    return stats + extra + f'<p>食物 · {h(profile["sub_category"])} · 食用标签：{h(tags)}</p><p>{h(" · ".join(facts))}</p>' + (
         f'<p class="food-note">{h(profile["note"])}</p>' if profile["note"] else "")
 
 
@@ -237,7 +248,7 @@ def entry_description(entry: dict[str, Any], label: str) -> str:
     if "products" in entry:
         ingredients = next((clean_text(field["value"]) for field in entry["highlights"]
                             if field["field"] == "ingredients"), "")
-        return f"生存日志 {name}配方" + (f"，食材：{ingredients}" if ingredients else "") + "。比较完美、良好、普通、失败品质的饱食、心态、精力、健康和生命效果，查看制作要求。"
+        return f"生存日志 {name}配方" + (f"，食材：{ingredients}" if ingredients else "") + "。比较完美、优良、普通、失败品质的饱腹、心态、精力、健康和生命效果，查看制作要求。"
     detail = clean_text(entry["description"]) or "；".join(
         f'{clean_text(field["label"])}：{clean_text(field["value"])}' for field in entry["highlights"][:2])
     return f"生存日志 {name}{label}图鉴。{detail[:120]} 查看相关属性、要求和关联配置。"
@@ -253,7 +264,7 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
         body += f'<p class="description">{h(entry["description"])}</p>'
     if "food" in entry:
         food = entry["food"]
-        body += '<section><h2>食用属性与食品标签</h2>' + profile_html(food)
+        body += '<section><h2>食用属性与食用标签</h2>' + profile_html(food)
         body += f'<p>烹饪分类：{h(food["sub_category"])} · 可用于烹饪：{"是" if food["cookable"] else "否"}</p></section>'
         related = []
         for dish in dishes:
@@ -272,11 +283,12 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
             art = item_art(product["name"], product.get("icon", ""), base, product,
                            is_dish=True, fixed=entry.get("portion_model", {}).get("mode") == "fixed", small=True)
             caption = "每次食用属性" if product.get("per_use_stats") else "配置参考属性"
-            body += f'<article class="quality">{art}<h3>{h(product["quality"])}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p><p>成品分类：{h(product["sub_category"])}</p><p class="portion-note">{caption}</p>' + profile_html(product) + '</article>'
+            quality = "优良" if product["quality"] == "良好" else product["quality"]
+            body += f'<article class="quality">{art}<h3>{h(quality)}品质</h3><p>{h(product["name"])} · ID:{product["id"]}</p><p>成品分类：{h(product["sub_category"])}</p><p class="portion-note">{caption}</p>' + profile_html(product) + '</article>'
         body += '</div></section>'
         threshold = entry.get("portion_model", {}).get("threshold")
         if threshold:
-            body += f'<p>分份标准：{h(threshold)} 饱食 / 次。可吃次数按整份总饱食除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
+            body += f'<p>分份标准：{h(threshold)} 饱腹 / 次。可吃次数按整份总饱腹除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
     if entry["highlights"]:
         heading = "完成条件与方法" if category == "achievements" else "制作要求与主要信息" if category in {"dish", "craft"} else "主要信息"
         body += f'<section><h2>{heading}</h2>' + fields_html(entry["highlights"]) + '</section>'

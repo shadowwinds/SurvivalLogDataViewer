@@ -60,6 +60,27 @@ button.tag:hover { background: #53472b; border-color: #ce9b3f; }
 .detail-art .icon-uses { font-size: 15px; left: 5px; bottom: 4px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .portion-note { color: #c1b9a2; font-size: 13px; }
+.ingredient-field { position: relative; }
+.ingredient-field summary { height: 46px; padding: 12px 14px; border: 1px solid #625b4b; border-radius: 3px; background: #22231f; cursor: pointer; color: #e7e0d1; font-size: 12px; }
+.ingredient-field details[open] summary { border-color: var(--amber); }
+.ingredient-menu { position: absolute; top: 100%; left: 0; width: max(100%, 320px); max-width: calc(100vw - 32px); padding: 12px; margin-top: 5px; z-index: 20; background: #22231f; border: 1px solid #93763b; box-shadow: 0 12px 30px #0009; }
+.ingredient-menu .input-wrap { display: block; margin-bottom: 8px; }
+.ingredient-menu input { height: 38px; }
+.ingredient-options { display: flex; flex-direction: column; max-height: min(280px, 42dvh); overflow-y: auto; scrollbar-color: #8a7751 #1d1e19; }
+.ingredient-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 8px; border: 0; border-bottom: 1px solid #514b3e; background: transparent; color: var(--ink); text-align: left; }
+.ingredient-option:hover, .ingredient-option:focus-visible { background: #51432a; }
+.ingredient-option small { color: #bfb298; font-size: 10px; white-space: nowrap; }
+.selected-materials { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 10px; }
+.material-chip { padding: 5px 9px; border: 1px solid #9d8050; border-radius: 3px; background: #393023; color: #f2d796; font-size: 11px; }
+.material-chip:hover { background: #56422b; }
+.material-help, .card-stat-caption { color: var(--muted); font-size: 10px; }
+.card-stat-caption { display: block; margin: 8px 0 4px; }
+.item-tag-line { color: #bdb49d; font-size: 12px; margin-top: 8px; }
+.food-facts { display: flex; flex-wrap: wrap; gap: 7px 16px; padding: 12px 0; margin-bottom: 12px; border-bottom: 1px solid var(--line); color: #c8bea5; font-size: 12px; }
+.tier-label { color: #e1bd70; font-size: 11px; font-weight: 500; }
+.secondary-stats { margin: 12px 0; color: var(--muted); font-size: 11px; }
+.secondary-stats summary { cursor: pointer; }
+.secondary-stats .highlights { margin-top: 8px; }
 .card-stats { border-color: #575440; }
 .card-stat { color: #c0b8a1; }
 .card-stat b, .stat-tile dd { color: #aacd7b; font-family: "Arial Narrow", "Microsoft YaHei", sans-serif; font-weight: 800; }

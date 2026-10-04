@@ -27,7 +27,7 @@ DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
           "recommendations.css", "recommendations.js")
-STAT_LABELS = ("饱食", "心态", "精力", "健康", "生命")
+STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 
 
@@ -44,22 +44,31 @@ def public_icon(asset_path: str) -> str:
     return f"./icons/{filename}" if source.is_file() and not source.is_symlink() else ""
 
 
-def food_profile(raw: dict[str, Any], tags: dict[int, str], groups: dict[int, str]) -> dict[str, Any]:
-    counts: dict[int, int] = {}
-    for field in ("FoodTag1", "FoodTag2", "FoodTag3"):
-        tag_id = raw.get(field, 0)
-        if tag_id:
-            counts[tag_id] = counts.get(tag_id, 0) + 1
+def ingredient_tier(raw: dict[str, Any], rules: dict[int, dict[str, Any]]) -> int | None:
+    rule = rules.get(raw.get("SubCategory"))
+    price = raw.get("price")
+    if not rule or not isinstance(price, (int, float)) or not math.isfinite(price):
+        return None
+    return 1 if price >= rule["high_threshold"] else 2 if price >= rule["mid_low_threshold"] else 3
+
+
+def food_profile(raw: dict[str, Any], tags: dict[str, dict[int, str]], groups: dict[int, str],
+                 rules: dict[int, dict[str, Any]] | None = None) -> dict[str, Any]:
     return {
         "stats": [{"field": f"ValueDisplay{index}", "label": label, "value": raw.get(f"ValueDisplay{index}")}
                   for index, label in enumerate(STAT_LABELS, 1)],
-        "tags": [{"id": tag_id, "name": tags.get(tag_id, f"ID:{tag_id}"), "count": count}
-                 for tag_id, count in counts.items()],
+        "tags": [{"id": raw[field], "field": field, "key": f"{field}:{raw[field]}",
+                  "name": tags.get(field, {}).get(raw[field], f"ID:{raw[field]}"), "count": 1}
+                 for field in ("FoodTag1", "FoodTag2") if raw.get(field)],
         "sub_category_id": raw.get("SubCategory", 0),
         "sub_category": groups.get(raw.get("SubCategory", 0), f"ID:{raw['SubCategory']}" if raw.get("SubCategory") else "未分类"),
         "cookable": raw.get("CanCook", False),
         "use_times": raw.get("UseTimes"),
         "can_use": not raw["CantUse"] if "CantUse" in raw else None,
+        "weight_grams": raw.get("weight"),
+        "size": raw.get("Size"),
+        "shelf_life_days": raw.get("Life"),
+        "tier": ingredient_tier(raw, rules or {}) if raw.get("CanCook") else None,
         "note": raw.get("ItemDes2_Local") or raw.get("ItemDes2") or "",
         "icon": public_icon(raw.get("Icon") or ""),
     }
@@ -109,12 +118,19 @@ def export_data(database_path: Path) -> dict[str, Any]:
             for category in CATEGORY_ORDER
         ]
         category_map = {category["id"]: category for category in categories}
-        tags = {row["row_id"]: row["name"] for row in connection.execute(
-            "SELECT row_id, name FROM auxiliary_rows WHERE table_name='Config_FoodType'")}
+        tags = {field: {row["row_id"]: row["name"] for row in connection.execute(
+            "SELECT row_id, name FROM auxiliary_rows WHERE table_name=?", (field,))}
+            for field in ("FoodTag1", "FoodTag2")}
         groups = {row["row_id"]: row["name"] for row in connection.execute(
             "SELECT row_id, name FROM auxiliary_rows WHERE table_name='Config_ItemSubCategory'")}
         items = {row["item_id"]: (row["name"], json.loads(row["raw_json"]))
                  for row in connection.execute("SELECT item_id, name, raw_json FROM recipe_items")}
+        rules = {row["sub_category"]: dict(row) for row in connection.execute(
+            "SELECT sub_category, high_threshold, mid_low_threshold FROM recipe_tier_rules")}
+        ingredients = [{"id": item_id, "name": name, "sub_category_id": raw.get("SubCategory", 0),
+                        "sub_category": groups.get(raw.get("SubCategory"), f"ID:{raw.get('SubCategory', 0)}"),
+                        "tier": ingredient_tier(raw, rules)}
+                       for item_id, (name, raw) in items.items() if raw.get("Category") == 1 and raw.get("CanCook") is True]
         memberships: dict[str, list[str]] = {}
         for row in connection.execute(
             """
@@ -171,8 +187,12 @@ def export_data(database_path: Path) -> dict[str, Any]:
                     "icon": public_icon(raw.get("Icon") or ""),
                 }
                 if category in {"food", "prey"}:
-                    entry["food"] = food_profile(raw, tags, groups)
+                    entry["food"] = food_profile(raw, tags, groups, rules)
                 elif category == "dish":
+                    entry["recipe"] = {"specific_items": raw.get("SpecificItems", []),
+                                       "tag_combo": raw.get("TagCombo", []), "tier": raw.get("Tier"),
+                                       "min_level": raw.get("MinLevel"), "show_level": raw.get("ShowLevel"),
+                                       "cook_time": raw.get("CookTime")}
                     fixed = (bool(raw.get("SpecificItems")) or
                              ("TagCombo" in raw and not raw["TagCombo"]) or
                              any(r["relation_type"] == "具体食材" for r in related))
@@ -217,7 +237,8 @@ def export_data(database_path: Path) -> dict[str, Any]:
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})
         recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
-        return {"format_version": 1, "metadata": metadata, "categories": categories, "recommendations": recommendations}
+        return {"format_version": 1, "metadata": metadata, "categories": categories,
+                "cooking_ingredients": ingredients, "recommendations": recommendations}
     finally:
         connection.close()
 

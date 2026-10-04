@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from codex_parser import (
     ConfigRow,
     ExtractionContext,
     render_dish_markdown,
+    parse_config_table,
     select_category_rows,
 )
 from codex_update import GameInstallation
@@ -175,6 +177,36 @@ class DishRenderingTests(unittest.TestCase):
         self.assertIn("Item 10（ID 10）", content)
         self.assertIn("Subcategory 2（ID 2）", content)
         self.assertIn("60 秒（1.0 分钟）", content)
+
+
+class CurrentConfigSchemaTests(unittest.TestCase):
+    @staticmethod
+    def constant_row(key: str, localized: str = "熟食") -> bytes:
+        def string(value: str) -> bytes:
+            raw = value.encode("utf-16-le")
+            return struct.pack("<i", len(raw) // 2) + raw
+        return b"\x03" + string(key) + string("") + string(localized)
+
+    def test_localization_string_ids_and_empty_text_are_preserved(self) -> None:
+        raw = struct.pack("<i", 1) + self.constant_row("FoodTag1_3")
+        rows = parse_config_table(raw, "Config_ConstantText")
+        self.assertEqual(rows[0].values, {"ID": "FoodTag1_3", "Text": "", "Text_Local": "熟食"})
+        self.assertEqual(parse_config_table(struct.pack("<i", 0), "Config_ConstantText"), [])
+        for invalid in (raw + b"x", raw[:-1], struct.pack("<i", 1) + b"\x04"):
+            with self.subTest(raw=invalid), self.assertRaises(ValueError):
+                parse_config_table(invalid, "Config_ConstantText")
+
+    def test_localization_rejects_empty_and_duplicate_string_keys(self) -> None:
+        for raw in (struct.pack("<i", 1) + self.constant_row(""),
+                    struct.pack("<i", 2) + self.constant_row("FoodTag1_3") * 2):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                parse_config_table(raw, "Config_ConstantText")
+
+    def test_changed_tables_reject_previous_member_counts(self) -> None:
+        for table, previous in (("Config_Item", 60), ("Config_PlantLv", 10),
+                                ("Config_Furniture", 57), ("Config_FurnitureTag", 5)):
+            with self.subTest(table=table), self.assertRaisesRegex(ValueError, table + ".*row 0.*member count"):
+                parse_config_table(struct.pack("<i", 1) + bytes([previous]), table)
 
 
 class AchievementSchemaTests(unittest.TestCase):

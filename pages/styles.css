@@ -103,7 +103,7 @@ button.tag:hover { border-color: #7e9e61; background: #e0ebd2; }
 .tag-count { font: 11px Georgia, serif; margin-left: 4px; color: #62734b; }
 .card-tags { min-height: 23px; margin-bottom: 12px; }
 .card-tag-label { align-self: center; color: var(--muted); font-size: 10px; margin-right: 3px; }
-.card-stats { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border-top: 1px solid #e5eadf; padding-top: 10px; gap: 4px; }
+.card-stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(48px,1fr)); border-top: 1px solid #e5eadf; padding-top: 10px; gap: 4px; }
 .card-stat { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--muted); }
 .card-stat b { font: 600 16px Georgia, serif; color: #396952; }
 .card-stat b.negative { color: #9a4830; }
@@ -130,7 +130,7 @@ button.tag:hover { border-color: #7e9e61; background: #e0ebd2; }
 .detail-id { color: var(--muted); font: 10px Georgia, serif; }
 .section-heading { font-size: 12px; font-weight: 600; margin: 0 0 13px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .section-heading span { color: var(--muted); font-size: 10px; font-weight: normal; }
-.stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 6px; margin: 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px,1fr)); gap: 6px; margin: 0; }
 .stat-tile { padding: 11px 4px 10px; border: 1px solid #e0e7d7; background: #f7faf1; border-radius: 8px; text-align: center; }
 .stat-tile dt { color: #62735b; font-size: 10px; }
 .stat-tile dd { margin: 5px 0 0; font: 600 22px Georgia, serif; color: #327256; }
@@ -238,7 +238,7 @@ a.relation-item:hover { border-color: #80a06b; background: #e6efdb; }
   .header-emblem svg { width: 42px; height: 42px; }
   .header-emblem span { display: none; }
   .search-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px 8px; }
-  #materialField { grid-row: 2; grid-column: 1; }
+  #materialField, #ingredientField { grid-row: 2; grid-column: 1; }
   #qualityField { grid-row: 2; grid-column: 2; }
   #resetSearch { grid-row: 1; grid-column: 2; padding: 0 14px; }
   .player-filters { padding: 13px 0; gap: 10px; }
@@ -258,7 +258,7 @@ a.relation-item:hover { border-color: #80a06b; background: #e6efdb; }
   .tag { font-size: 9px; padding: 2px 5px; }
   .card-stat { font-size: 10px; }
   .card-stat b { font-size: 14px; }
-  .card-stats { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px 4px; }
+  .card-stats { gap: 8px 4px; }
   .card-stat { align-items: center; }
   .entry-description { font-size: 10px; }
   .entry-card.active { box-shadow: none; border-color: #dce4d5; background: var(--surface); }

@@ -4,21 +4,23 @@
 
 `codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。
 
-在线版提供名称/ID、菜肴食材和制造/家具材料检索，并使用相对路径适配 Pages 项目子目录。食品展示 `ValueDisplay1..5` 的饱食、心态、精力、健康、生命值，名称顺序与[参考图鉴](https://github.com/AssassinLYB/STEAM-SurvivalLog-wiki)交叉核对，数值全部来自当前跟踪的静态库。负数和零值不省略，缺失属性显示为未提供。`FoodTag1..3` 经 `Config_FoodType` 解析并保留重复次数；`SubCategory` 单独经 `Config_ItemSubCategory` 解析，不用食品标签替代烹饪分类。
+在线版提供名称/ID、菜肴食材选择和制造/家具材料检索，并使用相对路径适配 Pages 项目子目录。食品展示 `ValueDisplay1..5` 的饱腹、心态、精力、健康、生命值，数值全部来自当前跟踪的静态库。默认只展示非零属性，负数保留，缺失属性显示未提供；详情可展开完整五项。物品信息同时展示配置重量、尺寸、使用次数和基础保质期，不将静态保质期冒充实例剩余时间或冷藏时间。
 
 菜肴通过 `PerfectItemID`、`GoodItemID`、`NormalItemID`、`FailItemID` 引用静态库 `recipe_items` 中的成品，按品质展示五维属性和 `ItemDes2_Local` 食用说明，不使用配方的 `SatietyStandard` 冒充食用效果。只导出被引用成品的属性、标签、分类、说明和图标，不发布 `recipe_items` 全集。页面支持标签/可烹饪/正属性筛选和属性降序；食品、菜肴和猎物默认按当前显示品质的每次饱食降序，重置恢复该默认值，其余分类保留图鉴顺序。菜肴“仅专用菜谱”只保留有具体食材关系的配方，查询多个食材时仍逐槽位匹配重复用量；未输入食材时显示所有专用配方。食材关联菜肴以具体物品 ID 或烹饪子分类识别，分类匹配仅表示可以占用该类槽位，不能据此声称完整组合必定能做出该菜肴；仍需满足其余食材、档位和特色配方优先规则。
 
-卡片明确标示物品分类和食品标签，菜肴详情展示对应品质成品的两项配置，不按名称或食材推断修改标签。当前跟踪库佛跳墙成品 `SubCategory=2` 对应“肉类”，`FoodTag1=3` 对应“蛋奶”，其他标签为 0；这两个字段不同，网页保留配置中的区别。
+只读核对当前游戏 `ItemDetailPopup.html`、IL2CPP 元数据和 `Config_ConstantText` 后，确认物品弹窗显示分类、子分类、`FoodTag1`（食用方式）与 `FoodTag2`（食物特点）。标签来自 `FoodTag1_n` / `FoodTag2_n` 的本地化文本，分别生成辅助表 `FoodTag1` / `FoodTag2`；相同数字不能跨字段合并。`FoodTag1=3` 是“熟食”，不是“蛋奶”；“蛋奶”来自食材分类表 `Config_FoodType`，旧网页错误地用该表解析食用标签。`FoodTag3` 保留原始 ID，不用于弹窗标签；未知标签显示 `ID:xxxx`。`SubCategory` 单独经 `Config_ItemSubCategory` 解析。网页展示“优良”，内部品质键仍保留 `良好` 以兼容现有数据。
 
-在线浏览将食品按 `CanCook` 分为烹饪食材（124）和即食食品（49）；这只是浏览分区，不修改原六类分类注册表、食品/猎物映射或数据库。旧 `#food/物品键` 链接会自动进入正确分区，既有 `/guide/food/ID/` 详情地址保留。`Config_Item.UseTimes` 用作食品每份的配置使用次数，`CantUse` 用于区别不可直接食用；缺失值显示未提供，不默认填 1。生态香米每份 7 次，90 压缩饼干每份 10 次。页面与静态详情采用游戏物品栏的深灰、暖棕与金黄视觉，次数统一以白色数字显示在物品图标左下角；这是整份可用总次数，不模拟库存剩余量。菜肴次数随品质切换，通用配方标为“可变”，未知配置标为“—”。各品质详情分别展示对应次数。
+菜肴的“我想用这些材料”支持搜索后选择实际食材或任意分类，重复添加按份数占用独立槽位；烹饪等级按 `MinLevel` 筛选可制作的配方。每种食材的档位复用本地 `Config_GlobalSetting` 的分类价格阈值，组合取参与计算食材中的最高档，可手动选择中档/高档保底。未选满时列出可补齐槽位与档位的候选，完整具体组合先匹配 `SpecificItems`，再匹配同档位 `TagCombo`，相同分类组合与档位使用最小配方 ID。茶树菇和白玉菇为低档，松茸为高档，灵芝为中档；灵芝参与的高档结果仍需其他高档食材或保底。野鸡新增专用配方“野鸡炖蘑菇”，指定野鸡与平菇。
+
+在线浏览将食品按 `CanCook` 分为烹饪食材（130）和即食食品（61）；这只是浏览分区，不修改原六类分类注册表、食品/猎物映射或数据库。旧 `#food/物品键` 链接会自动进入正确分区，既有 `/guide/food/ID/` 详情地址保留。`Config_Item.UseTimes` 用作食品每份的配置使用次数，`CantUse` 用于区别不可直接食用；缺失值显示未提供，不默认填 1。生态香米每份 7 次，90 压缩饼干每份 10 次。页面与静态详情采用游戏物品栏的深灰、暖棕与金黄视觉，次数统一以白色数字显示在物品图标左下角；这是整份可用总次数，不模拟库存剩余量。菜肴次数随品质切换，通用配方标为“可变”，未知配置标为“—”。各品质详情分别展示对应次数。
 
 菜肴成品的配置 `UseTimes` 不能直接当作实际可吃次数。只读核对当前 `1.1.18293` 的 IL2CPP v31 元数据与 native 方法确认：`ItemValueDisplayHelper.GetEffectiveMaxUseTimes` 优先使用实例 `MaxUseTimes`，否则回退配置 `UseTimes`；`SettleCookingResult` 将配方 `SatietyStandard` 传给 `CookingFormula.CalcSplit`。`CalcProductVD` 对固定食材配方取成品配置五项属性并分别向上取整；通用配方按参与食材、档位、品质与基础饱食奖励计算整份属性。`CalcSplit` 在总饱食超过正阈值时执行 float32 除法并向上取整，至少 1 份，之后按份数分摊五项属性。固定配方据此导出 `serving_count` 和 `per_use_stats`，同时保留原始 `stats`；佛跳墙完美/良好各 2 次，普通/失败各 1 次。通用配方不发布伪固定次数，显示配置参考属性、分份标准和总饱食计算入口。配置阈值或成品属性缺失时不猜测。
 
 无 `TagCombo` 条件的兜底菜肴在 `SettleCookingResult` 的兜底分支同样按 `isExact=true` 使用配置属性，按固定属性计算次数；字段本身缺失时不假定为兜底。正式数据的黑暗料理由此显示可吃 1 次，而不是伪标为随食材变化。
 
-本次只在隔离的内存 schema 中核对新版 `Config_Item`：元数据明确在 `UseAction` 前新增 `TradeSellRate: Single`，全表 61 字段及 EOF 校验通过；菜肴引用成品的 `UseTimes` 和配方分份阈值与跟踪库一致，少数成品属性已在新版变更。未修改正式解析器的 60 字段 schema，也未更新跟踪数据库或将临时 native/元数据导出物发布。网页按明示的静态库版本计算次数与每次属性，不混入新版部分数值。
+本次将正式解析器、七份导出和静态库统一更新至当前本地版本。新版元数据确认 `Config_Item` 在 `UseAction` 前增加 `TradeSellRate: Single`（61 字段）；`Config_PlantLv` 末尾增加 `unlock_recipes: List<int>`（11 字段）；`Config_Furniture` 末尾增加 `BagAcceptCategory`、`RobotPlayerID`（59 字段）；`Config_FurnitureTag` 增加排序、维度及说明字段（10 字段）。`Config_ConstantText` 按三个字符串字段严格读取，验证非空唯一键和 EOF，仅提取食用标签进入导出，不公开完整常量表。所有配置保留对象成员数量与 EOF 校验，不静默兼容未知 schema。
 
-`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理公开图鉴条目及其菜肴产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标来自本机游戏 `1.1.18293 / catalog 2.3.1`，图鉴数值仍使用静态库记录版本，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
+`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理公开图鉴条目及其菜肴产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
 
 `codex_pages_seo.py` 从同一公开导出数据生成独立 HTML 详情。导航统一进入首页查询图鉴和补给推荐；旧 `/guide/` 和分类目录地址仅保留自动跳转到首页或对应查询分类的兼容页面，标为 `noindex,follow`，不再生成另一套目录列表。属性、标签、各品质效果、材料关联及成就说明直接存在于独立详情 HTML，不依赖 JavaScript 抓取；首页禁用 JavaScript 时在原页面提供可展开的条目链接。食品与猎物共享条目只生成首个分类下的详情地址，其他分类链接到该页。各页包含独立标题、描述、canonical、Open Graph / Twitter 信息和 WebPage / CollectionPage / BreadcrumbList JSON-LD；游戏菜肴不使用现实食谱的 Recipe 类型。`sitemap.xml` 仅列出首页、补给推荐及独立详情的完整网址，不收录兼容跳转页，不包含交互图鉴的 hash 状态，不虚构更新时间。
 
@@ -34,7 +36,7 @@
 
 阶段按 `MinLevel ≤ 1/2/3` 对应前中后期，默认包含之前等级，品质仅作为普通/良好/完美情景。固定菜肴评分权重为饱食/摊销价 50%、饱食/烹饪小时 20%、饱食增量/摊销价 15%、辅助恢复/摊销价 15%；即食囤货为饱食/基价 50%、保质 25%、饱食/背包格 15%、辅助恢复/基价 10%；烹饪备料为单次用量价格优势 35%、保质 25%、当前阶段可计分固定配方覆盖 25%、最佳关联菜肴指数 15%。辅助恢复权重依次为心态 1、精力 0.5、健康 1、生命 0.5；负面恢复额外按 2/1/3/2 加权除以总饱食扣分，最高 30。各项按同类、同阶段、同品质有效候选的中位并列百分位转成相对分；单一候选为 50，全部非负指标的零收益为 0，搜索和排序不改变评分池。综合分在 0—100 内，表示本站比较模型，不是成功概率。
 
-植物 `Gain` 重复 ID 计普通基础数量，每物品乘 `UseTimes` 得到可选的原始食用饱食或烹饪用量，二者不相加。按 `GrowthTime/86400 × Size` 归一化，评分为单位尺寸每日基础饱食 40%、烹饪用量 35%、当前阶段固定配方覆盖 25%；不推断实际设施容量，不计完美收获、返种、种植等级和设施加成，不从 `HarvestTime` 猜测无限重复收获。返种配置概率仅作明细。当前跟踪库在普通品质下可计分即食 34；前/中/后期备料 74/108/116、固定菜肴 82/238/378；食物类基础收获作物 28。配置价格、基础属性与静态库版本一致，不模拟商店库存、角色、额外效果、饱食溢出、燃料和行动成本。
+植物 `Gain` 重复 ID 计普通基础数量，每物品乘 `UseTimes` 得到可选的原始食用饱食或烹饪用量，二者不相加。按 `GrowthTime/86400 × Size` 归一化，评分为单位尺寸每日基础饱食 40%、烹饪用量 35%、当前阶段固定配方覆盖 25%；不推断实际设施容量，不计完美收获、返种、种植等级和设施加成，不从 `HarvestTime` 猜测无限重复收获。返种配置概率仅作明细。当前跟踪库在普通品质下可计分即食 46；前/中/后期备料 82/115/121、固定菜肴 93/256/405；食物类基础收获作物 29。配置价格、基础属性与静态库版本一致，不模拟商店库存、角色、额外效果、饱食溢出、燃料和行动成本。
 
 ## 成就模块（当前实现）
 
@@ -48,7 +50,7 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机 `HistorySave.bytes` 中的图鉴完成状态。不启动游戏，不修改存档、mod DLL、游戏资源或 Steam Cloud。
 
-当前本地游戏资源版本为 `1.0.15704`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
+当前本地游戏资源版本为 `1.1.18293`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -58,7 +60,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前版本主图鉴配置总量为：食品 173、菜肴 493、植物 38、猎物 19、制造 148、家具 1249。严格按展示规则导出的数量为：食品 173、菜肴 493、植物 34、猎物 19、制造 124、家具 87，六类分类映射合计 `930`；当前 `Config_Achievement` 读取 93 行、21 个字段。前一组是原始配置总量，后一组是 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数，不能混用。
+当前原始主配置表数量为：`Config_Item` 3857、`Config_CookingRecipe` 524、`Config_Plant` 42、`Config_ProductionList` 820、`Config_Furniture` 1556。严格按展示规则导出的数量为：食品 191、菜肴 524、植物 38、猎物 23、制造 163、家具 110，六类分类映射合计 `1049`，去重条目 `1026`；辅助配置 `591` 行。当前 `Config_Achievement` 读取 93 行、21 个字段；静态库刷新保留原有人工成就说明。原始配置总量与 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数不能混用。
 
 ## 2. 游戏图鉴和存档
 
@@ -116,18 +118,18 @@
 
 食品和猎物使用当前游戏 Codex 字段，两个分类允许重叠：
 
-- 食品：`Config_Item.InCodex == true && Category == 1`，当前展示 173 条。
-- 猎物：`Config_Item.InCodex == true && Prey_Rarity > 0`，当前展示 19 条。
-- 菜肴：当前 `Config_CookingRecipe` 的全部 493 条配置（该表没有 `InCodex` 字段）。
-- 植物：`Config_Plant.InCodex == true`，当前展示 34 条。
-- 制造：`Config_ProductionList.InCodex == true`，当前展示 124 条。
-- 家具：`Config_Furniture.InCodex == true`，当前展示 87 条。
+- 食品：`Config_Item.InCodex == true && Category == 1`。
+- 猎物：`Config_Item.InCodex == true && Prey_Rarity > 0`。
+- 菜肴：当前 `Config_CookingRecipe` 的全部配置（该表没有 `InCodex` 字段）。
+- 植物：`Config_Plant.InCodex == true`。
+- 制造：`Config_ProductionList.InCodex == true`。
+- 家具：`Config_Furniture.InCodex == true`。
 
 因此，猎物物品可以同时出现在食品和猎物 Markdown 中；数据库只保存一份完成状态，并通过分类映射分别计数。主 Markdown 只展开主表条目，物品子分类、食品标签、植物等级、制造等级和家具辅助表集中写入 `survival_log_auxiliary.md`。
 
 | 输出 | 主表 | 主要关联表 |
 | --- | --- | --- |
-| 食品 | `Config_Item` | `Config_ItemSubCategory`、`Config_FoodType` |
+| 食品 | `Config_Item` | `Config_ItemSubCategory`、`FoodTag1`、`FoodTag2` |
 | 菜肴 | `Config_CookingRecipe` | `Config_Item`、`Config_ItemSubCategory` |
 | 植物 | `Config_Plant` | `Config_PlantLv`、`Config_Item` |
 | 猎物 | `Config_Item` | 猎物字段位于物品表中 |

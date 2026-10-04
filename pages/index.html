@@ -33,17 +33,21 @@
       <main class="main-content">
         <header class="page-header">
           <div><div class="eyebrow">SURVIVAL LOG / FIELD GUIDE</div><h1 id="categoryTitle">烹饪食材</h1><p id="categoryIntro">看属性、查标签，掌握每份食材的可用次数。</p></div>
-          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>配方按烹饪分类或指定食材匹配，食品标签按游戏配置展示。品质影响食用效果。</p></details></div>
+          <div class="header-actions"><a class="supply-link" href="./recommendations/">生存补给计划 →</a><details class="page-help"><summary>浏览提示</summary><p>选择食材查配方；同种食材可重复添加。完整组合按食材档位匹配，专用配方优先。品质影响效果；技能与状态的档位保底另行选择。</p></details></div>
         </header>
         <div class="query-tools">
         <form id="searchForm" class="search-toolbar" role="search">
           <label class="search-field"><span id="searchLabel">找食材</span><div class="input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="nameSearch" type="search" placeholder="搜索名称、标签或效果说明" autocomplete="off" disabled><kbd aria-hidden="true">/</kbd></div></label>
-          <label class="search-field" id="materialField" hidden><span>我想用这些材料</span><div class="input-wrap"><input id="materialSearch" type="search" placeholder="例如：松茸、鸡蛋" autocomplete="off" disabled></div></label>
-          <label class="select-field" id="qualityField" hidden><span>成品品质</span><select id="qualitySelect"><option value="普通">普通</option><option value="良好">良好</option><option value="完美">完美</option><option value="失败">失败</option></select></label>
+          <label class="search-field" id="materialField" hidden><span>材料名称</span><div class="input-wrap"><input id="materialSearch" type="search" placeholder="材料名称或 ID" autocomplete="off" disabled></div></label>
+          <div class="search-field ingredient-field" id="ingredientField" hidden><span>我想用这些材料</span><details id="ingredientPicker"><summary id="ingredientSummary">选择食材或分类</summary><div class="ingredient-menu"><label class="input-wrap"><input id="ingredientSearch" type="search" aria-label="搜索可选食材" placeholder="搜索食材名称或 ID" autocomplete="off" disabled></label><div id="ingredientOptions" class="ingredient-options" role="group" aria-label="可选食材"></div></div></details></div>
+          <label class="select-field" id="qualityField" hidden><span>成品品质</span><select id="qualitySelect"><option value="普通">普通</option><option value="良好">优良</option><option value="完美">完美</option><option value="失败">失败</option></select></label>
           <button class="reset-button" id="resetSearch" type="button" disabled>重置</button>
         </form>
+        <div id="selectedMaterials" class="selected-materials" role="group" aria-label="已选材料" hidden></div>
         <div id="playerFilters" class="player-filters">
-          <label id="tagField" class="filter-select"><span>食品标签</span><select id="tagSelect" aria-label="食品标签"><option value="">全部标签</option></select></label>
+          <label id="tagField" class="filter-select"><span>食用标签</span><select id="tagSelect" aria-label="食用标签"><option value="">全部标签</option></select></label>
+          <label id="cookingLevelField" class="filter-select" hidden><span>我的烹饪等级</span><select id="cookingLevelSelect" aria-label="我的烹饪等级"><option value="">不限等级</option></select></label>
+          <label id="tierFloorField" class="filter-select" hidden><span>食材档位保底</span><select id="tierFloorSelect" aria-label="食材档位保底"><option value="0">无保底</option><option value="2">至少中档</option><option value="3">至少高档</option></select></label>
           <div id="effectFilters" class="effect-filters" role="group" aria-label="按属性增益筛选"></div>
           <label id="cookableField" class="check-filter"><input id="cookableOnly" type="checkbox">只看可烹饪</label>
           <label id="specificRecipeField" class="check-filter" hidden title="只显示明确指定所查食材的配方，排除仅按食材分类匹配的通用配方；未填写食材时显示全部专用菜谱。"><input id="specificRecipesOnly" type="checkbox">仅专用菜谱</label>

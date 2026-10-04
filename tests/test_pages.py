@@ -102,7 +102,8 @@ class PagesExportTests(unittest.TestCase):
             connection.execute("INSERT INTO completion VALUES ('PRIVATE_PLAYER_STATE')")
             connection.executemany(
                 "INSERT INTO auxiliary_rows VALUES (?, ?, ?, ?)",
-                [("Config_FoodType", 4, "鱼类", "{}"), ("Config_ItemSubCategory", 11, "菌菇", "{}")],
+                [("Config_FoodType", 4, "鱼类", "{}"), ("Config_ItemSubCategory", 11, "菌菇", "{}"),
+                 ("FoodTag1", 4, "生食材", "{}"), ("FoodTag2", 4, "绿色食品", "{}")],
             )
             connection.execute(
                 "INSERT INTO codex_entries VALUES (?, 'Config_CookingRecipe', 10, '测试料理', '', '', '', ?, 1)",
@@ -146,12 +147,15 @@ class PagesExportTests(unittest.TestCase):
         self.assertIn('href="./styles.css"', (output / "index.html").read_text(encoding="utf-8"))
         self.assertEqual(json.loads((output / "data.json").read_text(encoding="utf-8"))["format_version"], 1)
 
-    def test_food_stats_preserve_negative_zero_missing_and_repeated_tags(self) -> None:
+    def test_food_stats_preserve_negative_zero_missing_and_separate_tag_namespaces(self) -> None:
         categories = {item["id"]: item for item in export_data(self.database)["categories"]}
         food = categories["food"]["entries"][0]["food"]
         self.assertEqual([stat["value"] for stat in food["stats"]], [8, -4, 0, None, None])
-        self.assertEqual([stat["label"] for stat in food["stats"]], ["饱食", "心态", "精力", "健康", "生命"])
-        self.assertEqual(food["tags"], [{"id": 4, "name": "鱼类", "count": 2}, {"id": 99, "name": "ID:99", "count": 1}])
+        self.assertEqual([stat["label"] for stat in food["stats"]], ["饱腹", "心态", "精力", "健康", "生命"])
+        self.assertEqual(food["tags"], [
+            {"id": 4, "field": "FoodTag1", "key": "FoodTag1:4", "name": "生食材", "count": 1},
+            {"id": 4, "field": "FoodTag2", "key": "FoodTag2:4", "name": "绿色食品", "count": 1},
+        ])
         self.assertEqual(food["sub_category"], "菌菇")
         self.assertTrue(food["cookable"])
 
@@ -163,6 +167,26 @@ class PagesExportTests(unittest.TestCase):
         self.assertEqual(products[3]["name"], "ID:104")
         self.assertEqual(products[0]["note"], "食用说明")
         self.assertNotIn("PRIVATE_", json.dumps(products))
+
+    def test_ingredient_export_uses_tier_rules_without_requiring_codex_membership(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("INSERT INTO recipe_tier_rules VALUES (11, '菌菇', 15, 6, '', '')")
+            for item_id, price, expected in ((201, 5, 3), (202, 6, 2), (203, 15, 1)):
+                raw = {"ID": item_id, "Category": 1, "SubCategory": 11, "CanCook": True,
+                       "InCodex": False, "price": price, "private": "PRIVATE_UNUSED_FIELD"}
+                connection.execute("INSERT INTO recipe_items VALUES (?, ?, 1, 1, 11, '菌菇', 0, ?)",
+                                   (item_id, f"菌菇{expected}", json.dumps(raw)))
+        ingredients = export_data(self.database)["cooking_ingredients"]
+        self.assertEqual([(item["id"], item["tier"]) for item in ingredients], [(201, 3), (202, 2), (203, 1)])
+        self.assertNotIn("PRIVATE_", json.dumps(ingredients))
+
+    def test_unknown_food_tags_keep_id_and_do_not_resolve_through_food_type(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("UPDATE codex_entries SET raw_json=? WHERE source_id=1",
+                               (json.dumps({"ID": 1, "FoodTag1": 99, "FoodTag2": 0, "FoodTag3": 4}),))
+        food = next(c for c in export_data(self.database)["categories"] if c["id"] == "food")["entries"][0]["food"]
+        self.assertEqual(food["tags"][0]["name"], "ID:99")
+        self.assertEqual(len(food["tags"]), 1)
 
     def test_schema_change_fails_before_writing_output(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection, connection:
@@ -209,10 +233,10 @@ class PagesExportTests(unittest.TestCase):
         output = self.root / "output"
         build_pages(self.database, output)
         food = " ".join(PageHTML((output / "guide/food/1/index.html").read_text(encoding="utf-8")).text)
-        for value in ("+8", "-4", "0", "未提供", "鱼类 ×2", "ID:99", "菌菇", "可用于烹饪：是", "ID:99999"):
+        for value in ("+8", "-4", "0", "未提供", "生食材", "绿色食品", "菌菇", "可用于烹饪：是", "ID:99999"):
             self.assertIn(value, food)
         dish = " ".join(PageHTML((output / "guide/dish/10/index.html").read_text(encoding="utf-8")).text)
-        for value in ("完美品质", "良好品质", "普通品质", "失败品质", "+60", "+50", "+40", "ID:104", "食用说明", "未提供"):
+        for value in ("完美品质", "优良品质", "普通品质", "失败品质", "+60", "+50", "+40", "ID:104", "食用说明", "未提供"):
             self.assertIn(value, dish)
         self.assertNotIn('<script src=', (output / "guide/dish/10/index.html").read_text(encoding="utf-8"))
 
