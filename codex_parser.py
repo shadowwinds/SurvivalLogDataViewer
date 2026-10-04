@@ -291,6 +291,14 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("SatietyStandard", "i32"), ("CookExp", "i32"), ("ShowLevel", "i32"),
         ("CraftLevel", "i32"), ("DiscoveryExp", "i32"),
     ),
+    "Config_Action": (
+        ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("NameDoing", "str"),
+        ("NameDoing_Local", "str"), ("WebIcon", "str"), ("ActionType", "i32"),
+        ("IsStop", "bool"), ("IsFast", "bool"), ("IsMoving", "bool"), ("During", "f32"),
+        ("ShowMomentName", "bool"), ("AttributeHold", "list_i32"), ("FmodPath", "str"),
+        ("ShowConfigID", "i32"), ("VFX", "str"), ("VFXPos", "list_f32"),
+        ("StartSetState", "str"), ("EndSetState", "str"), ("EffectConfigID", "i32"),
+    ),
     "Config_Plant": (
         ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("Des", "str"),
         ("Des_Local", "str"), ("Modle1", "str"), ("Modle2", "str"), ("Modle3", "str"),

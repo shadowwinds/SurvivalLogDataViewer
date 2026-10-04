@@ -55,7 +55,7 @@
     return b.total[goal] - a.total[goal] || b.total[0] - a.total[0] ||
       (a.cost ?? Infinity) - (b.cost ?? Infinity) || key(a.ingredients.map(item => item.id)).localeCompare(key(b.ingredients.map(item => item.id)), "en");
   }
-  function plan(entries, ingredients, stock, quality, goal, floor, model) {
+  function plan(entries, ingredients, stock, quality, goal, floor, model, options = {}) {
     const available = ingredients.filter(item => stock[item.id] > 0);
     const byId = new Map(available.map(item => [item.id, item]));
     const specifics = new Map(), generics = new Map(), results = new Map();
@@ -78,7 +78,7 @@
         for (const id of recipe.specific_items) required.set(id, (required.get(id) || 0) + 1);
         if ([...required].some(([id, count]) => !byId.has(id) || stock[id] < count)) continue;
         const result = forecast(entry, recipe.specific_items.map(id => byId.get(id)), quality, model);
-        if (result) results.set(entry.key, result);
+        if (result && (!options.score || Number.isFinite(options.score(result.total, result.ingredients, entry, result.product)))) results.set(entry.key, result);
         continue;
       }
       if (!recipe.tag_combo?.length || generics.get(key(recipe.tag_combo) + ":" + recipe.tier) !== entry.id) continue;
@@ -89,17 +89,21 @@
       const candidates = slots.map(group => available.filter(item => item.sub_category_id === group &&
         (effectiveTier(item.tier, floor) === null || effectiveTier(item.tier, floor) >= recipe.tier)).sort((a, b) => a.id - b.id));
       if (candidates.some(items => !items.length)) continue;
-      let best = null;
+      let best = null, bestScore = -Infinity;
       const chosen = [], used = new Map();
       const visit = (index, resolvedTier) => {
         if (index === slots.length) {
           if (resolvedTier !== recipe.tier) return;
           const total = calculateTotal(entry, chosen, product, model, base);
-          if (!total || (best && (total[goal] < best.total[goal] ||
+          if (!total || (!options.score && best && (total[goal] < best.total[goal] ||
             (total[goal] === best.total[goal] && total[0] < best.total[0])))) return;
           if (specifics.has(key(chosen.map(item => item.id)))) return;
+          const candidateScore = options.score ? options.score(total, chosen, entry, product) : 0;
+          if (!Number.isFinite(candidateScore) || candidateScore < bestScore) return;
           const result = makeForecast(entry, chosen.slice(), product, total, model);
-          if (result && (!best || compare(result, best, goal) < 0)) best = result;
+          if (result && (!best || candidateScore > bestScore || compare(result, best, goal) < 0)) {
+            best = result; bestScore = candidateScore;
+          }
           return;
         }
         for (const item of candidates[index]) {

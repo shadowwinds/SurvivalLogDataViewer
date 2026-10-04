@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "game_version": "1.1.18293 / catalog 2.3.1",
+  "actions": {
+    "sow": {
+      "id": 1611,
+      "seconds": 900.0
+    },
+    "harvest": {
+      "id": 1617,
+      "seconds": 300.0
+    },
+    "pest": {
+      "id": 1613,
+      "seconds": 300.0
+    },
+    "weed": {
+      "id": 1614,
+      "seconds": 300.0
+    },
+    "water": {
+      "id": 1615,
+      "seconds": 300.0
+    }
+  },
+  "anomaly_interval_seconds": 86400,
+  "special_plants": [
+    39
+  ],
+  "morale_base": 50,
+  "morale_per_point": 5
+}

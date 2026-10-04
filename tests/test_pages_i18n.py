@@ -71,6 +71,9 @@ async function setup(query, saved, browser, disabled = false, failed = false) {
     'Weather light 1 × Area multiplier 0.5 + Planter light 0 = 0.5; Weather cold 3 − Area insulation 1 − Heating 2 − Planter heat 0 → 0');
   assert.equal(state.i18n.text('3 个可计分候选 · 0 个暂不计分候选 · 搜索“matsutake”'),
     '3 rated candidates · 0 unrated candidates · Search: “matsutake”');
+  assert.equal(state.i18n.text('扣除心态上限溢出后，实际补心态 {gain}', {gain: 5}),
+    'Usable morale after applying the cap: 5');
+  assert.equal(state.i18n.text('种植等级'), 'Planting skill level');
   assert.equal(state.i18n.text('中期 · 烹饪 Lv.2 · 完美品质情景。中后期包含此前等级配方；指数只在同类、同阶段候选中比较。'),
     'Mid game · Cooking Lv.2 · Perfect quality scenario. Later stages include earlier recipes. Scores compare the same type and stage.');
   state.i18n.setLanguage('zh-CN');

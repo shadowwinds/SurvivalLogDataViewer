@@ -27,7 +27,7 @@ SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -276,6 +276,20 @@ def export_data(database_path: Path) -> dict[str, Any]:
         if cooking_model["format_version"] != 1 or cooking_model["game_version"] != metadata.get("game_version"):
             cooking_model = None
         recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
+        supply_model = json.loads((SOURCE_DIR / "supply-model.json").read_text(encoding="utf-8"))
+        if supply_model["format_version"] != 1 or supply_model["game_version"] != metadata.get("game_version"):
+            supply_model = None
+        plant_levels = [json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT raw_json FROM auxiliary_rows WHERE table_name='Config_PlantLv' ORDER BY row_id")]
+        recommendations["cooking"] = {"ingredients": ingredients, "model": cooking_model,
+            "entries": [{field: entry[field] for field in ("id", "key", "recipe", "portion_model", "products")}
+                        for category in categories if category["id"] == "dish" for entry in category["entries"]]}
+        recommendations["supply_model"] = supply_model
+        recommendations["planters"] = [{**planter, **{public: planter_configs[planter["config_id"]].get(raw)
+            for public, raw in (("growth_bonus", "GrowthFaster"), ("pest_control", "PestControl"),
+                               ("weed_control", "WeedControl"), ("water_control", "DryControl"))}} for planter in planters]
+        recommendations["plant_levels"] = [{"level": raw.get("Lv"), "growth_bonus": raw.get("growth_speed_bonus"),
+            "anomaly_reduction": raw.get("pest_rate_reduction")} for raw in plant_levels]
         return {"format_version": 1, "metadata": metadata, "categories": categories,
                 "cooking_ingredients": ingredients, "cooking_model": cooking_model, "planters": planters, "planting_environment": environment,
                 "recommendations": recommendations}
