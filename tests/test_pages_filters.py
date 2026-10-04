@@ -21,6 +21,7 @@ const get = id => {
 const sandbox = {document: {getElementById: get, addEventListener() {}}, window: {addEventListener() {}},
   matchMedia: () => ({matches: false, addEventListener() {}}), setTimeout, clearTimeout};
 const source = fs.readFileSync(process.argv[1], 'utf8');
+vm.runInNewContext(fs.readFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]), 'planting.js'), 'utf8'), sandbox);
 vm.runInNewContext(source.replace(/  load\(\);\s*\}\)\(\);\s*$/, '  globalThis.api = {state, matchesSelectedMaterials, filteredEntries};\n})();'), sandbox);
 const {state, matchesSelectedMaterials: matches, filteredEntries: filtered} = sandbox.api;
 state.category = 'dish';
@@ -92,6 +93,7 @@ get('renewableOnly').checked = false;
 assert.deepEqual(Array.from(filtered(), e => e.id), [10, 11, 12, 13]);
 get('renewableOnly').checked = true; // Hidden source filter must not affect other categories.
 state.category = 'plant';
+get('plantOnlySuitable').checked = true;
 const plant = (id, size, light, cold) => ({id, nameIndex: '', materialIndex: '',
   plant: {size, light_need: light, cold_resistance: cold}});
 state.categories.push({id: 'plant', entries: [plant(20, 1, 0, 0), plant(21, 1, 1, 2),

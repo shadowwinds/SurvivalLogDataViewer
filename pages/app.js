@@ -5,7 +5,7 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [] };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [], plantingEnvironment: null };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
@@ -15,7 +15,7 @@
     food: "看属性、查标签，掌握每份食材的可用次数。",
     "ready-food": "不用于烹饪的食品与饮品，直接查看食用次数与效果。",
     dish: "先看吃完的效果，再决定今天做什么。",
-    plant: "了解生长条件，把收获留给下一餐。",
+    plant: "选天气、位置与供暖，查现在能种什么。",
     prey: "查找猎物的属性与获取信息。",
     craft: "材料与产物，一次查清。",
     furniture: "从生活设施到生存据点。",
@@ -377,6 +377,9 @@
     const isDish = state.category === "dish";
     $("categoryTitle").textContent = titles[state.category];
     $("categoryIntro").textContent = intros[state.category];
+    $("pageHelp").querySelector("p").textContent = state.category === "plant" ?
+      "选择当前天气、寒潮强度、种植位置与正在运行的供暖设备。勾选只看当前可种；取消后可查看光照、寒冷或空间不满足的原因。默认食用作物优先，再按基础收获时间排列。" :
+      "选择食材查配方；同种食材可重复添加。完整组合按食材档位匹配，专用配方优先。品质影响效果；技能与状态的档位保底另行选择。";
     $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
     $("materialField").hidden = !["craft", "furniture"].includes(state.category);
@@ -430,15 +433,20 @@
       option.value = "ValueDisplay" + (index + 1);
       sorts.push(option);
     });
+    if (state.category === "plant") for (const [value, label] of [["plant-food", "食用优先 · 收获最快"],
+        ["plant-growth", "基础收获最快"], ["plant-space", "占用空间最少"], ["plant-cold", "耐寒最高优先"], ["plant-light", "光照需求最低"]]) {
+      const option = node("option", "", label); option.value = value; sorts.push(option);
+    }
     $("sortSelect").replaceChildren(...sorts);
     $("sortSelect").value = defaultSort();
   }
 
   function defaultSort() {
+    if (state.category === "plant") return "plant-food";
     return ["food", "ready-food", "dish", "prey"].includes(state.category) ? "ValueDisplay1" : "default";
   }
 
-  function clearFilters() {
+  function clearFilters(resetPlanting = false) {
     clearTimeout(state.debounce);
     $("nameSearch").value = "";
     $("materialSearch").value = "";
@@ -447,10 +455,13 @@
     $("ingredientTierSelect").value = "";
     state.group = "";
     state.tier = "";
-    $("planterSelect").value = "";
-    $("planterPower").value = "on";
-    $("plantLight").value = "";
-    $("plantCold").value = "";
+    if (resetPlanting) {
+      for (const [id, value] of Object.entries({planterSelect: "", planterPower: "on", plantLight: "", plantCold: "",
+          plantWeather: "sunny", plantColdWave: "0", plantLocation: "first", plantHeating: "none"})) $(id).value = value;
+      $("plantManual").checked = false;
+      $("plantOnlySuitable").checked = true;
+      savePlantingChoices();
+    }
     $("ingredientPicker").open = false;
     $("cookingLevelSelect").value = "";
     $("tierFloorSelect").value = "0";
@@ -472,34 +483,54 @@
       if (input.value === "") return null;
       return input.validity?.valid === false ? NaN : Number(input.value);
     };
-    const light = read("plantLight"), cold = read("plantCold");
-    const powered = planter?.needs_power && $("planterPower").value === "on";
-    const lightBonus = (planter?.light_bonus || 0) + (powered ? planter.electric_light || 0 : 0);
-    const heatBonus = (planter?.heat_bonus || 0) + (powered ? planter.electric_heat || 0 : 0);
-    return {planter, light: light === null ? null : light + lightBonus,
-      cold: cold === null ? null : cold - heatBonus,
-      valid: (light === null || (Number.isFinite(light) && light >= 0)) && (cold === null || Number.isFinite(cold))};
+    const heating = $("plantHeating").value;
+    return window.Planting.conditions(state.plantingEnvironment, {
+      weather: $("plantWeather").value, cold_wave: $("plantColdWave").value, location: $("plantLocation").value,
+      ac: ["ac", "both"].includes(heating), stove: ["stove", "both"].includes(heating), power: $("planterPower").value,
+    }, planter, $("plantManual").checked || !state.plantingEnvironment ? {light: read("plantLight"), cold: read("plantCold")} : null);
   }
 
   function matchesPlanting(entry, conditions) {
-    const plant = entry.plant;
-    if (!conditions.valid) return false;
-    if (conditions.planter && (!Number.isFinite(plant?.size) || plant.size <= 0 ||
-        !Number.isFinite(conditions.planter.capacity) || plant.size > conditions.planter.capacity)) return false;
-    if (conditions.light !== null && (!Number.isFinite(plant?.light_need) || conditions.light < plant.light_need)) return false;
-    if (conditions.cold !== null && (!Number.isFinite(plant?.cold_resistance) || conditions.cold > plant.cold_resistance)) return false;
-    return true;
+    return window.Planting.problems(entry, conditions).length === 0;
+  }
+
+  const plantingChoiceIds = ["plantWeather", "plantColdWave", "plantLocation", "plantHeating", "planterSelect", "planterPower", "plantOnlySuitable", "plantManual", "plantLight", "plantCold"];
+  function savePlantingChoices() {
+    try { localStorage.setItem("survival-log-planting-v1", JSON.stringify(Object.fromEntries(plantingChoiceIds.map(id =>
+      [id, $(id).type === "checkbox" ? $(id).checked : $(id).value])))); } catch { /* Preferences are optional. */ }
+  }
+  function restorePlantingChoices() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("survival-log-planting-v1") || "{}");
+      for (const id of plantingChoiceIds) {
+        const input = $(id), value = saved[id];
+        if (input.type === "checkbox" && typeof value === "boolean") input.checked = value;
+        else if (typeof value === "string" && (input.tagName !== "SELECT" || [...input.options].some(option => option.value === value))) input.value = value;
+      }
+    } catch { /* Ignore corrupt or unavailable storage. */ }
   }
 
   function renderPlantingConditions() {
     if (state.category !== "plant") return;
     const conditions = plantingConditions();
     $("planterPower").disabled = !conditions.planter?.needs_power;
+    const manual = $("plantManual").checked || !state.plantingEnvironment;
+    $("plantManualControls").hidden = !manual;
+    for (const select of $("plantScenarioControls").querySelectorAll("select")) select.disabled = manual;
+    $("plantHeating").disabled = manual || conditions.location?.device_heat === false;
     const captions = [];
+    if (conditions.scenario) captions.push(conditions.scenario.name + " · " + conditions.location.name);
     if (conditions.planter) captions.push("容器容量 " + conditions.planter.capacity);
     if (conditions.light !== null) captions.push("有效光照 " + number(conditions.light));
     if (conditions.cold !== null) captions.push("有效寒冷 " + number(conditions.cold));
     $("plantingSummary").textContent = !conditions.valid ? "请输入有效的环境数值" : captions.join(" · ") || "选择容器或环境值，筛选可种植物";
+    if (!conditions.planter) $("plantingSummary").append(document.createTextNode(" · "), node("span", "planting-unchecked", "未选容器，尚未核对空间"));
+    $("plantEnvironmentBreakdown").textContent = conditions.scenario ?
+      "天气光照 " + number(conditions.scenario.light) + " × 区域系数 " + number(conditions.parameters.light_multiplier) +
+      " + 容器补光 " + number(conditions.lightBonus) + " = " + number(conditions.light) + "；天气寒冷 " +
+      number(conditions.scenario.cold) + " − 区域保温 " + number(conditions.parameters.heat) + " − 设备供暖 " +
+      number(conditions.deviceHeat) + " − 容器加热 " + number(conditions.heatBonus) + " → " + number(conditions.cold) :
+      state.plantingEnvironment ? "已使用手动环境值" : "环境预设版本不匹配，请手动填写环境值";
     $("planterLink").hidden = !conditions.planter;
     if (conditions.planter) $("planterLink").href = urlFor("furniture", conditions.planter.key);
   }
@@ -517,7 +548,7 @@
     const level = $("cookingLevelSelect").value;
     const planting = state.category === "plant" ? plantingConditions() : null;
     const entries = category().entries.filter((entry) =>
-      (!planting || matchesPlanting(entry, planting)) &&
+      (!planting || (planting.valid && (!$("plantOnlySuitable").checked || matchesPlanting(entry, planting)))) &&
       (!renewableOnly || entry.sources?.some(source => ["plant", "prey"].includes(source.category))) &&
       (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
       (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
@@ -527,7 +558,8 @@
       (!tag || entry.food?.tags.some((item) => item.key === tag)) &&
       (!cookable || entry.food?.cookable) && (!state.effect || statValue(entry, state.effect) > 0));
     const sort = $("sortSelect").value;
-    if (sort !== "default") entries.sort((a, b) => {
+    if (planting && sort.startsWith("plant-")) entries.sort((a, b) => window.Planting.compare(a, b, sort, planting));
+    else if (sort !== "default") entries.sort((a, b) => {
       const av = statValue(a, sort), bv = statValue(b, sort);
       const difference = (typeof bv === "number" ? bv : -Infinity) - (typeof av === "number" ? av : -Infinity);
       return Number.isNaN(difference) || difference === 0 ? a.id - b.id : difference;
@@ -549,7 +581,8 @@
       const top = node("span", "card-top");
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
-      meta.append(node("span", "", player ? "分类：" + player.sub_category : entry.hidden ? "隐藏成就" : entry.group || category().label));
+      meta.append(node("span", "", entry.plant ? (entry.plant.food_harvest ? "食用收获" : "其他收获") :
+        player ? "分类：" + player.sub_category : entry.hidden ? "隐藏成就" : entry.group || category().label));
       if (state.category === "dish") {
         meta.append(node("span", "quality-label", qualityName($("qualitySelect").value) + "品质"));
         if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
@@ -566,6 +599,9 @@
           node("span", "card-stat-caption", state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
         if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
       } else if (entry.plant) {
+        const reasons = window.Planting.problems(entry, plantingConditions());
+        button.append(node("span", "plant-verdict " + (reasons.length ? "blocked" : "suitable"),
+          reasons.length ? reasons.join(" · ") : "满足当前条件"));
         const facts = node("span", "plant-facts");
         facts.append(node("span", "", "空间 " + number(entry.plant.size)),
           node("span", "", "光照 ≥ " + number(entry.plant.light_need)),
@@ -620,6 +656,9 @@
     const plant = entry.plant;
     if (!plant) return;
     const block = section("种植条件", "基础需求");
+    const current = plantingConditions(), reasons = window.Planting.problems(entry, current);
+    block.append(node("p", "plant-verdict " + (reasons.length ? "blocked" : "suitable"),
+      reasons.length ? "当前条件：" + reasons.join(" · ") : "满足当前条件"));
     const list = node("dl", "plant-requirements");
     for (const [label, value] of [["占用空间", number(plant.size)], ["光照需求", "≥ " + number(plant.light_need)],
         ["可承受寒冷", "≤ " + number(plant.cold_resistance)]]) {
@@ -897,7 +936,7 @@
   }
 
   function resetSearch() {
-    clearFilters();
+    clearFilters(state.category === "plant");
     render();
     $("nameSearch").focus();
   }
@@ -916,7 +955,10 @@
       $("entryList").scrollTop = 0;
     }
     state.key = key || "";
-    if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) clearFilters();
+    if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) {
+      clearFilters();
+      if (state.category === "plant") $("plantOnlySuitable").checked = false;
+    }
     render();
     if (mobile.matches && openMobile && key && state.entries.some((entry) => entry.key === key)) selectEntry(key, true);
   }
@@ -942,12 +984,14 @@
       ] : [item]);
       state.ingredients = data.cooking_ingredients || [];
       state.planters = data.planters || [];
+      state.plantingEnvironment = data.planting_environment || null;
       const planterOptions = [node("option", "", "不限容器")];
       planterOptions[0].value = "";
       for (const planter of state.planters) {
         const option = node("option", "", planter.name); option.value = planter.id; planterOptions.push(option);
       }
       $("planterSelect").replaceChildren(...planterOptions);
+      restorePlantingChoices();
       const groupOptions = [node("option", "", "全部分类")];
       groupOptions[0].value = "";
       for (const [id, name] of new Map(state.ingredients.map(item => [item.sub_category_id, item.sub_category]))) {
@@ -997,8 +1041,9 @@
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
   ["tagSelect", "cookableOnly", "renewableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
-  ["planterSelect", "planterPower"].forEach(id => $(id).addEventListener("change", () => { $("entryList").scrollTop = 0; render(); }));
-  ["plantLight", "plantCold"].forEach(id => $(id).addEventListener("input", () => { $("entryList").scrollTop = 0; render(); }));
+  plantingChoiceIds.forEach(id => $(id).addEventListener(["plantLight", "plantCold"].includes(id) ? "input" : "change", () => {
+    savePlantingChoices(); $("entryList").scrollTop = 0; render();
+  }));
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
   });

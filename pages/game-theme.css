@@ -218,11 +218,23 @@ body > footer a, body > main a { color: #e4c77f; }
 .portion-form input { display: block; margin-top: 5px; width: 130px; padding: 9px; background: #20221b; border: 1px solid #867248; border-radius: 2px; color: #f0e5ca; }
 .portion-result { font-size: 13px; color: #f1c643; }
 .planting-filters { padding: 13px 0 10px; border-bottom: 1px solid var(--line); }
-.planting-controls { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 10px; }
+.planting-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.planting-container { grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) minmax(130px, 1fr); margin-top: 12px; align-items: end; }
+.planting-manual { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 460px; margin-top: 10px; }
 .planting-controls label { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: #d2c7ac; font-size: 11px; }
 .planting-controls select, .planting-controls input { width: 100%; min-width: 0; height: 36px; padding: 7px 9px; border: 1px solid #796742; border-radius: 3px; background: #25261f; color: #eee2c4; font: inherit; font-size: 12px; }
 .planting-controls select:disabled { color: #a59d8b; border-color: #514d3c; }
 .planting-controls input::placeholder { color: #a59d8b; }
+.planting-check { display: flex; flex-direction: row; gap: 8px; align-items: center; color: #e4c77f; font-size: 12px; cursor: pointer; }
+.planting-controls .planting-check { flex-direction: row; align-self: center; padding-top: 17px; }
+.planting-check input { width: 16px; height: 16px; margin: 0; accent-color: #e5b528; }
+.planting-unchecked { color: #bdb49d; }
+.planting-help { margin-top: 9px; color: #c5bca3; font-size: 11px; line-height: 1.7; }
+.planting-help summary { color: #d8bd77; cursor: pointer; width: fit-content; }
+.planting-help p { margin: 9px 0; max-width: 850px; }
+.plant-verdict { display: block; font-size: 11px; line-height: 1.6; margin: 0 0 8px; }
+.plant-verdict.suitable { color: #bdd38c; }
+.plant-verdict.blocked { color: #df9c88; }
 .planting-context { display: flex; flex-wrap: wrap; gap: 6px 15px; align-items: baseline; margin-top: 9px; font-size: 10px; color: #c5bca3; }
 .planting-context output { color: #e4c77f; }
 .planting-context a, .planting-context summary { color: #d8bd77; cursor: pointer; }
@@ -244,6 +256,9 @@ body > footer a, body > main a { color: #e4c77f; }
   .planting-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; }
   .planting-controls select, .planting-controls input { height: 38px; }
   .planting-context details { margin-left: 0; }
+  .planting-container .planter-field { grid-column: 1 / -1; }
+  .planting-controls .planting-check { padding-top: 16px; }
+  body:has(#plantingFilters:not([hidden])) .query-tools { position: static; }
 }
 @media (max-width: 960px) { .sidebar { border-right: 0; border-bottom: 1px solid #6c5938; } }
 @media (max-width: 720px) {

@@ -12,13 +12,21 @@
 
 种植手册从公开 `Config_Plant` 导出空间、光照需求、耐寒与基础生长时间，优先以 `Gain` / `Perfect_Gain` 对应的食物图标显示植物；图片注明收获物名称，无已提取图标时仍用分类占位。食材详情按收获物 ID 反查种植入口，食品/猎物共享条目增加猎物分类入口，独立详情页保留相同链接，不推断未解析的陷阱、掉落或野外采集来源。
 
-只读核对本地 `1.1.18293 / catalog 2.3.1` 的 `Config_Plant`、`Config_FurniturePlant`、`Config_Furniture` 严格读取及 EOF，确认静态库相应行完全一致。当前游戏 `PlantPanel.html` 的 `checkSeedEnv` 使用 `actualLight >= lightNeed` 与 `coldStress <= coldResistance`；容量判定为植物 `Size <= Capacity`，种满用量为 `floor(Capacity / Size)`。寒冷是游戏环境数值，不转换成摄氏温度。容器下拉只收录公开家具，通过 `PlantFurnitureID` 解析加成：有效光照为输入环境光照加 `AddLight`，有效寒冷为输入环境寒冷减 `AddHeat`；通电时分别再加 `ElectricLight`、减 `ElectricHeat`。输入环境值已经包含用户自行确认的房间、天气和其他环境影响，留空只筛选已填写条件；未叠加角色修正、种子库存、灾前限制或生长速度加成。简体中文与 English 共用同一筛选规则，切换保留所选条件。
+只读核对本地 `1.1.18293 / catalog 2.3.1` 的 `Config_Plant`、`Config_FurniturePlant`、`Config_Furniture` 严格读取及 EOF，确认静态库相应行完全一致。当前游戏 `PlantPanel.html` 的 `checkSeedEnv` 使用 `actualLight >= lightNeed` 与 `coldStress <= coldResistance`；容量判定为植物 `Size <= Capacity`，种满用量为 `floor(Capacity / Size)`。寒冷是游戏环境数值，不转换成摄氏温度。容器下拉只收录公开家具，通过 `PlantFurnitureID` 解析被动 `AddLight` / `AddHeat`，通电时计入 `ElectricLight` / `ElectricHeat`。
+
+`codex_pages_environment.py` 使用集中 schema，只读提取 `Config_Weather`（11 字段）、`Config_EnvArea`（6 字段）、`Config_EnvAreaWeather`（5 字段）、`Config_MapRoom`（5 字段）和供暖家具，验证成员数量、字段类型和 EOF。字段类型和顺序来自当前本地 IL2CPP 元数据；新增 schema 不改变六类注册表或默认辅助导出范围。刷新命令为 `python codex_pages_environment.py --game-root "游戏目录" --output pages/planting-environment.json`。版本化文件仅包含当前页面使用的天气、楼层、区域参数、供暖值和 `RoomTemp_Max`，没有游戏路径、原始资源或 runtime 状态。Pages 构建仅在预设版本与静态库版本一致时嵌入环境；否则提示手动输入，不套用其他版本数值。
+
+核对当前 native `EnvAreaHelper.GetLightMul` / `GetAreaTemperature` / `GetParamRow`（RVA `0x305C1F0` / `0x305BB90` / `0x305C5C0`）与 `PlantComponent.EvaluateEnvironment`（RVA `0x2DF7650`）：区域参数优先匹配当前天气 ID，回退 `WeatherID=0`；有效光照为天气 `LightValue × LightMul + 容器补光`；有效寒冷为 `max(0, ColdValue − 区域温度 − 容器加热)`。区域温度包含 `TempAdd` 与同一区域运行设备的 `HeatOutput`，区域 `DeviceHeat=false` 时不计设备；`RoomTemp_Max>0` 才限制区域温度，当前为 0。空调 ID 21007 供暖 2，燃料暖炉 ID 65001 供暖 1，未运行时不计。地下室对应区域 5（光照倍率 0、保温 2），一楼区域 1（0.5、1），二楼室内按区域 2 / 阳光房（1、1），二楼露台区域 3（1、0、不接受设备供暖）；所选楼层对应 `Config_MapRoom` 行的光照和保温与区域默认参数交叉校验。晴天、阴天、雨天分别使用 native 天气行 1/2/3，无寒潮至重度寒潮的晴天为 1/7/8/9、阴天为 2/4/5/6、雨天为 3/15/16/17；寒雨光照为 0，不把普通雨天光照 1 直接叠加寒潮。
+
+种植手册默认显示当前满足环境的植物，取消“只看当前可种”显示全部及空间、光照、寒冷不满足的原因。未选容器时明确提示尚未核对空间。条件保存在本机，切换分类、语言和刷新保留；重置恢复晴天、无寒潮、一楼和无运行供暖设备。手动环境值替代天气、楼层和供暖计算，容器加成仍单独应用，空值不核对该项。预设仅计同区域一台运行空调和一台燃烧暖炉，未叠加植物天赋、种子库存、灾前限制、后续天气、生长速度、温室承诺和其他供暖来源；多设备或特殊区域可手动填写。截图的角色个人抗寒属于体感档位，不作为植物抗寒加成。用户重度寒潮截图验证光照 1、寒冷 3，一楼空调后光照 0.5、寒冷 0；普通小型花盆在地下室寒冷 1，草菇耐寒 0 不满足，移至一楼空调制热后满足。
+
+植物默认按普通 `Gain` 是否含 `Config_Item.Category=1` 的食用收获优先，再按基础 `GrowthTime` 升序，空间和 ID 打破并列；另可按最快基础收获、最省空间、最高耐寒、最低光照需求或原图鉴顺序排列。非图鉴排序在显示全部时将当前满足条件的植物排在前面，未知数值放在末尾。基础生长时长没有冒充实际收获倒计时。食用、其他收获在卡片中标明，不使用完美产物或返种猜测用途。
 
 `codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。
 
 在线版提供名称/ID、菜肴食材选择和制造/家具材料检索，并使用相对路径适配 Pages 项目子目录。食品展示 `ValueDisplay1..5` 的饱腹、心态、精力、健康、生命值，数值全部来自当前跟踪的静态库。默认只展示非零属性，负数保留，缺失属性显示未提供；详情可展开完整五项。物品信息同时展示配置重量、尺寸、使用次数和基础保质期，不将静态保质期冒充实例剩余时间或冷藏时间。
 
-菜肴通过 `PerfectItemID`、`GoodItemID`、`NormalItemID`、`FailItemID` 引用静态库 `recipe_items` 中的成品，按品质展示五维属性和 `ItemDes2_Local` 食用说明，不使用配方的 `SatietyStandard` 冒充食用效果。只导出被引用成品的属性、标签、分类、说明和图标，不发布 `recipe_items` 全集。页面支持标签/可烹饪/正属性筛选和属性降序；食品、菜肴和猎物默认按当前显示品质的每次饱食降序，重置恢复该默认值，其余分类保留图鉴顺序。菜肴“仅专用菜谱”只保留有具体食材关系的配方，查询多个食材时仍逐槽位匹配重复用量；未输入食材时显示所有专用配方。食材关联菜肴以具体物品 ID 或烹饪子分类识别，分类匹配仅表示可以占用该类槽位，不能据此声称完整组合必定能做出该菜肴；仍需满足其余食材、档位和特色配方优先规则。
+菜肴通过 `PerfectItemID`、`GoodItemID`、`NormalItemID`、`FailItemID` 引用静态库 `recipe_items` 中的成品，按品质展示五维属性和 `ItemDes2_Local` 食用说明，不使用配方的 `SatietyStandard` 冒充食用效果。只导出被引用成品的属性、标签、分类、说明和图标，不发布 `recipe_items` 全集。页面支持标签/可烹饪/正属性筛选和属性降序；食品、菜肴和猎物默认按当前显示品质的每次饱食降序，重置恢复该默认值；种植排序见上文，其余分类保留图鉴顺序。菜肴“仅专用菜谱”只保留有具体食材关系的配方，查询多个食材时仍逐槽位匹配重复用量；未输入食材时显示所有专用配方。食材关联菜肴以具体物品 ID 或烹饪子分类识别，分类匹配仅表示可以占用该类槽位，不能据此声称完整组合必定能做出该菜肴；仍需满足其余食材、档位和特色配方优先规则。
 
 只读核对当前游戏 `ItemDetailPopup.html`、IL2CPP 元数据和 `Config_ConstantText` 后，确认物品弹窗显示分类、子分类、`FoodTag1`（食用方式）与 `FoodTag2`（食物特点）。标签来自 `FoodTag1_n` / `FoodTag2_n` 的本地化文本，分别生成辅助表 `FoodTag1` / `FoodTag2`；相同数字不能跨字段合并。`FoodTag1=3` 是“熟食”，不是“蛋奶”；“蛋奶”来自食材分类表 `Config_FoodType`，旧网页错误地用该表解析食用标签。`FoodTag3` 保留原始 ID，不用于弹窗标签；未知标签显示 `ID:xxxx`。`SubCategory` 单独经 `Config_ItemSubCategory` 解析。网页展示“优良”，内部品质键仍保留 `良好` 以兼容现有数据。
 

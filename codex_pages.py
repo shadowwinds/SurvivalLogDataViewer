@@ -27,7 +27,7 @@ SOURCE_DIR = PROJECT_DIR / "pages"
 DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "i18n.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "i18n.js", "planting.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -264,9 +264,13 @@ def export_data(database_path: Path) -> dict[str, Any]:
         planter_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
             "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurniturePlant'")}
         planters = add_planting_data(categories, raw_entries, items, planter_configs, public_icon)
+        environment = json.loads((SOURCE_DIR / "planting-environment.json").read_text(encoding="utf-8"))
+        if environment["format_version"] != 1 or environment["game_version"] != metadata.get("game_version"):
+            environment = None
         recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
         return {"format_version": 1, "metadata": metadata, "categories": categories,
-                "cooking_ingredients": ingredients, "planters": planters, "recommendations": recommendations}
+                "cooking_ingredients": ingredients, "planters": planters, "planting_environment": environment,
+                "recommendations": recommendations}
     finally:
         connection.close()
 

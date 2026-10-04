@@ -241,6 +241,16 @@ class ExtractionContext:
 # These are the serialized backing-field schemas from the current HotUpdate.dll
 # interop metadata. Computed MainKey properties are intentionally not serialized.
 CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
+    "Config_Weather": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
+                       ("LightValue", "i32"), ("ColdValue", "i32"), ("Weight", "i32"),
+                       ("BroadcastId", "i32"), ("Web_Icon", "str"), ("Anim", "list_str"),
+                       ("GameLightName", "str"), ("WindValue", "f32")),
+    "Config_EnvArea": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
+                       ("IsOutdoor", "bool"), ("DeviceHeat", "bool"), ("FoodDecayScale", "f32")),
+    "Config_EnvAreaWeather": (("ID", "i32"), ("AreaID", "i32"), ("WeatherID", "i32"),
+                              ("LightMul", "f32"), ("TempAdd", "i32")),
+    "Config_MapRoom": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
+                       ("Light", "f32"), ("Heat", "i32")),
     "Config_ConstantText": (("ID", "str"), ("Text", "str"), ("Text_Local", "str")),
     "FoodTag1": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("SourceKey", "str")),
     "FoodTag2": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("SourceKey", "str")),

@@ -154,7 +154,8 @@ class PagesExportTests(unittest.TestCase):
         plant = groups["plant"][0]
         self.assertEqual(plant["icon_source"], {"id": 1, "name": "食品"})
         self.assertEqual(plant["icon"], "./icons/00000000000000000000.png")
-        self.assertEqual(plant["plant"], {"size": 2, "light_need": 0, "cold_resistance": 3, "growth_seconds": 86400})
+        self.assertEqual(plant["plant"], {"size": 2, "light_need": 0, "cold_resistance": 3,
+                                         "growth_seconds": 86400, "food_harvest": True})
         self.assertEqual([(source["category"], source["id"]) for source in groups["food"][0]["sources"]],
                          [("plant", 20), ("prey", 1)])
         self.assertNotIn("PRIVATE_", json.dumps(payload))
@@ -217,6 +218,15 @@ class PagesExportTests(unittest.TestCase):
         self.assertEqual([planter["id"] for planter in planters], [30])
         self.assertEqual((planters[0]["capacity"], planters[0]["heat_bonus"], planters[0]["electric_light"]), (2, 1, 2))
         self.assertNotIn("PRIVATE_", json.dumps(planters))
+
+    def test_environment_presets_are_only_attached_to_the_matching_game_version(self) -> None:
+        self.assertIsNone(export_data(self.database)["planting_environment"])
+        environment = json.loads((SOURCE_DIR / "planting-environment.json").read_text(encoding="utf-8"))
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("UPDATE metadata SET value=? WHERE key='game_version'", (environment["game_version"],))
+        exported = export_data(self.database)["planting_environment"]
+        self.assertEqual(exported["game_version"], environment["game_version"])
+        self.assertEqual(exported["heaters"], environment["heaters"])
 
     def test_build_keeps_unrelated_files_and_generates_relative_assets(self) -> None:
         output = self.root / "output"

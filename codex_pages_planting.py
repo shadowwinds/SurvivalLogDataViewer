@@ -15,7 +15,9 @@ def add_planting_data(categories: list[dict[str, Any]], raw_entries: dict[str, d
     for plant in groups["plant"]:
         raw = raw_entries[plant["key"]]
         plant["plant"] = {"size": raw.get("Size"), "light_need": raw.get("LightNeed"),
-                          "cold_resistance": raw.get("ColdResistance"), "growth_seconds": raw.get("GrowthTime")}
+                          "cold_resistance": raw.get("ColdResistance"), "growth_seconds": raw.get("GrowthTime"),
+                          "food_harvest": any(items.get(item_id, ("", {}))[1].get("Category") == 1
+                                              for item_id in raw.get("Gain", []))}
         harvest_ids = list(dict.fromkeys([*raw.get("Gain", []), *raw.get("Perfect_Gain", [])]))
         for item_id in harvest_ids:
             if item_id in foods:

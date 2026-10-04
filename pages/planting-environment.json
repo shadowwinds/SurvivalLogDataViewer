@@ -1,0 +1,175 @@
+{
+  "format_version": 1,
+  "game_version": "1.1.18293 / catalog 2.3.1",
+  "scenarios": [
+    {
+      "weather": "sunny",
+      "cold_wave": 0,
+      "id": 1,
+      "name": "晴天",
+      "light": 2,
+      "cold": 0
+    },
+    {
+      "weather": "sunny",
+      "cold_wave": 1,
+      "id": 7,
+      "name": "霜晴",
+      "light": 2,
+      "cold": 1
+    },
+    {
+      "weather": "sunny",
+      "cold_wave": 2,
+      "id": 8,
+      "name": "寒晴",
+      "light": 2,
+      "cold": 2
+    },
+    {
+      "weather": "sunny",
+      "cold_wave": 3,
+      "id": 9,
+      "name": "凛晴",
+      "light": 2,
+      "cold": 3
+    },
+    {
+      "weather": "cloudy",
+      "cold_wave": 0,
+      "id": 2,
+      "name": "阴天",
+      "light": 1,
+      "cold": 0
+    },
+    {
+      "weather": "cloudy",
+      "cold_wave": 1,
+      "id": 4,
+      "name": "轻度寒潮",
+      "light": 1,
+      "cold": 1
+    },
+    {
+      "weather": "cloudy",
+      "cold_wave": 2,
+      "id": 5,
+      "name": "中度寒潮",
+      "light": 1,
+      "cold": 2
+    },
+    {
+      "weather": "cloudy",
+      "cold_wave": 3,
+      "id": 6,
+      "name": "重度寒潮",
+      "light": 1,
+      "cold": 3
+    },
+    {
+      "weather": "rainy",
+      "cold_wave": 0,
+      "id": 3,
+      "name": "雨天",
+      "light": 1,
+      "cold": 0
+    },
+    {
+      "weather": "rainy",
+      "cold_wave": 1,
+      "id": 15,
+      "name": "轻度寒雨",
+      "light": 0,
+      "cold": 1
+    },
+    {
+      "weather": "rainy",
+      "cold_wave": 2,
+      "id": 16,
+      "name": "中度寒雨",
+      "light": 0,
+      "cold": 2
+    },
+    {
+      "weather": "rainy",
+      "cold_wave": 3,
+      "id": 17,
+      "name": "重度寒雨",
+      "light": 0,
+      "cold": 3
+    }
+  ],
+  "locations": [
+    {
+      "key": "basement",
+      "name": "地下室",
+      "room_id": 2,
+      "area_id": 5,
+      "device_heat": true,
+      "parameters": [
+        {
+          "weather_id": 0,
+          "light_multiplier": 0.0,
+          "heat": 2
+        }
+      ]
+    },
+    {
+      "key": "first",
+      "name": "一楼",
+      "room_id": 1,
+      "area_id": 1,
+      "device_heat": true,
+      "parameters": [
+        {
+          "weather_id": 0,
+          "light_multiplier": 0.5,
+          "heat": 1
+        }
+      ]
+    },
+    {
+      "key": "second",
+      "name": "二楼",
+      "room_id": 3,
+      "area_id": 2,
+      "device_heat": true,
+      "parameters": [
+        {
+          "weather_id": 0,
+          "light_multiplier": 1.0,
+          "heat": 1
+        }
+      ]
+    },
+    {
+      "key": "terrace",
+      "name": "二楼露台",
+      "room_id": 4,
+      "area_id": 3,
+      "device_heat": false,
+      "parameters": [
+        {
+          "weather_id": 0,
+          "light_multiplier": 1.0,
+          "heat": 0
+        }
+      ]
+    }
+  ],
+  "heaters": [
+    {
+      "key": "ac",
+      "id": 21007,
+      "name": "空调",
+      "heat": 2
+    },
+    {
+      "key": "stove",
+      "id": 65001,
+      "name": "暖炉",
+      "heat": 1
+    }
+  ],
+  "heat_cap": 0
+}

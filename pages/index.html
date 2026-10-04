@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="./styles.css">
     <link rel="stylesheet" href="./game-theme.css">
     <script src="./i18n.js" defer></script>
+    <script src="./planting.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -47,13 +48,19 @@
         <div id="selectedMaterials" class="selected-materials" role="group" aria-label="已选材料" hidden></div>
         <div id="ingredientFacets" class="ingredient-facets" hidden><div class="facet-row"><span>食材分类</span><select id="ingredientGroupFilter" class="facet-select" aria-label="筛选食材分类"><option value="">全部分类</option></select><div id="ingredientCategories" class="facet-options" role="group" aria-label="筛选食材分类"></div></div><div class="facet-row"><span>食材档位</span><select id="ingredientTierFilter" class="facet-select" aria-label="筛选食材档位"><option value="">全部档位</option><option value="1">高档</option><option value="2">中档</option><option value="3">低档</option><option value="none">不影响档位</option></select><div id="ingredientTiers" class="facet-options" role="group" aria-label="筛选食材档位"></div></div></div>
         <div id="plantingFilters" class="planting-filters" hidden>
-          <div class="planting-controls">
-            <label class="planter-field"><span>种植容器</span><select id="planterSelect" aria-label="种植容器"><option value="">不限容器</option></select></label>
-            <label><span>供电状态</span><select id="planterPower" aria-label="供电状态" disabled><option value="on">通电</option><option value="off">断电</option></select></label>
-            <label><span>环境光照</span><input id="plantLight" type="number" min="0" step="any" placeholder="不限" aria-label="环境光照" aria-describedby="plantingHelp"></label>
-            <label><span>环境寒冷</span><input id="plantCold" type="number" step="any" placeholder="不限" aria-label="环境寒冷" aria-describedby="plantingHelp"></label>
+          <div id="plantScenarioControls" class="planting-controls planting-scenario">
+            <label><span>当前天气</span><select id="plantWeather" aria-label="当前天气"><option value="sunny">晴天</option><option value="cloudy">阴天</option><option value="rainy">雨天</option></select></label>
+            <label><span>寒潮强度</span><select id="plantColdWave" aria-label="寒潮强度"><option value="0">无寒潮</option><option value="1">轻度寒潮</option><option value="2">中度寒潮</option><option value="3">重度寒潮</option></select></label>
+            <label><span>种植位置</span><select id="plantLocation" aria-label="种植位置"><option value="basement">地下室</option><option value="first" selected>一楼</option><option value="second">二楼</option><option value="terrace">二楼露台</option></select></label>
+            <label><span>同区域供暖</span><select id="plantHeating" aria-label="同区域供暖"><option value="none">无运行设备</option><option value="ac">空调制热（通电）</option><option value="stove">暖炉燃烧（有燃料）</option><option value="both">空调 + 暖炉</option></select></label>
           </div>
-          <div class="planting-context"><output id="plantingSummary" role="status"></output><a id="planterLink" hidden>查看容器详情 ↗</a><details><summary>种植条件说明</summary><p id="plantingHelp">输入未计入所选容器加成的环境值，可留空。寒冷值越低越暖，不是摄氏温度；通电时计入电力补光和加热。筛选核对空间、光照和耐寒，未计入角色修正、种子数量与灾前限制。</p></details></div>
+          <div class="planting-controls planting-container">
+            <label class="planter-field"><span>种植容器</span><select id="planterSelect" aria-label="种植容器"><option value="">不限容器</option></select></label>
+            <label><span>容器供电</span><select id="planterPower" aria-label="容器供电" disabled><option value="on">通电</option><option value="off">断电</option></select></label>
+            <label class="planting-check"><input id="plantOnlySuitable" type="checkbox" checked><span>只看当前可种</span></label>
+          </div>
+          <div class="planting-context"><output id="plantingSummary" role="status"></output><a id="planterLink" hidden>查看容器详情 ↗</a></div>
+          <details class="planting-help"><summary>环境明细与手动调整</summary><p id="plantEnvironmentBreakdown"></p><p id="plantingHelp">供暖只计同一区域正在运行的一台空调、一台暖炉；露台不接受室内供暖。寒冷最低为 0，不是摄氏温度。二楼室内按阳光房环境，露台单独选择。仅判断当前空间、光照和耐寒，未计植物天赋、种子库存、灾前限制与后续天气变化。</p><label class="planting-check"><input id="plantManual" type="checkbox"><span>手动输入环境值</span></label><div id="plantManualControls" class="planting-controls planting-manual" hidden><label><span>环境光照</span><input id="plantLight" type="number" min="0" step="any" placeholder="不限" aria-label="环境光照"></label><label><span>环境寒冷</span><input id="plantCold" type="number" step="any" placeholder="不限" aria-label="环境寒冷"></label></div><p>手动值填写种植面板中未计容器加成的环境值，替代天气、位置与供暖计算；留空则不核对该项。</p></details>
         </div>
         <div id="playerFilters" class="player-filters">
           <label id="tagField" class="filter-select"><span>食用标签</span><select id="tagSelect" aria-label="食用标签"><option value="">全部标签</option></select></label>

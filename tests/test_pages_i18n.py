@@ -61,6 +61,9 @@ async function setup(query, saved, browser, disabled = false, failed = false) {
   assert.equal(state.i18n.text('图片：松茸（收获物）'), 'Image: Matsutake (harvest)');
   assert.equal(state.i18n.text('种植：松茸'), 'Grow: Matsutake');
   assert.equal(state.i18n.text('当前容器需种满：2 份种子'), 'Seeds to fill this planter: 2');
+  assert.equal(state.i18n.text('当前条件：光照不足 · 寒冷过高'), 'Current conditions: Not enough light · Too cold');
+  assert.equal(state.i18n.text('天气光照 1 × 区域系数 0.5 + 容器补光 0 = 0.5；天气寒冷 3 − 区域保温 1 − 设备供暖 2 − 容器加热 0 → 0'),
+    'Weather light 1 × Area multiplier 0.5 + Planter light 0 = 0.5; Weather cold 3 − Area insulation 1 − Heating 2 − Planter heat 0 → 0');
   assert.equal(state.i18n.text('3 个可计分候选 · 0 个暂不计分候选 · 搜索“matsutake”'),
     '3 rated candidates · 0 unrated candidates · Search: “matsutake”');
   assert.equal(state.i18n.text('中期 · 烹饪 Lv.2 · 完美品质情景。中后期包含此前等级配方；指数只在同类、同阶段候选中比较。'),
