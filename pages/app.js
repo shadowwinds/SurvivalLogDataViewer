@@ -5,7 +5,7 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "" };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [] };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
@@ -384,6 +384,7 @@
     $("materialSearch").placeholder = "材料名称或 ID";
     $("qualityField").hidden = !isDish;
     $("playerFilters").hidden = !isFood && !isDish;
+    $("plantingFilters").hidden = state.category !== "plant";
     $("tagField").hidden = !isFood;
     $("cookableField").hidden = state.category !== "prey";
     $("specificRecipeField").hidden = !isDish;
@@ -445,6 +446,10 @@
     $("ingredientTierSelect").value = "";
     state.group = "";
     state.tier = "";
+    $("planterSelect").value = "";
+    $("planterPower").value = "on";
+    $("plantLight").value = "";
+    $("plantCold").value = "";
     $("ingredientPicker").open = false;
     $("cookingLevelSelect").value = "";
     $("tierFloorSelect").value = "0";
@@ -457,6 +462,49 @@
     state.effect = "";
   }
 
+  function plantingConditions() {
+    const planter = state.planters.find(item => String(item.id) === $("planterSelect").value);
+    const read = id => {
+      const input = $(id);
+      if (input.validity?.badInput) return NaN;
+      if (input.value === "") return null;
+      return input.validity?.valid === false ? NaN : Number(input.value);
+    };
+    const light = read("plantLight"), cold = read("plantCold");
+    const powered = planter?.needs_power && $("planterPower").value === "on";
+    const lightBonus = (planter?.light_bonus || 0) + (powered ? planter.electric_light || 0 : 0);
+    const heatBonus = (planter?.heat_bonus || 0) + (powered ? planter.electric_heat || 0 : 0);
+    return {planter, light: light === null ? null : light + lightBonus,
+      cold: cold === null ? null : cold - heatBonus,
+      valid: (light === null || (Number.isFinite(light) && light >= 0)) && (cold === null || Number.isFinite(cold))};
+  }
+
+  function matchesPlanting(entry, conditions) {
+    const plant = entry.plant;
+    if (!conditions.valid) return false;
+    if (conditions.planter && (!Number.isFinite(plant?.size) || plant.size <= 0 ||
+        !Number.isFinite(conditions.planter.capacity) || plant.size > conditions.planter.capacity)) return false;
+    if (conditions.light !== null && (!Number.isFinite(plant?.light_need) || conditions.light < plant.light_need)) return false;
+    if (conditions.cold !== null && (!Number.isFinite(plant?.cold_resistance) || conditions.cold > plant.cold_resistance)) return false;
+    return true;
+  }
+
+  function renderPlantingConditions() {
+    if (state.category !== "plant") return;
+    const conditions = plantingConditions();
+    $("planterPower").disabled = !conditions.planter?.needs_power;
+    const captions = [];
+    if (conditions.planter) captions.push("容器容量 " + conditions.planter.capacity);
+    if (conditions.light !== null) captions.push("有效光照 " + number(conditions.light));
+    if (conditions.cold !== null) captions.push("有效寒冷 " + number(conditions.cold));
+    $("plantingSummary").textContent = !conditions.valid ? "请输入有效的环境数值" : captions.join(" · ") || "选择容器或环境值，筛选可种植物";
+    $("planterLink").hidden = !conditions.planter;
+    if (conditions.planter) $("planterLink").href = urlFor("furniture", conditions.planter.key);
+  }
+
+  const number = value => Number.isFinite(value) ? new Intl.NumberFormat(locale(), {maximumFractionDigits: 2}).format(value) : "未提供";
+  const growthHours = seconds => Number.isFinite(seconds) ? number(seconds / 3600) : "未提供";
+
   function filteredEntries() {
     const name = normalize($("nameSearch").value);
     const materials = $("materialField").hidden ? [] : normalize($("materialSearch").value).split(/[\s,，、]+/).filter(Boolean);
@@ -464,7 +512,9 @@
     const cookable = !$("cookableField").hidden && $("cookableOnly").checked;
     const specificOnly = state.category === "dish" && $("specificRecipesOnly").checked;
     const level = $("cookingLevelSelect").value;
+    const planting = state.category === "plant" ? plantingConditions() : null;
     const entries = category().entries.filter((entry) =>
+      (!planting || matchesPlanting(entry, planting)) &&
       (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
       (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
       (!specificOnly || entry.hasSpecificIngredients) &&
@@ -511,6 +561,12 @@
         button.append(node("span", "card-tags", foodTagLine(player)),
           node("span", "card-stat-caption", state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
         if (state.category === "dish") button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
+      } else if (entry.plant) {
+        const facts = node("span", "plant-facts");
+        facts.append(node("span", "", "空间 " + number(entry.plant.size)),
+          node("span", "", "光照 ≥ " + number(entry.plant.light_need)),
+          node("span", "", "寒冷 ≤ " + number(entry.plant.cold_resistance)));
+        button.append(facts, node("span", "entry-description", "基础生长 " + growthHours(entry.plant.growth_seconds) + " 小时"));
       } else {
         button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
       }
@@ -538,6 +594,39 @@
     const list = node("ul", "notes-list");
     values.forEach((value) => list.append(node("li", "", value)));
     block.append(list);
+    container.append(block);
+  }
+
+  function renderSources(container, entry) {
+    const sources = (entry.sources || []).filter(source => source.category !== state.category || source.key !== entry.key);
+    if (!sources.length) return;
+    const block = section("获取来源");
+    const links = node("div", "source-links");
+    for (const source of sources) {
+      const link = node("a", "source-link");
+      link.href = urlFor(source.category, source.key);
+      link.append(icon(source.category), node("span", "", (source.category === "plant" ? "种植：" : "捕获图鉴：") + source.name), node("span", "", "→"));
+      links.append(link);
+    }
+    block.append(links);
+    container.append(block);
+  }
+
+  function renderPlantDetails(container, entry) {
+    const plant = entry.plant;
+    if (!plant) return;
+    const block = section("种植条件", "基础需求");
+    const list = node("dl", "plant-requirements");
+    for (const [label, value] of [["占用空间", number(plant.size)], ["光照需求", "≥ " + number(plant.light_need)],
+        ["可承受寒冷", "≤ " + number(plant.cold_resistance)]]) {
+      const row = node("div"); row.append(node("dt", "", label), node("dd", "", value)); list.append(row);
+    }
+    block.append(list, node("p", "stat-help", "基础生长 " + growthHours(plant.growth_seconds) + " 小时"),
+      node("p", "stat-help", "光照不低于需求、寒冷不高于耐寒值时满足基础环境。寒冷越低越暖；生长时间未计加速与停滞。"));
+    const planter = plantingConditions().planter;
+    if (planter && Number.isFinite(plant.size) && plant.size > 0) {
+      block.append(node("p", "plant-seeds", "当前容器需种满：" + Math.floor(planter.capacity / plant.size) + " 份种子"));
+    }
     container.append(block);
   }
 
@@ -640,6 +729,7 @@
     const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
     permalink.href = entry.detailPath;
     text.append(permalink);
+    if (entry.icon_source) text.append(node("p", "image-credit", "图片：" + entry.icon_source.name + "（收获物）"));
     if (player) text.append(node("div", "item-tag-line", foodTagLine(player)));
     hero.append(addUsage(art(player?.icon || entry.icon, state.category, true), player, state.category === "dish", entry.portion_model?.mode === "fixed"), text);
     fragment.append(hero);
@@ -712,10 +802,13 @@
       tags.append(info);
       if (player.tier) tags.append(node("p", "stat-help", tierLabels[player.tier] + "食材；档位按该分类的配置价格阈值判断，不等于成品品质或烹饪等级。"));
       fragment.append(tags);
+      renderSources(fragment, entry);
       showRelatedDishes(fragment, entry);
     }
+    renderPlantDetails(fragment, entry);
     if (entry.description) fragment.append(node("p", "detail-description", entry.description));
-    const usefulHighlights = entry.highlights.filter((field) => !(player && ["acquisition", "ingredients"].includes(field.field)));
+    const usefulHighlights = entry.highlights.filter((field) => !(player && ["acquisition", "ingredients"].includes(field.field)) &&
+      !(entry.plant && ["Size", "LightNeed", "ColdResistance"].includes(field.field)));
     if (usefulHighlights.length) {
       const block = section(state.category === "dish" ? "制作信息" : "更多信息");
       const list = node("dl", "highlights");
@@ -794,6 +887,7 @@
     renderList();
     renderDetail(preserveDetailScroll);
     renderFacets();
+    renderPlantingConditions();
     i18n?.apply();
   }
 
@@ -842,6 +936,13 @@
         { id: "ready-food", label: "即食食品", entries: item.entries.filter((entry) => !entry.food?.cookable) },
       ] : [item]);
       state.ingredients = data.cooking_ingredients || [];
+      state.planters = data.planters || [];
+      const planterOptions = [node("option", "", "不限容器")];
+      planterOptions[0].value = "";
+      for (const planter of state.planters) {
+        const option = node("option", "", planter.name); option.value = planter.id; planterOptions.push(option);
+      }
+      $("planterSelect").replaceChildren(...planterOptions);
       const groupOptions = [node("option", "", "全部分类")];
       groupOptions[0].value = "";
       for (const [id, name] of new Map(state.ingredients.map(item => [item.sub_category_id, item.sub_category]))) {
@@ -853,6 +954,7 @@
       for (const item of state.categories) {
         for (const entry of item.entries) {
           entry.nameIndex = searchIndex([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
+            entry.icon_source?.name,
             ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)]);
           const materialRelations = entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type));
           const specific = materialRelations.filter((relation) => relation.relation_type === "具体食材");
@@ -890,6 +992,8 @@
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
   ["tagSelect", "cookableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
+  ["planterSelect", "planterPower"].forEach(id => $(id).addEventListener("change", () => { $("entryList").scrollTop = 0; render(); }));
+  ["plantLight", "plantCold"].forEach(id => $(id).addEventListener("input", () => { $("entryList").scrollTop = 0; render(); }));
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
   });

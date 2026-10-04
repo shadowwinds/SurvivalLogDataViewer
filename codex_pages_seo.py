@@ -263,6 +263,22 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
     body = f'<div class="entry-heading">{art}<div><p class="eyebrow">SURVIVAL LOG · {h(CATEGORY_INTROS[category][0])}</p><h1>{name}</h1><p>配置 ID：{entry["id"]}</p><a class="action-link" href="{h(interactive)}">在图鉴中筛选与比较 →</a></div></div>'
     if entry["description"]:
         body += f'<p class="description">{h(entry["description"])}</p>'
+    if entry.get("icon_source"):
+        body += f'<p class="image-credit">图片：{h(entry["icon_source"]["name"])}（收获物）</p>'
+    if entry.get("plant"):
+        plant = entry["plant"]
+        body += '<section><h2>种植条件</h2>' + fields_html([
+            {"field": "Size", "label": "占用空间", "value": str(plant["size"]) if plant["size"] is not None else "未提供"},
+            {"field": "LightNeed", "label": "光照需求", "value": "≥ " + str(plant["light_need"]) if plant["light_need"] is not None else "未提供"},
+            {"field": "ColdResistance", "label": "可承受寒冷", "value": "≤ " + str(plant["cold_resistance"]) if plant["cold_resistance"] is not None else "未提供"},
+        ]) + '<p>光照不低于需求、寒冷不高于耐寒值时满足基础环境。寒冷越低越暖；生长时间未计加速与停滞。</p></section>'
+    if entry.get("sources"):
+        body += '<section><h2>获取来源</h2><ul class="related-list">'
+        for source in entry["sources"]:
+            target = (base + routes[source["key"]]) if source["category"] == "plant" else base + '#prey/' + quote(source["key"], safe="")
+            label = "种植：" if source["category"] == "plant" else "捕获图鉴："
+            body += f'<li><a href="{h(target)}">{label}{h(source["name"])}</a></li>'
+        body += '</ul></section>'
     if "food" in entry:
         food = entry["food"]
         body += '<section><h2>食用属性与食用标签</h2>' + profile_html(food)
@@ -290,9 +306,10 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
         threshold = entry.get("portion_model", {}).get("threshold")
         if threshold:
             body += f'<p>分份标准：{h(threshold)} 饱腹 / 次。可吃次数按整份总饱腹除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
-    if entry["highlights"]:
+    highlights = [field for field in entry["highlights"] if not entry.get("plant") or field["field"] not in {"Size", "LightNeed", "ColdResistance"}]
+    if highlights:
         heading = "完成条件与方法" if category == "achievements" else "制作要求与主要信息" if category in {"dish", "craft"} else "主要信息"
-        body += f'<section><h2>{heading}</h2>' + fields_html(entry["highlights"]) + '</section>'
+        body += f'<section><h2>{heading}</h2>' + fields_html(highlights) + '</section>'
     groups: dict[str, list[str]] = defaultdict(list)
     for relation in entry["relations"]:
         target = relation.get("link", {}).get("key")

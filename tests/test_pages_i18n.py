@@ -56,6 +56,11 @@ async function setup(query, saved, browser, disabled = false, failed = false) {
   assert.equal(state.i18n.text('分份标准：30 饱腹 / 次。次数 = 整份总饱腹 ÷ 30，向上取整，至少 1 次。'),
     'Serving threshold: 30 satiety per use. Uses = total satiety ÷ 30, rounded up, with a minimum of 1.');
   assert.equal(state.i18n.text('ID:1234'), 'ID:1234');
+  assert.equal(state.i18n.text('容器容量 2 · 有效光照 1.5 · 有效寒冷 0'),
+    'Planter capacity 2 · Effective light 1.5 · Effective cold 0');
+  assert.equal(state.i18n.text('图片：松茸（收获物）'), 'Image: Matsutake (harvest)');
+  assert.equal(state.i18n.text('种植：松茸'), 'Grow: Matsutake');
+  assert.equal(state.i18n.text('当前容器需种满：2 份种子'), 'Seeds to fill this planter: 2');
   assert.equal(state.i18n.text('3 个可计分候选 · 0 个暂不计分候选 · 搜索“matsutake”'),
     '3 rated candidates · 0 unrated candidates · Search: “matsutake”');
   assert.equal(state.i18n.text('中期 · 烹饪 Lv.2 · 完美品质情景。中后期包含此前等级配方；指数只在同类、同阶段候选中比较。'),

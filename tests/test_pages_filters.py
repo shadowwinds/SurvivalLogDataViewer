@@ -81,6 +81,43 @@ state.group = '2';
 assert.deepEqual(Array.from(filtered(), e => e.id), []);
 state.group = ''; state.tier = 'none';
 assert.deepEqual(Array.from(filtered(), e => e.id), [13]);
+state.category = 'plant';
+const plant = (id, size, light, cold) => ({id, nameIndex: '', materialIndex: '',
+  plant: {size, light_need: light, cold_resistance: cold}});
+state.categories.push({id: 'plant', entries: [plant(20, 1, 0, 0), plant(21, 1, 1, 2),
+  plant(22, 2, 2, 3), plant(23, 4, 2, 0), plant(24, 2, 0, 1), plant(25, null, null, null)]});
+const result = () => Array.from(filtered(), e => e.id);
+assert.deepEqual(result(), [20, 21, 22, 23, 24, 25]); // Blank environmental fields impose no requirements.
+get('plantLight').value = '0'; get('plantCold').value = '0';
+assert.deepEqual(result(), [20, 24]); // Zero is a real condition, not a blank value.
+get('plantLight').value = '2';
+assert.deepEqual(result(), [20, 21, 22, 23, 24]); // Exact light and cold boundaries are inclusive.
+get('plantCold').value = '3';
+assert.deepEqual(result(), [22]);
+state.planters = [{id: 60007, capacity: 2, light_bonus: 0, heat_bonus: 1,
+  needs_power: true, electric_light: 2, electric_heat: 0}];
+get('planterSelect').value = '60007';
+get('plantLight').value = '0'; get('plantCold').value = '3';
+get('planterPower').value = 'on';
+assert.deepEqual(result(), [21, 22]); // Passive insulation plus electric light.
+get('planterPower').value = 'off';
+assert.deepEqual(result(), []);
+get('plantCold').value = '2';
+assert.deepEqual(result(), [24]); // Passive heat remains when unpowered.
+get('plantLight').value = '1.99'; get('plantCold').value = '1';
+assert.deepEqual(result(), [20, 21, 24]);
+get('plantLight').value = '2';
+assert.deepEqual(result(), [20, 21, 22, 24]); // Large plant does not fit the medium planter.
+get('plantLight').value = ''; get('plantCold').value = '';
+assert.deepEqual(result(), [20, 21, 22, 24]); // A planter alone checks space, not unknown ambient light/cold.
+get('plantLight').value = '-1';
+assert.deepEqual(result(), []);
+get('plantLight').value = '';
+get('plantCold').validity = {badInput: true};
+assert.deepEqual(result(), []);
+get('plantCold').validity = {valid: true};
+get('planterSelect').value = '';
+assert.deepEqual(result(), [20, 21, 22, 23, 24, 25]);
 """
         result = subprocess.run([node, "-e", script, str(Path(__file__).resolve().parents[1] / "pages/app.js")],
                                 capture_output=True, text=True)

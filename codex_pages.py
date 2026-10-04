@@ -16,6 +16,7 @@ from typing import Any
 
 from codex_database import CATEGORY_LABELS, CATEGORY_ORDER, DATABASE_SCHEMA_VERSION
 from codex_parser import FIELD_LABELS, format_scalar
+from codex_pages_planting import add_planting_data
 from codex_pages_recommendations import build_recommendations, recommendation_document
 from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, validate_output_targets
 from codex_server import _achievement_payload, _build_detail_fields
@@ -236,9 +237,12 @@ def export_data(database_path: Path) -> dict[str, Any]:
                 }
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})
+        planter_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurniturePlant'")}
+        planters = add_planting_data(categories, raw_entries, items, planter_configs, public_icon)
         recommendations = build_recommendations(categories, raw_entries, items, lambda raw: food_profile(raw, tags, groups))
         return {"format_version": 1, "metadata": metadata, "categories": categories,
-                "cooking_ingredients": ingredients, "recommendations": recommendations}
+                "cooking_ingredients": ingredients, "planters": planters, "recommendations": recommendations}
     finally:
         connection.close()
 

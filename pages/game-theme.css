@@ -200,6 +200,34 @@ body > footer a, body > main a { color: #e4c77f; }
 .portion-form label { font-size: 12px; color: #cec3a6; }
 .portion-form input { display: block; margin-top: 5px; width: 130px; padding: 9px; background: #20221b; border: 1px solid #867248; border-radius: 2px; color: #f0e5ca; }
 .portion-result { font-size: 13px; color: #f1c643; }
+.planting-filters { padding: 13px 0 10px; border-bottom: 1px solid var(--line); }
+.planting-controls { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 10px; }
+.planting-controls label { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: #d2c7ac; font-size: 11px; }
+.planting-controls select, .planting-controls input { width: 100%; min-width: 0; height: 36px; padding: 7px 9px; border: 1px solid #796742; border-radius: 3px; background: #25261f; color: #eee2c4; font: inherit; font-size: 12px; }
+.planting-controls select:disabled { color: #a59d8b; border-color: #514d3c; }
+.planting-controls input::placeholder { color: #a59d8b; }
+.planting-context { display: flex; flex-wrap: wrap; gap: 6px 15px; align-items: baseline; margin-top: 9px; font-size: 10px; color: #c5bca3; }
+.planting-context output { color: #e4c77f; }
+.planting-context a, .planting-context summary { color: #d8bd77; cursor: pointer; }
+.planting-context details { margin-left: auto; max-width: 100%; }
+.planting-context details[open] { flex-basis: 100%; }
+.planting-context p { margin: 8px 0 0; max-width: 720px; line-height: 1.8; }
+.plant-facts { display: flex; flex-wrap: wrap; gap: 6px 11px; padding-top: 8px; border-top: 1px solid #575440; font-size: 11px; color: #d9c99e; }
+.plant-requirements { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.plant-requirements > div { background: #313329; border: 1px solid #606247; padding: 12px 5px; text-align: center; }
+.plant-requirements dt { color: #c6bfa9; font-size: 10px; }
+.plant-requirements dd { margin: 8px 0 0; color: #e8c369; font-size: 20px; font-weight: 700; }
+.plant-seeds { color: #d8bd77; font-size: 12px; }
+.image-credit { color: #bdb49d; font-size: 10px; line-height: 1.7; margin: 7px 0 0; }
+.source-links { display: flex; flex-direction: column; gap: 7px; }
+.source-link { display: flex; align-items: center; gap: 10px; padding: 11px; color: #e4c77f; border: 1px solid #71613e; background: #343326; text-decoration: none; font-size: 12px; }
+.source-link > span:last-child { margin-left: auto; }
+.source-link:hover { background: #4d432c; border-color: #c7a458; }
+@media (max-width: 720px) {
+  .planting-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; }
+  .planting-controls select, .planting-controls input { height: 38px; }
+  .planting-context details { margin-left: 0; }
+}
 @media (max-width: 960px) { .sidebar { border-right: 0; border-bottom: 1px solid #6c5938; } }
 @media (max-width: 720px) {
   .guide-item-art { width: 90px; height: 90px; }

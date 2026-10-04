@@ -46,6 +46,15 @@
         </form>
         <div id="selectedMaterials" class="selected-materials" role="group" aria-label="已选材料" hidden></div>
         <div id="ingredientFacets" class="ingredient-facets" hidden><div class="facet-row"><span>食材分类</span><select id="ingredientGroupFilter" class="facet-select" aria-label="筛选食材分类"><option value="">全部分类</option></select><div id="ingredientCategories" class="facet-options" role="group" aria-label="筛选食材分类"></div></div><div class="facet-row"><span>食材档位</span><select id="ingredientTierFilter" class="facet-select" aria-label="筛选食材档位"><option value="">全部档位</option><option value="1">高档</option><option value="2">中档</option><option value="3">低档</option><option value="none">不影响档位</option></select><div id="ingredientTiers" class="facet-options" role="group" aria-label="筛选食材档位"></div></div></div>
+        <div id="plantingFilters" class="planting-filters" hidden>
+          <div class="planting-controls">
+            <label class="planter-field"><span>种植容器</span><select id="planterSelect" aria-label="种植容器"><option value="">不限容器</option></select></label>
+            <label><span>供电状态</span><select id="planterPower" aria-label="供电状态" disabled><option value="on">通电</option><option value="off">断电</option></select></label>
+            <label><span>环境光照</span><input id="plantLight" type="number" min="0" step="any" placeholder="不限" aria-label="环境光照" aria-describedby="plantingHelp"></label>
+            <label><span>环境寒冷</span><input id="plantCold" type="number" step="any" placeholder="不限" aria-label="环境寒冷" aria-describedby="plantingHelp"></label>
+          </div>
+          <div class="planting-context"><output id="plantingSummary" role="status"></output><a id="planterLink" hidden>查看容器详情 ↗</a><details><summary>种植条件说明</summary><p id="plantingHelp">输入未计入所选容器加成的环境值，可留空。寒冷值越低越暖，不是摄氏温度；通电时计入电力补光和加热。筛选核对空间、光照和耐寒，未计入角色修正、种子数量与灾前限制。</p></details></div>
+        </div>
         <div id="playerFilters" class="player-filters">
           <label id="tagField" class="filter-select"><span>食用标签</span><select id="tagSelect" aria-label="食用标签"><option value="">全部标签</option></select></label>
           <label id="cookingLevelField" class="filter-select" hidden><span>我的烹饪等级</span><select id="cookingLevelSelect" aria-label="我的烹饪等级"><option value="">不限等级</option></select></label>

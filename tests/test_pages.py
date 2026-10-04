@@ -136,6 +136,56 @@ class PagesExportTests(unittest.TestCase):
         self.assertNotIn("link", unknown)
         self.assertTrue(categories["achievements"]["entries"][0]["hidden"])
 
+    def test_planting_export_links_only_current_harvests_and_uses_food_icon(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute("INSERT INTO recipe_items VALUES (1, '食品', 1, 1, 11, '菌菇', 0, ?)",
+                               (json.dumps({"ID": 1, "Category": 1, "Icon": "food-icon", "private": "PRIVATE_UNUSED_FIELD"}),))
+            for plant_id, current, gain, perfect, seed in ((20, 1, [1, 1], [1], [101]),
+                                                         (21, 0, [1], [], []), (22, 1, [], [], [1])):
+                raw = {"ID": plant_id, "Size": 2, "LightNeed": 0, "ColdResistance": 3,
+                       "GrowthTime": 86400, "Gain": gain, "Perfect_Gain": perfect, "Gain_Seed": seed}
+                connection.execute("INSERT INTO codex_entries VALUES (?, 'Config_Plant', ?, ?, '', '', '', ?, ?)",
+                                   (f"Config_Plant:{plant_id}", plant_id, f"植物{plant_id}", json.dumps(raw), current))
+                connection.execute("INSERT INTO codex_entry_categories VALUES (?, 'plant', ?)",
+                                   (f"Config_Plant:{plant_id}", plant_id))
+        with patch("codex_pages.public_icon", side_effect=lambda path: "./icons/00000000000000000000.png" if path == "food-icon" else ""):
+            payload = export_data(self.database)
+        groups = {category["id"]: category["entries"] for category in payload["categories"]}
+        plant = groups["plant"][0]
+        self.assertEqual(plant["icon_source"], {"id": 1, "name": "食品"})
+        self.assertEqual(plant["icon"], "./icons/00000000000000000000.png")
+        self.assertEqual(plant["plant"], {"size": 2, "light_need": 0, "cold_resistance": 3, "growth_seconds": 86400})
+        self.assertEqual([(source["category"], source["id"]) for source in groups["food"][0]["sources"]],
+                         [("plant", 20), ("prey", 1)])
+        self.assertNotIn("PRIVATE_", json.dumps(payload))
+        output = self.root / "plant-pages"
+        build_pages(self.database, output)
+        document = PageHTML((output / "guide/food/1/index.html").read_text(encoding="utf-8"))
+        self.assertTrue(any(link.endswith('/guide/plant/20/') for link in document.links))
+        self.assertTrue(any(link.endswith('#prey/Config_Item%3A1') for link in document.links))
+        plant_document = (output / "guide/plant/20/index.html").read_text(encoding="utf-8")
+        self.assertIn("光照需求", plant_document)
+        self.assertIn("≥ 0", plant_document)
+        self.assertIn("≤ 3", plant_document)
+
+    def test_planters_use_public_furniture_config_and_do_not_export_auxiliary_private_fields(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            for furniture_id, current, config_id in ((30, 1, 17), (31, 0, 18), (32, 1, 999), (33, 1, 0)):
+                connection.execute("INSERT INTO codex_entries VALUES (?, 'Config_Furniture', ?, ?, '', '', '', ?, ?)",
+                                   (f"Config_Furniture:{furniture_id}", furniture_id, f"花盆{furniture_id}",
+                                    json.dumps({"PlantFurnitureID": config_id}), current))
+                connection.execute("INSERT INTO codex_entry_categories VALUES (?, 'furniture', ?)",
+                                   (f"Config_Furniture:{furniture_id}", furniture_id))
+            for config_id in (17, 18, 19):
+                connection.execute("INSERT INTO auxiliary_rows VALUES ('Config_FurniturePlant', ?, '', ?)",
+                                   (config_id, json.dumps({"Capacity": 2, "AddLight": 0, "AddHeat": 1, "NeedPower": True,
+                                                          "ElectricLight": 2, "ElectricHeat": 0,
+                                                          "private": "PRIVATE_UNUSED_FIELD"})))
+        planters = export_data(self.database)["planters"]
+        self.assertEqual([planter["id"] for planter in planters], [30])
+        self.assertEqual((planters[0]["capacity"], planters[0]["heat_bonus"], planters[0]["electric_light"]), (2, 1, 2))
+        self.assertNotIn("PRIVATE_", json.dumps(planters))
+
     def test_build_keeps_unrelated_files_and_generates_relative_assets(self) -> None:
         output = self.root / "output"
         output.mkdir()
