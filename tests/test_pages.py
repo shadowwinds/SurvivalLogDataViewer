@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 from codex_database import CATEGORY_LABELS, DATABASE_SCHEMA_VERSION, STATIC_SCHEMA_SQL
 from codex_pages import SOURCE_DIR, build_pages, dish_servings, export_data
-from codex_pages_seo import browse_categories, normalize_site_url
+from codex_pages_seo import browse_categories, normalize_site_url, seo_documents
 
 
 class PageHTML(HTMLParser):
@@ -167,6 +167,38 @@ class PagesExportTests(unittest.TestCase):
         self.assertIn("光照需求", plant_document)
         self.assertIn("≥ 0", plant_document)
         self.assertIn("≤ 3", plant_document)
+
+    def test_other_category_icons_use_normal_outputs_and_explicit_config_fields(self) -> None:
+        refs = {"flower-icon": "./icons/00000000000000000001.png",
+                "paper-icon": "./icons/00000000000000000002.png",
+                "furniture-icon": "./icons/00000000000000000003.png",
+                "achievement-icon": "./icons/00000000000000000004.png"}
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            for item_id, name, picture in ((20, "花", "flower-icon"), (30, "纸", "paper-icon"),
+                                           (31, "失败产物", "failed-icon")):
+                connection.execute("INSERT INTO recipe_items VALUES (?, ?, 0, 0, 0, '', 0, ?)",
+                                   (item_id, name, json.dumps({"WebIcon": picture, "private": "PRIVATE_UNUSED_FIELD"})))
+            for table, item_id, category, raw in (("Config_Plant", 20, "plant", {"Gain": [20]}),
+                                                 ("Config_ProductionList", 30, "craft", {"ProductID": [999, 30, 30], "FailedID": [31]}),
+                                                 ("Config_Furniture", 40, "furniture", {"ICON": "furniture-icon"})):
+                connection.execute("INSERT INTO codex_entries VALUES (?, ?, ?, ?, '', '', '', ?, 1)",
+                                   (f"{table}:{item_id}", table, item_id, category, json.dumps({"ID": item_id, **raw})))
+                connection.execute("INSERT INTO codex_entry_categories VALUES (?, ?, 0)", (f"{table}:{item_id}", category))
+            connection.execute("UPDATE achievements SET raw_json=?", (json.dumps({"ID": 1, "WebIcon": "achievement-icon"}),))
+        with patch("codex_pages.public_icon", side_effect=lambda ref: refs.get(ref, "")):
+            payload = export_data(self.database)
+            documents = seo_documents(payload, "https://example.org/project/")
+        groups = {category["id"]: category["entries"] for category in payload["categories"]}
+        self.assertEqual(groups["plant"][0]["icon"], refs["flower-icon"])
+        self.assertEqual(groups["craft"][0]["icon"], refs["paper-icon"])
+        self.assertEqual(groups["craft"][0]["icon_source"], {"id": 30, "name": "纸", "kind": "product"})
+        self.assertEqual(groups["furniture"][0]["icon"], refs["furniture-icon"])
+        self.assertEqual(groups["achievements"][0]["icon"], refs["achievement-icon"])
+        self.assertIn("图片：纸（制造产物）", documents["guide/craft/30/index.html"])
+        for category, item_id, ref in (("plant", 20, "flower-icon"), ("craft", 30, "paper-icon"),
+                                       ("furniture", 40, "furniture-icon"), ("achievements", 1, "achievement-icon")):
+            self.assertIn("icons/" + refs[ref].rsplit("/", 1)[-1], documents[f"guide/{category}/{item_id}/index.html"])
+        self.assertNotIn("PRIVATE_", json.dumps(payload))
 
     def test_planters_use_public_furniture_config_and_do_not_export_auxiliary_private_fields(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection, connection:

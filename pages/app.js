@@ -733,7 +733,8 @@
     const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
     permalink.href = entry.detailPath;
     text.append(permalink);
-    if (entry.icon_source) text.append(node("p", "image-credit", "图片：" + entry.icon_source.name + "（收获物）"));
+    if (entry.icon_source) text.append(node("p", "image-credit", "图片：" + entry.icon_source.name +
+      (entry.icon_source.kind === "product" ? "（制造产物）" : "（收获物）")));
     if (player) text.append(node("div", "item-tag-line", foodTagLine(player)));
     hero.append(addUsage(art(player?.icon || entry.icon, state.category, true), player, state.category === "dish", entry.portion_model?.mode === "fixed"), text);
     fragment.append(hero);

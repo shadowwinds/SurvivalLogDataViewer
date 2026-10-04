@@ -264,7 +264,8 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
     if entry["description"]:
         body += f'<p class="description">{h(entry["description"])}</p>'
     if entry.get("icon_source"):
-        body += f'<p class="image-credit">图片：{h(entry["icon_source"]["name"])}（收获物）</p>'
+        caption = "制造产物" if entry["icon_source"].get("kind") == "product" else "收获物"
+        body += f'<p class="image-credit">图片：{h(entry["icon_source"]["name"])}（{caption}）</p>'
     if entry.get("plant"):
         plant = entry["plant"]
         body += '<section><h2>种植条件</h2>' + fields_html([

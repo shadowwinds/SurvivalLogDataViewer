@@ -11,17 +11,18 @@ from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
 
-from codex_pages import PRODUCT_FIELDS, icon_filename
+from codex_pages import icon_asset, icon_filename, related_icon_items
 from codex_parser import decrypt_bundle, find_catalog, load_unitypy, parse_catalog
 
 
 def web_icon_source(game_root: Path, web_icon: str) -> Path | None:
-    if not re.fullmatch(r"\.\./\.\./Res/Food/[^/\\]+\.png", web_icon):
+    match = re.fullmatch(r"\.\./\.\./Res/(Food|Furniture|Structure|Material|Literature|icon|Consumable|Electrical|RobotModule)/([A-Za-z0-9_-]+\.png)", web_icon)
+    if not match:
         return None
-    resource_dir = (game_root / "SurvivalLog_Data/StreamingAssets/WebUI/Res/Food").resolve()
+    resource_dir = (game_root / "SurvivalLog_Data/StreamingAssets/WebUI/Res" / match[1]).resolve()
     if not resource_dir.is_relative_to(game_root.resolve()):
         return None
-    source = resource_dir / web_icon.rsplit("/", 1)[-1]
+    source = resource_dir / match[2]
     if source.is_symlink() or not source.resolve().is_relative_to(resource_dir):
         return None
     return source if source.is_file() else None
@@ -34,22 +35,22 @@ def extract_icons(database: Path, game_root: Path, output_dir: Path) -> None:
     requested: dict[str, str] = {}
 
     def request(raw: dict) -> None:
-        icon = raw.get("Icon")
+        icon = icon_asset(raw)
         if icon:
-            requested[icon] = raw.get("WebIcon") or requested.get(icon, "")
+            requested[icon] = raw.get("WebIcon") or raw.get("ICON") or raw.get("WebSmallIcon") or requested.get(icon, "")
 
     with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as connection:
-        recipes = []
+        referenced_items = set()
         for table, raw_json in connection.execute("SELECT source_table, raw_json FROM codex_entries WHERE is_current=1"):
             raw = json.loads(raw_json)
             request(raw)
-            if table == "Config_CookingRecipe":
-                recipes.extend(raw.get(field, 0) for field, _quality in PRODUCT_FIELDS)
-        product_ids = set(recipes) - {0}
+            referenced_items.update(related_icon_items(table, raw))
         for item_id, raw_json in connection.execute("SELECT item_id, raw_json FROM recipe_items"):
-            if item_id in product_ids:
+            if item_id in referenced_items:
                 raw = json.loads(raw_json)
                 request(raw)
+        for (raw_json,) in connection.execute("SELECT raw_json FROM achievements"):
+            request(json.loads(raw_json))
     catalog = find_catalog(game_root)
     assets, bundles, version = parse_catalog(catalog)
     asset_lookup = {path.removesuffix(".png").lower(): path for path in assets}

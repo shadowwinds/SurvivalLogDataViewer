@@ -474,5 +474,6 @@
   "获取来源": "How to obtain",
   "种植：{name}": "Grow: {name}",
   "捕获图鉴：{name}": "Prey guide: {name}",
-  "仅可种植 / 捕捉": "Growable / catchable only"
+  "仅可种植 / 捕捉": "Growable / catchable only",
+  "图片：{name}（制造产物）": "Image: {name} (crafted product)"
 }

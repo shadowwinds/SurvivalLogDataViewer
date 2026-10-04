@@ -30,6 +30,20 @@ ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "
           "recommendations.css", "recommendations.js", "i18n.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
+ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
+                    "Config_Plant": ("Gain", "Perfect_Gain"), "Config_ProductionList": ("ProductID",)}
+
+
+def icon_asset(raw: dict[str, Any]) -> str:
+    return next((raw[field] for field in ("Icon", "ICON", "WebIcon", "WebSmallIcon") if raw.get(field)), "")
+
+
+def related_icon_items(table: str, raw: dict[str, Any]) -> list[int]:
+    ids = []
+    for field in ICON_ITEM_FIELDS.get(table, ()):
+        value = raw.get(field) or []
+        ids.extend([value] if isinstance(value, int) else value)
+    return list(dict.fromkeys(item_id for item_id in ids if type(item_id) is int and item_id > 0))
 
 
 def icon_filename(asset_path: str) -> str:
@@ -71,7 +85,7 @@ def food_profile(raw: dict[str, Any], tags: dict[str, dict[int, str]], groups: d
         "shelf_life_days": raw.get("Life"),
         "tier": ingredient_tier(raw, rules or {}) if raw.get("CanCook") else None,
         "note": raw.get("ItemDes2_Local") or raw.get("ItemDes2") or "",
-        "icon": public_icon(raw.get("Icon") or ""),
+        "icon": public_icon(icon_asset(raw)),
     }
 
 
@@ -130,7 +144,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
             "SELECT sub_category, high_threshold, mid_low_threshold FROM recipe_tier_rules")}
         ingredients = [{"id": item_id, "name": name, "sub_category_id": raw.get("SubCategory", 0),
                         "sub_category": groups.get(raw.get("SubCategory"), f"ID:{raw.get('SubCategory', 0)}"),
-                        "tier": ingredient_tier(raw, rules), "icon": public_icon(raw.get("Icon") or "")}
+                        "tier": ingredient_tier(raw, rules), "icon": public_icon(icon_asset(raw))}
                        for item_id, (name, raw) in items.items() if raw.get("Category") == 1 and raw.get("CanCook") is True]
         memberships: dict[str, list[str]] = {}
         for row in connection.execute(
@@ -185,7 +199,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
                     "highlights": highlights,
                     "fields": fields,
                     "relations": related,
-                    "icon": public_icon(raw.get("Icon") or ""),
+                    "icon": public_icon(icon_asset(raw)),
                 }
                 if category in {"food", "prey"}:
                     entry["food"] = food_profile(raw, tags, groups, rules)
@@ -209,10 +223,19 @@ def export_data(database_path: Path) -> dict[str, Any]:
                         result["serving_count"], result["per_use_stats"] = dish_servings(result, threshold, fixed)
                         entry["products"].append(result)
                     entry["icon"] = next((product["icon"] for product in entry["products"] if product["icon"]), "")
+                elif category == "craft":
+                    for item_id in related_icon_items(row["source_table"], raw):
+                        name, product = items.get(item_id, (f"ID:{item_id}", {}))
+                        picture = public_icon(icon_asset(product))
+                        if picture:
+                            entry["icon"] = picture
+                            entry["icon_source"] = {"id": item_id, "name": name, "kind": "product"}
+                            break
                 category_map[category]["entries"].append(entry)
         achievements = []
         for row in connection.execute("SELECT * FROM achievements ORDER BY sort_order, achievement_id"):
             public = _achievement_payload(dict(row))
+            raw = json.loads(row["raw_json"])
             achievements.append(
                 {
                     "key": f"Config_Achievement:{row['achievement_id']}",
@@ -232,8 +255,9 @@ def export_data(database_path: Path) -> dict[str, Any]:
                     "exclusions": public["exclusions"],
                     "references": public["config_references"],
                     "source_version": public["source_version"],
-                    "fields": config_fields(json.loads(row["raw_json"])),
+                    "fields": config_fields(raw),
                     "relations": [],
+                    "icon": public_icon(icon_asset(raw)),
                 }
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})

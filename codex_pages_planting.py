@@ -26,7 +26,7 @@ def add_planting_data(categories: list[dict[str, Any]], raw_entries: dict[str, d
         candidates += [item_id for item_id in harvest_ids if item_id not in candidates]
         for item_id in candidates:
             name, item = items.get(item_id, (f"ID:{item_id}", {}))
-            icon = public_icon(item.get("Icon") or "")
+            icon = public_icon(item.get("Icon") or item.get("WebIcon") or "")
             if icon:
                 plant["icon"] = icon
                 plant["icon_source"] = {"id": item_id, "name": name}

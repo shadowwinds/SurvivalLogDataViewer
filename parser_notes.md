@@ -32,9 +32,13 @@
 
 本次将正式解析器、七份导出和静态库统一更新至当前本地版本。新版元数据确认 `Config_Item` 在 `UseAction` 前增加 `TradeSellRate: Single`（61 字段）；`Config_PlantLv` 末尾增加 `unlock_recipes: List<int>`（11 字段）；`Config_Furniture` 末尾增加 `BagAcceptCategory`、`RobotPlayerID`（59 字段）；`Config_FurnitureTag` 增加排序、维度及说明字段（10 字段）。`Config_ConstantText` 按三个字符串字段严格读取，验证非空唯一键和 EOF，仅提取食用标签进入导出，不公开完整常量表。所有配置保留对象成员数量与 EOF 校验，不静默兼容未知 schema。
 
-`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理公开图鉴条目及其菜肴产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
+`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
 
-本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器仅对缺失引用按同一物品配置的 `WebIcon` 回退到游戏自带 `WebUI/Res/Food` PNG，不按名称猜测、不访问网络；路径只接受该目录下的单层文件，拒绝越界与文件符号链接。回退图片同样缩放至最长边 192、保留透明通道，沿用 `Icon` 的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
+本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器对缺失引用按同一配置的 `WebIcon`、`ICON` 或 `WebSmallIcon` 回退到游戏自带 `WebUI/Res` PNG，不按名称猜测、不访问网络。仅允许当前公开引用涉及的 Food、Furniture、Structure、Material、Literature、icon、Consumable、Electrical、RobotModule 目录中的单层 PNG 文件，拒绝越界与文件符号链接。回退图片同样缩放至最长边 192、保留透明通道，沿用配置图标路径的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
+
+家具使用配置 `ICON`，成就使用 `WebIcon`；制造使用 `ProductID` 中第一个有图标的普通产物，并注明“制造产物”，不借用失败产物、完美额外产物或材料图标。植物沿用实际收获物图片，花卉共用图片时遵循游戏配置。上述图片同时用于交互列表、详情与独立 HTML / 分享信息；不更改图鉴分类、成就说明或条目数量。
+
+当前公开植物、制造、家具、成就的缺图数均为零；新增补齐植物 9、制造 163、家具 110、成就 93 条，实际发布使用 1039 张去重图标。图片字段与普通产物 ID 已逐项对照本地严格读取的配置表；发布构建仍只复制当前网页引用的图片。
 
 `codex_pages_seo.py` 从同一公开导出数据生成独立 HTML 详情。导航统一进入首页查询图鉴和补给推荐；旧 `/guide/` 和分类目录地址仅保留自动跳转到首页或对应查询分类的兼容页面，标为 `noindex,follow`，不再生成另一套目录列表。属性、标签、各品质效果、材料关联及成就说明直接存在于独立详情 HTML，不依赖 JavaScript 抓取；首页禁用 JavaScript 时在原页面提供可展开的条目链接。食品与猎物共享条目只生成首个分类下的详情地址，其他分类链接到该页。各页包含独立标题、描述、canonical、Open Graph / Twitter 信息和 WebPage / CollectionPage / BreadcrumbList JSON-LD；游戏菜肴不使用现实食谱的 Recipe 类型。`sitemap.xml` 仅列出首页、补给推荐及独立详情的完整网址，不收录兼容跳转页，不包含交互图鉴的 hash 状态，不虚构更新时间。
 
