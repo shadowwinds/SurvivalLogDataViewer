@@ -72,6 +72,9 @@ assert.ok(rated(late).every(d=>d.daily.extraPoints>=0 && d.daily.extraPoints<=10
 assert.ok(rated(capped).every(d=>d.daily.extraPoints<=0));
 assert.ok(rated(capped).filter(d=>d.output.total[1]>=0).every(d=>d.daily.extraPoints===0));
 assert.ok(rated(capped).every(d=>d.daily.moraleGain<=0 && !d.daily.moraleCovered));
+assert.equal(rated(capped)[0].id,rated(late)[0].id); // A full mood meter does not erase long-term food value.
+const settlement=S.evaluate(data,{stage:3,moraleNow:100,moraleMode:'settlement'});
+assert.notEqual(rated(settlement)[0].id,rated(late)[0].id);
 assert.equal(late.crops.find(c=>c.id===39).score,null);
 assert.ok(late.ingredients.find(i=>i.id===30000).morale100>0);
 const perfect = S.evaluate(data,{stage:3,quality:'完美'}), trade = S.evaluate(data,{stage:3,focus:'trade'});

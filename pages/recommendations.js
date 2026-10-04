@@ -18,16 +18,20 @@
     return [...counts.values()].map(({item, amount}) => `${text(item.name)} ×${amount}`).join(" + ");
   };
   let view = "dishes", result = null, signature = "", resultSignature = "", generation = 0, timer, worker;
-  try {
-    worker = new Worker(new URL("../supply-worker.js", location.href));
-    worker.onmessage = event => {
-      if (event.data.id !== generation) return;
-      byId("status").removeAttribute("aria-busy");
-      if (event.data.error) { byId("status").textContent = text("计算未完成，请重新加载页面"); return; }
-      result = event.data.result; resultSignature = signature; render();
-    };
-    worker.onerror = () => { worker?.terminate(); worker = null; signature = ""; compute(); };
-  } catch { /* The pure model also works without Workers. */ }
+  function createWorker() {
+    try {
+      const instance = new Worker(new URL("../supply-worker.js", location.href));
+      instance.onmessage = event => {
+        if (event.data.id !== generation) return;
+        byId("status").removeAttribute("aria-busy");
+        if (event.data.error) { byId("status").textContent = text("计算未完成，请重新加载页面"); return; }
+        result = event.data.result; resultSignature = signature; render();
+      };
+      instance.onerror = () => { if (worker !== instance) return; worker.terminate(); worker = null; signature = ""; compute(); };
+      return instance;
+    } catch { return null; }
+  }
+  worker = createWorker();
   function planterLabels() {
     const selected = byId("planter").value;
     byId("planter").innerHTML = (data.planters || []).map(p => `<option value="${p.id}">${escape(text(p.name))} · ${p.capacity}</option>`).join("");
@@ -50,6 +54,7 @@
   function compute() {
     const input = options(), current = JSON.stringify(input);
     if (current === signature) { render(); return; }
+    if (worker && signature && signature !== resultSignature) { worker.terminate(); worker = createWorker(); }
     signature = current; generation += 1;
     render();
     byId("status").textContent = text("正在比较具体食材组合…"); byId("status").setAttribute("aria-busy", "true");
@@ -90,7 +95,7 @@
       if (output) {
         reason = combo(output.ingredients);
         facts = view === "trade" ? [["原料换入基值", row.inputTrade], ["成品交出估值", row.outputTrade], ["净交易基值", row.tradeMargin], ["每锅心态", output.total[1]]] :
-          [["一天饱食 / 实补心态", `${format(row.daily.total[0])} / ${format(row.daily.moraleGain)}`], ["额外生存点 / 日", row.daily.extraPoints], ["每天照料 / 分钟", row.daily.care], ["均摊成本 / 占容量", `${format(row.daily.cash)} / ${format(row.daily.capacity)}`]];
+          [["一天饱食 / 基础心态", `${format(row.daily.total[0])} / ${format(row.daily.total[1])}`], ["额外生存点 / 日", row.daily.extraPoints], ["每天照料 / 分钟", row.daily.care], ["均摊成本 / 占容量", `${format(row.daily.cash)} / ${format(row.daily.capacity)}`]];
         detail = `<p>${text("每锅总恢复")}：${escape(stats(output.total))}</p><p>${text("每次食用")}：${escape(stats(output.perUse))} · ${format(output.servings)} ${text("次")}</p>
           <p>${text("首批备料等待 / 日")} ${format(row.lead)} · ${text("烹饪等待 / 分钟")} ${format(row.seconds / 60)}</p>
           <p>${text("每锅照料摊销 / 分钟")} ${format(row.minutes)} · ${text("种植容量 × 日")} ${format(row.spaceDays)}</p>
@@ -150,8 +155,10 @@
     byId("mood-label").hidden = view !== "dishes";
     if (signature !== resultSignature && view !== "stock") {
       document.querySelector(`#${view} .rec-list`).innerHTML = ""; byId("brief").hidden = true;
+      byId("context").textContent = ""; byId("model-summary").hidden = true;
       byId("status").textContent = text("正在比较具体食材组合…"); return;
     }
+    byId("model-summary").hidden = view === "stock";
     const phrase = byId("search").value.trim().toLocaleLowerCase(), source = view === "stock" ? data.stock : result[view === "trade" ? "dishes" : view];
     const rows = source.filter(row => {
       if ((view === "dishes" || view === "trade") && byId("stage-only").checked && row.level !== Number(byId("stage").value)) return false;
@@ -173,7 +180,8 @@
       byId("context").textContent = text("{stage} · {quality}品质 · {currency} · 每日目标：饱食 {satiety} / 心态 {morale}", {stage: text(data.stages[o.stage]), quality: text(o.quality), currency: text(o.currency === "trade" ? "交易基值" : "购买基价"), satiety: format(o.satiety), morale: format(o.morale)});
       const benefit = view === "trade" ? text("按净交易基值与烹饪等待比较，食用效果保留供取舍。") : text("收益权重：饱食 {satiety}% · 心态 {morale}% · 其他恢复 {other}%", {satiety: format(w.satiety * 100), morale: format(w.morale * 100), other: format(w.other * 100)});
       const heading = view === "trade" ? "比较直接交换与加工成菜" : o.focus === "ease" ? "少照料，留时间" : o.focus === "satiety" ? "优先饱食" : o.focus === "morale" ? "优先心态" : o.stage === 3 ? "补心态，也把时间留出来" : o.stage === 1 ? "先吃饱，再节省备料" : "稳定供给，兼顾心态";
-      byId("brief").innerHTML = `<div><p class="eyebrow">${text("本阶段优先级")}</p><h2>${text(heading)}</h2><p>${benefit}</p></div><div><p>${text("预算与照料")} ${format(o.cash)} / ${format(o.care)} ${text("分钟每天")}</p><p>${text("种植容量")} ${format(o.capacity)} · ${text("等待容忍")} ${format(o.horizon)} ${text("日")}</p><a href="../#dish/">${text("用冰箱库存确认能做什么 →")}</a></div>`;
+      const moraleNote = view === "trade" ? "" : `<p>${text(o.moraleMode === "supply" ? "按长期心态补给价值排名；当天实补与生存点按当前上限另算。心态上限可随游戏进程调整。" : "按当天结算条件排名，已扣除当前心态上限以上的溢出。")}</p>`;
+      byId("brief").innerHTML = `<div><p class="eyebrow">${text("本阶段优先级")}</p><h2>${text(heading)}</h2><p>${benefit}</p>${moraleNote}</div><div><p>${text("预算与照料")} ${format(o.cash)} / ${format(o.care)} ${text("分钟每天")}</p><p>${text("种植容量")} ${format(o.capacity)} · ${text("等待容忍")} ${format(o.horizon)} ${text("日")}</p><a href="../#dish/">${text("用冰箱库存确认能做什么 →")}</a></div>`;
       byId("model-summary").innerHTML = `<p>${benefit}</p><p>${view === "trade" ? text("交易效率 = 净交易基值 ÷（1 + 烹饪小时）；食用负面恢复不扣交易分。") : text("负担权重：计价成本 {economy}% · 操作时间 {labor}% · 空间 {space}% · 等待 {wait}%", {economy: format(w.economy * 100), labor: format(w.labor * 100), space: format(w.space * 100), wait: format(w.wait * 100)})}</p>`;
     } else byId("context").textContent = text("即食囤货沿用整包饱食、购买价、保质与背包格比较。");
     i18n?.apply();

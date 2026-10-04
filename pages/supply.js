@@ -3,7 +3,7 @@
   const defaults = {stage: 1, quality: "普通", focus: "auto", source: "mixed", currency: "trade",
     planter: 60002, powered: true, plantLevel: 1, growth: 0, action: 100, harvest: "normal",
     satiety: 100, morale: 20, cash: 100, care: 60, capacity: 8, horizon: 7,
-    cookActive: 0, moraleNow: 50, moraleMax: 100, pointStep: 5, sellChannel: "normal"};
+    cookActive: 0, moraleNow: 50, moraleMax: 100, moraleMode: "supply", pointStep: 5, sellChannel: "normal"};
   const profiles = {
     1: {satiety: .7, morale: .1, other: .2, economy: .45, labor: .25, space: .2, wait: .1},
     2: {satiety: .45, morale: .4, other: .15, economy: .35, labor: .3, space: .25, wait: .1},
@@ -195,7 +195,7 @@
       const servings = Math.max(1, Math.ceil(Math.fround(total[0] / Math.fround(threshold))));
       const pots = Math.ceil(options.satiety / (total[0] / servings)) / servings;
       const usable = total.slice();
-      usable[1] = Math.min(Math.max(0, total[1]), Math.max(0, options.moraleMax - options.moraleNow) / pots);
+      if (options.moraleMode === "settlement") usable[1] = Math.min(Math.max(0, total[1]), Math.max(0, options.moraleMax - options.moraleNow) / pots);
       const value = benefit(usable, options, w) / burden;
       if (dishById.get(entry.id)?.level <= options.stage) for (const ingredient of ingredients) {
         let matches = bestByIngredient.get(ingredient.id);

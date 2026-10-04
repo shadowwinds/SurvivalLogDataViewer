@@ -341,8 +341,9 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <label>动作耗时倍率 / %<input id="rec-action" type="number" min="10" max="500" value="100"></label>
 <label>收获情景<select id="rec-harvest"><option value="normal">普通收获</option><option value="perfect">完美收获（情景）</option></select></label>
 <label>烹饪等待计作占用 / %<input id="rec-cookActive" type="number" min="0" max="100" value="0"></label>
+<label>心态排名口径<select id="rec-moraleMode"><option value="supply">长期补给价值</option><option value="settlement">当天结算条件</option></select></label>
 <label>不吃这组菜的结算前心态<input id="rec-moraleNow" type="number" min="0" max="1000" value="50"></label>
-<label>角色心态上限<input id="rec-moraleMax" type="number" min="1" max="1000" value="100"></label>
+<label>当前角色心态上限（按游戏填写）<input id="rec-moraleMax" type="number" min="1" max="1000" value="100"></label>
 <label>兑换 1 点所需心态<input id="rec-pointStep" type="number" min="1" max="100" value="5"></label>
 <label>交出估值情景<select id="rec-sellChannel"><option value="normal">原始基值</option><option value="discount">应用商人配置折价</option></select></label>
 <label class="rec-stage-only"><input id="rec-powered" type="checkbox" checked>种植设施通电</label>
@@ -363,7 +364,7 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <details><summary>烹饪、照料与交易的计算口径</summary><ul>
 <li>指定配方优先；通用配方按实际食材、最高档位和所选品质计算。通用菜心态、精力取品质成品配置；饱食、健康、生命来自实际食材。每锅和每次食用分别展示，不将分份次数再乘到整锅恢复。</li>
 <li>在全部公开可烹饪食材中枚举组合，每道菜独立推荐。配置存在不等于商店有售、已经解锁或库存充足；实际库存可到图鉴的“按冰箱食材配餐”确认。</li>
-<li>收益按每日饱食、心态目标归一化；负担按每日预算、照料分钟、可用种植容量和等待容忍归一化。收益 ÷（1 + 加权负担）得到效率，再转成同类候选的并列百分位，负面恢复最多扣 30 分。搜索与排序不改变评分池。</li>
+<li>收益按每日饱食、心态目标归一化；负担按每日预算、照料分钟、可用种植容量和等待容忍归一化。收益 ÷（1 + 加权负担）得到效率，再转成同类候选的并列百分位，负面恢复最多扣 30 分。长期补给按基础心态收益比较，当天结算按当前上限扣除溢出；搜索与排序不改变评分池。</li>
 <li>每次食材购买价 = 整包 price ÷ UseTimes；每次交易换入基值 = TradeValue。两种单位不混用。种植计新种子的成本，不把返种当免费；未计肥料、电力、燃料、获取路程和设备购置。</li>
 <li>按所选容器种满计算：种子数 = floor(容量 ÷ 作物尺寸)。生长时间按设施、等级和额外速度的乘积缩短。普通与完美收获独立选择，不推断完美概率或无限再生。特殊温室的每日施肥、再生作物不参与基础排名。</li>
 <li>基础播种 15 分钟、收获 5 分钟；除虫、除草、浇水各 5 分钟。生长期每个容器每日检查一次，概率 = max(0, 植物基础值 + 设施修正) × max(0, 1 − 等级减免)，三项合计大于 1 时一起归一化。这里只估计及时处理的次数，随机波动、处理延迟和雨水自动浇灌会改变实际耗时。</li>
