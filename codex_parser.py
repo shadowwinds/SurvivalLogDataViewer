@@ -1040,13 +1040,18 @@ def render_config_rows(
 
 
 def markdown_header(title: str, count: int, context: ExtractionContext, source_tables: Iterable[str], note: str) -> list[str]:
+    # 导出的公开 Markdown 不携带本机绝对路径，只记录相对游戏目录的文件位置。
+    try:
+        bundle_ref = context.bundle_path.relative_to(context.game_root).as_posix()
+    except ValueError:
+        bundle_ref = context.bundle_path.name
     return [
         f"# Survival Log {title}（离线解析）",
         "",
         f"- 生成时间：{datetime.now().astimezone().isoformat(timespec='seconds')}",
         f"- 游戏资源版本：{md_escape(context.package_version)}",
         f"- 数据包：`{context.bundle_name}`",
-        f"- 实际读取文件：`{context.bundle_path}`",
+        f"- 实际读取文件（相对游戏目录）：`{bundle_ref}`",
         f"- 条目数量：{count}",
         f"- 配置表：`{'`、`'.join(source_tables)}`",
         "- 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。",
@@ -1282,13 +1287,24 @@ def extract_all(
     return results
 
 
+def resolve_default_game_root() -> Path:
+    """CLI default game root via Steam library discovery; never hardcode machine paths."""
+
+    from codex_update import discovered_game_root
+
+    game_root = discovered_game_root()
+    if game_root is None:
+        raise FileNotFoundError("未自动找到 Survival Log 游戏安装目录，请用 --game-root 指定游戏安装路径")
+    return game_root
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="离线解析 Survival Log 图鉴并导出 Markdown")
     parser.add_argument(
         "--game-root",
         type=Path,
-        default=Path(r"E:\games\Steam\steamapps\common\Survival Log"),
-        help="游戏安装目录",
+        default=None,
+        help="游戏安装目录；缺省时自动查找 Steam 库",
     )
     parser.add_argument(
         "--output",
@@ -1310,15 +1326,16 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        game_root = args.game_root or resolve_default_game_root()
         if args.category == "all":
             if args.output is not None:
                 raise ValueError("--output 只适用于显式单分类；all 模式请使用 --output-dir")
-            results = extract_all(args.game_root, args.output_dir)
+            results = extract_all(game_root, args.output_dir)
             for category, (count, path) in results.items():
                 print(f"{category}: {count} 条 -> {path}")
         else:
             output_path = args.output or args.output_dir / OUTPUT_FILENAMES[args.category]
-            context = build_extraction_context(args.game_root)
+            context = build_extraction_context(game_root)
             count, path = extract_category(context, args.category, output_path)
             print(f"{args.category}: {count} 条 -> {path}")
     except Exception as exc:  # command-line tool: show a concise actionable error

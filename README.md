@@ -170,7 +170,7 @@
 需要 Python 3.11 或更高版本。UnityPy 默认安装到当前项目目录：
 
 ```powershell
-Set-Location "D:\Codex\SurvivalLogDataViewer"
+Set-Location "<项目目录>"
 python -m pip install --target ".\_vendor_unitypy" UnityPy
 ```
 
@@ -190,7 +190,6 @@ python .\codex_server.py `
 
 ```powershell
 python .\codex_database.py `
-  --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
   --database .\survival_log_codex.sqlite3 `
   --runtime-database .\survival_log_codex_runtime.sqlite3
 ```
@@ -199,11 +198,10 @@ python .\codex_database.py `
 
 ```powershell
 python .\codex_parser.py `
-  --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
   --output-dir .\snapshots
 ```
 
-单分类导出支持 `food`、`dish`、`plant`、`prey`、`craft`、`furniture` 和 `auxiliary`；`all` 使用 `--output-dir`，单分类可以使用 `--output`。
+`--game-root` 缺省时自动查找 Steam 库中的游戏目录；未自动找到时显式传入游戏安装路径即可。单分类导出支持 `food`、`dish`、`plant`、`prey`、`craft`、`furniture` 和 `auxiliary`；`all` 使用 `--output-dir`，单分类可以使用 `--output`。
 
 ### 独立版打包
 

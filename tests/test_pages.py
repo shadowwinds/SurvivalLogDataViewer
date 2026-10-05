@@ -271,6 +271,37 @@ class PagesExportTests(unittest.TestCase):
         self.assertNotIn("制造材料（配方 ID", json.dumps(payload))
         self.assertNotIn("PRIVATE_", json.dumps(payload))
 
+    def test_build_copies_craft_recipe_material_icons_for_furniture_cards(self) -> None:
+        real_icon = next(path for path in sorted((SOURCE_DIR / "icons").iterdir())
+                         if path.is_file() and path.suffix == ".png")
+        reference = f"./icons/{real_icon.name}"
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute(
+                "INSERT INTO recipe_items VALUES (?, ?, 0, 1, 0, '', 0, ?)",
+                (20005, "木片", json.dumps({"ID": 20005, "Category": 9, "Icon": "wood-icon"})))
+            connection.execute(
+                "INSERT INTO codex_entries VALUES (?, 'Config_ProductionList', 341, '木片包裹', '', '', '', ?, 1)",
+                ("Config_ProductionList:341",
+                 json.dumps({"ID": 341, "Level": 1, "MaterialList": [20005], "ProductID": []})))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_ProductionList:341', 'craft', 1)")
+            connection.execute(
+                "INSERT INTO codex_entries VALUES (?, 'Config_Furniture', 20002, '木架', '', '', '', ?, 1)",
+                ("Config_Furniture:20002", json.dumps({"ID": 20002, "ShopPage": 1})))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_Furniture:20002', 'furniture', 1)")
+            connection.executemany(
+                "INSERT INTO entry_relations VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [("Config_Furniture:20002", "制造配方", "Config_ProductionList", 341, "木片包裹", 0, "341"),
+                 ("Config_Furniture:20002", "制造材料（配方 ID 341）", "Config_Item", 20005, "木片", 0, "20005"),
+                 ("Config_Furniture:20002", "制造要求等级（配方 ID 341）", "Config_ProductionList", 1, "1级", 0, "1")])
+        output = self.root / "material-icon-pages"
+        with patch("codex_pages.public_icon", side_effect=lambda path: reference if path == "wood-icon" else ""):
+            build_pages(self.database, output)
+        payload = json.loads((output / "data.json").read_text(encoding="utf-8"))
+        furniture = next(entry for category in payload["categories"] if category["id"] == "furniture"
+                         for entry in category["entries"] if entry["id"] == 20002)
+        self.assertEqual(furniture["craft_recipes"][0]["materials"][0]["icon"], reference)
+        self.assertTrue((output / "icons" / real_icon.name).is_file())
+
     def test_furniture_effects_are_category_specific_and_storage_gated(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.executemany(

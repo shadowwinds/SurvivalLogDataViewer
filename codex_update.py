@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import sys
@@ -255,6 +256,14 @@ def discover_game_root() -> GameInstallation | None:
     if not valid:
         return None
     return max(valid, key=lambda item: tuple(int(part) for part in _VERSION_PARTS.findall(item.package_version)))
+
+
+@functools.lru_cache(maxsize=1)
+def discovered_game_root() -> Path | None:
+    """Cached best-effort game installation lookup for CLI defaults."""
+
+    installation = discover_game_root()
+    return installation.root if installation else None
 
 
 def _database_version(database_path: Path) -> str:

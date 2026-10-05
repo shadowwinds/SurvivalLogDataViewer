@@ -1,9 +1,9 @@
 # Survival Log 图鉴辅助配置（离线解析）
 
-- 生成时间：2026-10-05T17:16:54+08:00
+- 生成时间：2026-10-06T01:34:12+08:00
 - 游戏资源版本：1.1.18293 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件：`E:\games\Steam\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\36e63204cc1526b87676160b32cf9815.bundle`
+- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/36e63204cc1526b87676160b32cf9815.bundle`
 - 条目数量：676
 - 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`FoodTag1`、`FoodTag2`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`、`Config_Bag`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。

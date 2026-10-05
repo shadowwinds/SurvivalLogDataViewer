@@ -52,7 +52,7 @@
 
 本次将正式解析器、七份导出和静态库统一更新至当前本地版本。新版元数据确认 `Config_Item` 在 `UseAction` 前增加 `TradeSellRate: Single`（61 字段）；`Config_PlantLv` 末尾增加 `unlock_recipes: List<int>`（11 字段）；`Config_Furniture` 末尾增加 `BagAcceptCategory`、`RobotPlayerID`（59 字段）；`Config_FurnitureTag` 增加排序、维度及说明字段（10 字段）。`Config_ConstantText` 按三个字符串字段严格读取，验证非空唯一键和 EOF，仅提取食用标签进入导出，不公开完整常量表。所有配置保留对象成员数量与 EOF 校验，不静默兼容未知 schema。
 
-`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标，另把 `entry_relations` 中全部“制造材料”关联指向的物品（家具与制造列表卡片的配方材料）加入提取范围。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
+`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标，另把 `entry_relations` 中全部“制造材料”关联指向的物品（家具与制造列表卡片的配方材料）加入提取范围。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建复制条目、成品、烹饪食材及制造配方材料引用的全部图标，工作流不读取游戏。
 
 本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器对缺失引用按同一配置的 `WebIcon`、`ICON` 或 `WebSmallIcon` 回退到游戏自带 `WebUI/Res` PNG，不按名称猜测、不访问网络。仅允许当前公开引用涉及的 Achievement、Consumable、Electrical、Food、Furniture、Literature、Material、RobotModule、Structure、icon 目录中的单层 PNG 文件，拒绝越界与文件符号链接；Achievement 目录为本次新内容更新中的成就图标补入。回退图片同样缩放至最长边 192、保留透明通道，沿用配置图标路径的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
 
@@ -205,7 +205,7 @@ data[i] ^= key[i % 32]
 源码运行需要 Python 3.11 或更高版本。UnityPy 默认安装在当前项目目录：
 
 ```powershell
-python -m pip install --target "D:\Codex\SurvivalLogDataViewer\_vendor_unitypy" UnityPy
+python -m pip install --target "_vendor_unitypy" UnityPy
 ```
 
 也可以设置 `SURVIVALLOG_UNITYPY_DIR` 覆盖默认依赖目录。独立包不复制 `_vendor_unitypy` 源码目录，而是通过 PyInstaller 打包解析所需的 UnityPy 导入图和运行数据。
@@ -216,7 +216,14 @@ python -m pip install --target "D:\Codex\SurvivalLogDataViewer\_vendor_unitypy" 
 
 ```powershell
 python "codex_parser.py" `
-  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
+  --output-dir "snapshots"
+```
+
+`--game-root` 缺省时通过 Steam 库自动发现游戏目录；自动发现失败会报错，此时显式指定本地游戏安装路径即可：
+
+```powershell
+python "codex_parser.py" `
+  --game-root "<游戏安装目录>" `
   --output-dir "snapshots"
 ```
 
@@ -224,7 +231,6 @@ python "codex_parser.py" `
 
 ```powershell
 python "codex_parser.py" `
-  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
   --category dish `
   --output "snapshots\survival_log_dish.md"
 ```
@@ -235,13 +241,12 @@ python "codex_parser.py" `
 
 ```powershell
 python "codex_database.py" `
-  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
   --database "survival_log_codex.sqlite3" `
   --runtime-database "survival_log_codex_runtime.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"
 ```
 
-静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v9 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断；`POST /api/recipe-plans/refresh?file_name=...` 只重读指定的当前子存档，并将结果合并回现有计划。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
+静态库保存主条目、分类映射、关联关系、辅助配置原始行、资源元数据，以及 schema v9 的菜肴物品、按储物功能生成的家具映射和烹饪档位规则；runtime 库保存共享主完成状态、分类完成状态、`save_*` 元数据和持久化缓存。查询通过附加 runtime 库跨库关联。`codex_parser.py` 与 `codex_database.py` 的 `--game-root` 缺省时复用 `codex_update.py` 的 Steam 库自动发现（校验 PackageManifest 与 catalog），找不到时返回非零并提示显式指定；导出的 Markdown 头部只记录相对游戏目录的数据包路径，不写入本机绝对路径。重新导入使用事务和 upsert；存档同步先完整解析，成功后才在 runtime 事务中更新状态，失败不会清空上一次有效状态。菜肴库存不写入 SQLite，网页请求 `/api/recipe-plans` 时根据 `HistorySave.bytes` 列出的子存档重新计算，并附带角色上下文、回退诊断和每个储物容器的位置诊断；`POST /api/recipe-plans/refresh?file_name=...` 只重读指定的当前子存档，并将结果合并回现有计划。没有存档时可以使用 `--no-save-sync` 只构建静态数据库。
 
 源码默认数据库为根目录的 `survival_log_codex.sqlite3`，runtime 文件固定为根目录的 `survival_log_codex_runtime.sqlite3`，源码运行不生成存档同步诊断日志。首次发现旧的 `data/survival_log_codex.sqlite3` 时，工具会先执行 `PRAGMA integrity_check`，校验通过后在临时文件中原子拆分静态和 runtime 数据库，并保留完成状态、存档哈希和已有缓存；存在 WAL/SHM 旁车文件、锁定或目标冲突时会保留旧文件。显式 `--database` 路径不会触发默认迁移。
 

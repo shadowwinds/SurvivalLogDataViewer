@@ -25,7 +25,6 @@ from codex_server import _achievement_payload, _build_detail_fields
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
-DEFAULT_GAME_ROOT = Path(r"E:\games\Steam\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
           "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
@@ -87,8 +86,10 @@ def furniture_recipe_groups(relations: list[dict[str, Any]],
             item = material(relation["target_id"], relation["target_name"])
             raw = items.get(relation["target_id"], ("", {}))[1]
             if raw.get("Category") == DECORATION_ITEM_CATEGORY:
-                if item not in recipe["dyes"]:
-                    recipe["dyes"].append(item)
+                # 染料配色在网页上只展示名称，不引用图标。
+                dye = {"id": item["id"], "name": item["name"]}
+                if dye not in recipe["dyes"]:
+                    recipe["dyes"].append(dye)
             else:
                 recipe["materials"].append(item)
         elif relation["relation_type"].startswith("制造要求等级"):
@@ -552,8 +553,14 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     site_url = normalize_site_url(site_url)
     output_dir = output_dir.expanduser().resolve()
     database_path = database_path.expanduser().resolve()
-    for protected in (DEFAULT_GAME_ROOT.resolve(), SOURCE_DIR.resolve(), database_path):
-        if output_dir == protected or output_dir.is_relative_to(protected):
+    from codex_update import discovered_game_root
+
+    protected = [SOURCE_DIR.resolve(), database_path]
+    game_root = discovered_game_root()
+    if game_root is not None:
+        protected.append(game_root.resolve())
+    for protected_path in protected:
+        if output_dir == protected_path or output_dir.is_relative_to(protected_path):
             raise ValueError("输出目录不能位于游戏目录、网页源码目录或数据库文件路径中")
     if database_path.is_relative_to(output_dir) or SOURCE_DIR.is_relative_to(output_dir):
         raise ValueError("输出目录不能包含源数据库或网页源码目录")
@@ -574,16 +581,17 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
         target = output_dir / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-    icons = {entry.get("icon", "") for category in payload["categories"] for entry in category["entries"]}
-    icons.update(product["icon"] for category in payload["categories"] for entry in category["entries"]
-                 for product in entry.get("products", []))
-    icons.update(item["icon"] for item in payload["cooking_ingredients"])
-    if icons - {""}:
+    # 导出数据和生成页面（图鉴详情、补给推荐等）中引用的图标一律经 public_icon 产出，
+    # 必然存在于源码 icons 目录；按实际引用统一扫描复制，新增展示字段后不会漏发导致 404。
+    referenced = json.dumps(payload, ensure_ascii=False)
+    referenced += "".join(documents.values())
+    icons = set(re.findall(r"\./icons/[a-f0-9]{20}\.png", referenced))
+    if icons:
         icon_dir = output_dir / "icons"
         if icon_dir.is_symlink() or (icon_dir.exists() and not icon_dir.is_dir()):
             raise ValueError("图标输出目录不能是符号链接或普通文件")
         icon_dir.mkdir(exist_ok=True)
-        for icon in sorted(icons - {""}):
+        for icon in sorted(icons):
             filename = Path(icon).name
             target = icon_dir / filename
             if target.is_symlink():

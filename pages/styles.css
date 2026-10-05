@@ -85,7 +85,7 @@ input[type="checkbox"] { accent-color: var(--green); width: 14px; height: 14px; 
 .workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(355px, .85fr); gap: 20px; }
 .entries-panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .entry-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #bdcbbb transparent; padding: 1px 6px 12px 1px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; align-content: start; }
-.entry-card { border: 1px solid #dce4d5; border-radius: 12px; background: var(--surface); padding: 15px; text-align: left; min-width: 0; position: relative; }
+.entry-card { display: flex; flex-direction: column; border: 1px solid #dce4d5; border-radius: 12px; background: var(--surface); padding: 15px; text-align: left; min-width: 0; position: relative; }
 .entry-card:hover { border-color: #95b395; box-shadow: 0 5px 16px #263e2b0a; }
 .entry-card.active { border-color: #3b825f; box-shadow: 0 0 0 1px #3b825f; background: #fbfef6; }
 .card-top { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; }
@@ -119,6 +119,10 @@ button.tag:hover { border-color: #7e9e61; background: #e0ebd2; }
 .entry-material .entry-art svg { width: 16px; height: 16px; }
 .entry-material-name { overflow-wrap: anywhere; }
 .entry-material-count { font: 600 12px Georgia, serif; color: #396952; white-space: nowrap; }
+@media (min-width: 721px) {
+  .entry-materials { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .entry-materials-level, .entry-material-note { grid-column: 1 / -1; }
+}
 .loading-state { color: #768b73; padding: 45px 15px; grid-column: 1 / -1; }
 .empty-state { text-align: center; padding: 55px 20px; color: var(--muted); }
 .empty-state > span { font: 48px Georgia, serif; color: #7d9775; }

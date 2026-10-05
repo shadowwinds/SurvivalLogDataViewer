@@ -279,6 +279,10 @@ body > footer a, body > main a { color: #e4c77f; }
 .entry-material .entry-art svg { width: 16px; height: 16px; }
 .entry-material-name { overflow-wrap: anywhere; }
 .entry-material-count { color: #e8c369; white-space: nowrap; }
+@media (min-width: 721px) {
+  .entry-materials { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .entry-materials-level, .entry-material-note { grid-column: 1 / -1; }
+}
 .plant-requirements { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
 .plant-requirements > div { background: #313329; border: 1px solid #606247; padding: 12px 5px; text-align: center; }
 .plant-requirements dt { color: #c6bfa9; font-size: 10px; }

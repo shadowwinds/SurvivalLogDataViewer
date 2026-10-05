@@ -20,6 +20,7 @@ from codex_parser import (
     ExtractionContext,
     config_row_name,
     build_extraction_context,
+    resolve_default_game_root,
     select_category_rows,
 )
 from codex_achievements import (
@@ -1963,8 +1964,8 @@ def main() -> int:
     parser.add_argument(
         "--game-root",
         type=Path,
-        default=Path(r"E:\games\Steam\steamapps\common\Survival Log"),
-        help="游戏安装目录",
+        default=None,
+        help="游戏安装目录；缺省时自动查找 Steam 库",
     )
     parser.add_argument(
         "--database",
@@ -1997,6 +1998,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        game_root = args.game_root or resolve_default_game_root()
         database_path = args.database or resolve_default_database_path()
         if args.package_copy_from is not None:
             destination = prepare_packaged_database(args.package_copy_from, database_path)
@@ -2007,7 +2009,7 @@ def main() -> int:
             args.runtime_database or resolve_default_runtime_database_path()
         )
         counts = build_database(
-            args.game_root,
+            game_root,
             database_path,
             args.save_file,
             sync_save=not args.no_save_sync,
