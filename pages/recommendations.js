@@ -172,9 +172,27 @@
     byId("status").textContent = text("{rated} 个可计分候选 · {unrated} 个暂不计分候选", {rated: ranked.length, unrated: unranked.length});
     const list = document.querySelector(`#${view} .rec-list`);
     list.innerHTML = ranked.slice(0, 20).map((row, i) => card(row, i + 1)).join("") || `<div class="rec-empty"><p>${text("没有符合条件的推荐")}</p></div>`;
-    if (ranked.length > 20) list.innerHTML += `<details class="rec-more"><summary>${text("其余可计分候选")}（${ranked.length - 20}）</summary>${ranked.slice(20).map((row, i) => card(row, i + 21)).join("")}</details>`;
+    if (ranked.length > 20) list.innerHTML += `<button type="button" class="rec-load-more">${text("再显示 20 个，剩余 {count} 个", {count: ranked.length - 20})}</button>`;
     if (unranked.length) list.innerHTML += `<details class="rec-more"><summary>${text("数据不足或条件不满足")}（${unranked.length}）</summary>${unranked.map((row, i) => card(row, i + 1)).join("")}</details>`;
-    for (const img of list.querySelectorAll("img")) img.addEventListener("error", () => { img.src = "../favicon.svg"; }, {once: true});
+    for (const img of list.querySelectorAll("img")) {
+      img.dataset.fallbackReady = "1";
+      img.addEventListener("error", () => { img.src = "../favicon.svg"; }, {once: true});
+    }
+    const more = list.querySelector(".rec-load-more");
+    if (more) {
+      let shown = 20;
+      more.addEventListener("click", () => {
+        more.insertAdjacentHTML("beforebegin", ranked.slice(shown, shown + 20).map((row, i) => card(row, shown + i + 1)).join(""));
+        shown = Math.min(ranked.length, shown + 20);
+        if (shown === ranked.length) more.remove();
+        else more.textContent = text("再显示 20 个，剩余 {count} 个", {count: ranked.length - shown});
+        for (const img of list.querySelectorAll("img:not([data-fallback-ready])")) {
+          img.dataset.fallbackReady = "1";
+          img.addEventListener("error", () => { img.src = "../favicon.svg"; }, {once: true});
+        }
+        i18n?.apply(list);
+      });
+    }
     if (view !== "stock") {
       const o = result.options, w = result.weights;
       byId("context").textContent = text("{stage} · {quality}品质 · {currency} · 每日目标：饱食 {satiety} / 心态 {morale}", {stage: text(data.stages[o.stage]), quality: text(o.quality), currency: text(o.currency === "trade" ? "交易基值" : "购买基价"), satiety: format(o.satiety), morale: format(o.morale)});

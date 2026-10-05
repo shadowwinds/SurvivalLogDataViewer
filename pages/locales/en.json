@@ -675,6 +675,7 @@
   "食材、恢复与每日备料明细": "Ingredients, recovery and daily supply details",
   "{rated} 个可计分候选 · {unrated} 个暂不计分候选": "{rated} rated candidates · {unrated} unrated candidates",
   "其余可计分候选": "More rated candidates",
+  "再显示 20 个，剩余 {count} 个": "Show 20 more ({count} remaining)",
   "数据不足或条件不满足": "Incomplete data or unmet conditions",
   "{stage} · {quality}品质 · {currency} · 每日目标：饱食 {satiety} / 心态 {morale}": "{stage} · {quality} quality · {currency} · Daily targets: satiety {satiety} / morale {morale}",
   "收益权重：饱食 {satiety}% · 心态 {morale}% · 其他恢复 {other}%": "Benefit weights: satiety {satiety}% · morale {morale}% · other recovery {other}%",
