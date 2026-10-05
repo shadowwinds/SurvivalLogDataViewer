@@ -55,6 +55,23 @@ kbd { border-color: #5b5646; color: #c5b995; background: #33332c; }
 .filter-chip.active { background: #dcaf2d; border-color: #efc944; color: #272318; font-weight: 700; }
 .filter-chip:hover { border-color: #c99f46; }
 .entry-list, .detail-content { scrollbar-color: #8a7751 #1d1e19; }
+/* Chromium/WebView 下的经典滚动条带箭头按钮，统一替换为主题色细滚动条。 */
+.entry-list::-webkit-scrollbar, .detail-content::-webkit-scrollbar, .category-nav::-webkit-scrollbar,
+.ingredient-options::-webkit-scrollbar, .pantry-materials::-webkit-scrollbar,
+.cooking-thresholds::-webkit-scrollbar { width: 10px; height: 10px; }
+.entry-list::-webkit-scrollbar-track, .detail-content::-webkit-scrollbar-track, .category-nav::-webkit-scrollbar-track,
+.ingredient-options::-webkit-scrollbar-track, .pantry-materials::-webkit-scrollbar-track,
+.cooking-thresholds::-webkit-scrollbar-track { background: #1d1e19; }
+.entry-list::-webkit-scrollbar-thumb, .detail-content::-webkit-scrollbar-thumb, .category-nav::-webkit-scrollbar-thumb,
+.ingredient-options::-webkit-scrollbar-thumb, .pantry-materials::-webkit-scrollbar-thumb,
+.cooking-thresholds::-webkit-scrollbar-thumb { background: #565040; border-radius: 5px; border: 2px solid #1d1e19; }
+.entry-list::-webkit-scrollbar-thumb:hover, .detail-content::-webkit-scrollbar-thumb:hover, .category-nav::-webkit-scrollbar-thumb:hover,
+.ingredient-options::-webkit-scrollbar-thumb:hover, .pantry-materials::-webkit-scrollbar-thumb:hover,
+.cooking-thresholds::-webkit-scrollbar-thumb:hover { background: #7a6f52; }
+.entry-list::-webkit-scrollbar-button, .detail-content::-webkit-scrollbar-button, .category-nav::-webkit-scrollbar-button,
+.ingredient-options::-webkit-scrollbar-button, .pantry-materials::-webkit-scrollbar-button,
+.cooking-thresholds::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.entry-list::-webkit-scrollbar-corner, .detail-content::-webkit-scrollbar-corner { background: transparent; }
 .entry-card { background: linear-gradient(135deg, #30312b, #20211e); border-color: #68634f; border-radius: 3px; box-shadow: inset 0 0 0 2px #11130f; padding: 17px; }
 .entry-card:hover { border-color: #ad965b; background: linear-gradient(135deg, #3c3b31, #24251e); transform: translateY(-1px); }
 .entry-card.active { border-color: #e3b82e; background: linear-gradient(135deg, #4a4329, #282920); box-shadow: inset 0 0 0 2px #1b1b14, 0 0 12px #e7ad2512; }
@@ -177,6 +194,17 @@ html[lang="en"] .category-label { white-space: normal; }
 .product-caption, .ingredient-label { color: #c1b9a2; }
 .relation-item { background: #343326; border-color: #71613e; color: #e2cd96; border-radius: 2px; }
 a.relation-item:hover { background: #4d432c; border-color: #c7a458; }
+button.relation-item { font: inherit; cursor: pointer; }
+button.relation-item:hover { background: #4d432c; border-color: #c7a458; color: #f2d796; }
+.material-link { text-decoration: none; }
+.recipe-group { border: 1px solid #57503a; border-radius: 2px; background: #2b2a22; padding: 12px 12px 10px; margin: 0 0 10px; }
+.recipe-group-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.recipe-level { flex-shrink: 0; display: inline-flex; gap: 5px; align-items: baseline; padding: 2px 7px; border: 1px solid #6d603d; border-radius: 2px; background: #373528; color: #e2d0a3; font-size: 10px; }
+.dye-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-top: 9px; }
+.dye-label { flex-shrink: 0; color: #c1b9a2; font-size: 10px; }
+.dye-chip { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid #65583a; border-radius: 10px; background: #26261f; color: #cfc4a4; font-size: 10px; text-decoration: none; }
+a.dye-chip { color: #e2cd96; cursor: pointer; }
+a.dye-chip:hover { background: #4d432c; border-color: #c7a458; color: #f2d796; }
 .relation-id { color: #bbb098; }
 .highlight-row, .recipe-link, .raw-details, .config-row { border-color: #504b3a; }
 .highlight-row dt, .config-row dt, .config-row dt small, .recipe-link .recipe-hint { color: #bdb49e; }

@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import shutil
 import sqlite3
 import struct
@@ -32,6 +33,14 @@ STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
                     "Config_Plant": ("Gain", "Perfect_Gain"), "Config_ProductionList": ("ProductID",)}
+# 制造笔记分类名来自本地化 ConstantText_Text_ToolTable_15..21（本地 1.1.18293 已核对）。
+CRAFT_NOTE_CATEGORIES = {1: "基础材料", 2: "工具器件", 3: "陷阱狩猎", 4: "种植园艺",
+                         5: "电力能源", 6: "防御设施", 7: "生活家具"}
+# 建造商店页签名来自 ConstantText_Text_WebUI_BuildShop_8..14 与 GlobalSetting ShopPageIcon1..7；
+# ShopPage 0 的家具不出现在任何建造商店页签中。
+FURNITURE_SHOP_PAGES = {0: "未上架", 1: "储物", 2: "生活", 3: "安保", 4: "能源", 5: "烹饪", 6: "种植", 7: "其他"}
+# 制造配方中的装修材料 Category；当前版本只有 8 种植物染料参与配方。
+DECORATION_ITEM_CATEGORY = 21
 
 
 def icon_asset(raw: dict[str, Any]) -> str:
@@ -44,6 +53,84 @@ def related_icon_items(table: str, raw: dict[str, Any]) -> list[int]:
         value = raw.get(field) or []
         ids.extend([value] if isinstance(value, int) else value)
     return list(dict.fromkeys(item_id for item_id in ids if type(item_id) is int and item_id > 0))
+
+
+def per_recipe_relation_id(relation_type: str) -> int | None:
+    match = re.fullmatch(r"制造(?:材料|要求等级)（配方 ID (\d+)）", relation_type)
+    return int(match.group(1)) if match else None
+
+
+def furniture_recipe_groups(relations: list[dict[str, Any]],
+                            items: dict[int, tuple[str, dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Group a furniture entry's crafting recipes that differ only in decoration items (dyes)."""
+
+    recipes: dict[int, dict[str, Any]] = {}
+    order: list[int] = []
+    for relation in relations:
+        if relation["relation_type"] != "制造配方":
+            continue
+        recipe_id = relation["target_id"]
+        if recipe_id not in recipes:
+            recipes[recipe_id] = {"recipe_id": recipe_id, "name": relation["target_name"],
+                                  "materials": [], "dyes": [], "level": None, "link": relation.get("link")}
+            order.append(recipe_id)
+    for relation in relations:
+        recipe_id = per_recipe_relation_id(relation["relation_type"])
+        recipe = recipes.get(recipe_id) if recipe_id is not None else None
+        if recipe is None:
+            continue
+        if relation["relation_type"].startswith("制造材料"):
+            item = {"id": relation["target_id"], "name": relation["target_name"]}
+            raw = items.get(relation["target_id"], ("", {}))[1]
+            if raw.get("Category") == DECORATION_ITEM_CATEGORY:
+                if item not in recipe["dyes"]:
+                    recipe["dyes"].append(item)
+            else:
+                recipe["materials"].append(item)
+        elif relation["relation_type"].startswith("制造要求等级"):
+            recipe["level"] = relation["target_id"]
+    groups: dict[tuple, dict[str, Any]] = {}
+    group_order: list[tuple] = []
+    for recipe_id in order:
+        recipe = recipes[recipe_id]
+        key = (tuple(sorted(item["id"] for item in recipe["materials"])), recipe["level"])
+        group = groups.get(key)
+        if group is None:
+            names: dict[int, str] = {}
+            counts: dict[int, int] = {}
+            for item in recipe["materials"]:
+                names.setdefault(item["id"], item["name"])
+                counts[item["id"]] = counts.get(item["id"], 0) + 1
+            group = {"level": recipe["level"],
+                     "materials": [{"id": item_id, "name": names[item_id], "count": count}
+                                   for item_id, count in counts.items()],
+                     "options": []}
+            groups[key] = group
+            group_order.append(key)
+        group["options"].append({"recipe_id": recipe["recipe_id"], "name": recipe["name"],
+                                 "dyes": recipe["dyes"], "link": recipe["link"]})
+    for group in groups.values():
+        group["options"].sort(key=lambda option: (bool(option["dyes"]),
+                                                  option["dyes"][0]["id"] if option["dyes"] else 0,
+                                                  option["recipe_id"]))
+    return [groups[key] for key in group_order]
+
+
+def furniture_recipe_materials_text(groups: list[dict[str, Any]]) -> str:
+    parts = []
+    for group in groups:
+        text = "、".join(f"{item['name']} × {item['count']}" if item["count"] > 1 else item["name"]
+                         for item in group["materials"])
+        dye_count = sum(1 for option in group["options"] if option["dyes"])
+        if dye_count:
+            text += f"；另有 {dye_count} 种染料配色"
+        parts.append(text)
+    return "；".join(parts)
+
+
+def furniture_recipe_levels_text(groups: list[dict[str, Any]]) -> str:
+    levels = sorted({group["level"] for group in groups if group["level"] is not None})
+    return "、".join("无" if level == 0 else f"{level}级" for level in levels)
 
 
 def icon_filename(asset_path: str) -> str:
@@ -229,6 +316,7 @@ def export_data(database_path: Path) -> dict[str, Any]:
                         entry["products"].append(result)
                     entry["icon"] = next((product["icon"] for product in entry["products"] if product["icon"]), "")
                 elif category == "craft":
+                    entry["note_category"] = raw.get("NoteCategory") if isinstance(raw.get("NoteCategory"), int) else None
                     for item_id in related_icon_items(row["source_table"], raw):
                         name, product = items.get(item_id, (f"ID:{item_id}", {}))
                         picture = public_icon(icon_asset(product))
@@ -236,6 +324,22 @@ def export_data(database_path: Path) -> dict[str, Any]:
                             entry["icon"] = picture
                             entry["icon_source"] = {"id": item_id, "name": name, "kind": "product"}
                             break
+                elif category == "furniture":
+                    entry["shop_page"] = raw.get("ShopPage") if isinstance(raw.get("ShopPage"), int) else None
+                    recipe_groups = furniture_recipe_groups(related, items)
+                    entry["craft_recipes"] = recipe_groups
+                    # The per-recipe relations are re-exported as grouped craft_recipes.
+                    entry["relations"] = [relation for relation in related
+                                          if relation["relation_type"] != "制造配方"
+                                          and per_recipe_relation_id(relation["relation_type"]) is None]
+                    if recipe_groups:
+                        overrides = {"materials": furniture_recipe_materials_text(recipe_groups),
+                                     "level": furniture_recipe_levels_text(recipe_groups)}
+                        entry["highlights"] = [{**field, "value": overrides.get(field["field"], field["value"])}
+                                               for field in highlights]
+                    else:
+                        entry["highlights"] = [field for field in highlights
+                                               if field["field"] not in {"materials", "level"}]
                 category_map[category]["entries"].append(entry)
         achievements = []
         for row in connection.execute("SELECT * FROM achievements ORDER BY sort_order, achievement_id"):
@@ -291,6 +395,8 @@ def export_data(database_path: Path) -> dict[str, Any]:
         recommendations["plant_levels"] = [{"level": raw.get("Lv"), "growth_bonus": raw.get("growth_speed_bonus"),
             "anomaly_reduction": raw.get("pest_rate_reduction")} for raw in plant_levels]
         return {"format_version": 1, "metadata": metadata, "categories": categories,
+                "craft_note_categories": {str(key): value for key, value in CRAFT_NOTE_CATEGORIES.items()},
+                "furniture_shop_pages": {str(key): value for key, value in FURNITURE_SHOP_PAGES.items()},
                 "cooking_ingredients": ingredients, "cooking_model": cooking_model, "planters": planters, "planting_environment": environment,
                 "recommendations": recommendations}
     finally:

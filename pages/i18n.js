@@ -26,6 +26,8 @@
     const parts = value.split(/(\s* · \s*|、|，|：|；|\s+\+\s+|\s*\/\s*|\s*×\s*|\s*−\s*)/);
     if (parts.length > 1) return parts.map((part, index) => index % 2 ?
       ({"、": ", ", "，": ", ", "：": ": ", "；": "; "}[part] || part) : english(part, depth + 1)).join("");
+    const level = value.match(/^(\d+)级$/);
+    if (level) return "Lv." + level[1];
     const stat = value.match(/^(饱腹|饱食|心态|精力|健康|生命)([\s+−\-\d.,]+)$/);
     return stat ? english(stat[1], depth + 1) + " " + stat[2].trim() : value;
   }

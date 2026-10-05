@@ -308,6 +308,23 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
         if threshold:
             body += f'<p>分份标准：{h(threshold)} 饱腹 / 次。可吃次数按整份总饱腹除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
     highlights = [field for field in entry["highlights"] if not entry.get("plant") or field["field"] not in {"Size", "LightNeed", "ColdResistance"}]
+    if entry.get("craft_recipes"):
+        body += '<section><h2>制造配方</h2>'
+        for group in entry["craft_recipes"]:
+            materials = "、".join(f"{item['name']} × {item['count']}" if item["count"] > 1 else item["name"]
+                                  for item in group["materials"]) or "未提供"
+            options = []
+            for option in group["options"]:
+                label = "原色" if not option["dyes"] else "、".join(dye["name"] for dye in option["dyes"])
+                target = (option.get("link") or {}).get("key")
+                text = h(label)
+                if target in routes:
+                    text = f'<a href="{h(base + routes[target])}">{text}</a>'
+                options.append(f'{text} <span class="muted">（{h(option["name"])} · 配方 ID {option["recipe_id"]}）</span>')
+            level = "无" if group["level"] == 0 else f'{group["level"]}级' if group["level"] is not None else "未提供"
+            body += (f'<p>材料：{h(materials)} · 要求等级：{h(level)}</p>'
+                     f'<p>染料配色：{"、".join(options)}</p>')
+        body += '</section>'
     if highlights:
         heading = "完成条件与方法" if category == "achievements" else "制作要求与主要信息" if category in {"dish", "craft"} else "主要信息"
         body += f'<section><h2>{heading}</h2>' + fields_html(highlights) + '</section>'

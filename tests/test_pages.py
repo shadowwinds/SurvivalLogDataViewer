@@ -201,6 +201,76 @@ class PagesExportTests(unittest.TestCase):
             self.assertIn("icons/" + refs[ref].rsplit("/", 1)[-1], documents[f"guide/{category}/{item_id}/index.html"])
         self.assertNotIn("PRIVATE_", json.dumps(payload))
 
+    def test_furniture_recipes_group_dye_variants_and_craft_note_categories(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.executemany(
+                "INSERT INTO recipe_items VALUES (?, ?, 0, 1, 0, '', 0, ?)",
+                [(20005, "木片", json.dumps({"ID": 20005, "Category": 9})),
+                 (20003, "废塑料", json.dumps({"ID": 20003, "Category": 9})),
+                 (20363, "鼠尾草绿染料", json.dumps({"ID": 20363, "Category": 21})),
+                 (20364, "陶土橙染料", json.dumps({"ID": 20364, "Category": 21})),
+                 (14045, "沙发包裹", json.dumps({"ID": 14045, "Category": 14, "TargetFurnitureID": 20002}))])
+            connection.execute(
+                "INSERT INTO codex_entries VALUES (?, 'Config_ProductionList', 341, '沙发包裹', '', '', '', ?, 1)",
+                ("Config_ProductionList:341",
+                 json.dumps({"ID": 341, "Level": 1, "NoteCategory": 7,
+                             "MaterialList": [20005, 20005, 20003, 20003], "ProductID": [14045]})))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_ProductionList:341', 'craft', 1)")
+            connection.execute(
+                "INSERT INTO codex_entries VALUES (?, 'Config_Furniture', 20002, '沙发', '', '', '', ?, 1)",
+                ("Config_Furniture:20002", json.dumps({"ID": 20002, "ShopPage": 2, "FurniturePrice": 20})))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_Furniture:20002', 'furniture', 1)")
+            connection.execute(
+                "INSERT INTO codex_entries VALUES (?, 'Config_Furniture', 20003, '信标', '', '', '', ?, 1)",
+                ("Config_Furniture:20003", json.dumps({"ID": 20003, "ShopPage": 0})))
+            connection.execute("INSERT INTO codex_entry_categories VALUES ('Config_Furniture:20003', 'furniture', 2)")
+            relations = [
+                ("Config_Furniture:20002", "制造配方", "Config_ProductionList", 341, "沙发包裹", 0, "341"),
+                ("Config_Furniture:20002", "制造配方", "Config_ProductionList", 1073, "鼠尾草绿沙发包裹", 1, "1073"),
+                ("Config_Furniture:20002", "制造配方", "Config_ProductionList", 1074, "陶土橙沙发包裹", 2, "1074"),
+            ]
+            for recipe_id, dye in ((341, None), (1073, 20363), (1074, 20364)):
+                materials = [(20005, "木片"), (20005, "木片"), (20003, "废塑料"), (20003, "废塑料")]
+                if dye:
+                    materials.append((dye, "染料"))
+                for ordinal, (item_id, name) in enumerate(materials):
+                    relations.append((f"Config_Furniture:20002", f"制造材料（配方 ID {recipe_id}）",
+                                      "Config_Item", item_id, name, ordinal, str(item_id)))
+                relations.append(("Config_Furniture:20002", f"制造要求等级（配方 ID {recipe_id}）",
+                                  "Config_ProductionList", 1, "1级", 0, "1"))
+            connection.executemany("INSERT INTO entry_relations VALUES (?, ?, ?, ?, ?, ?, ?)", relations)
+        payload = export_data(self.database)
+        self.assertEqual(payload["craft_note_categories"]["7"], "生活家具")
+        self.assertEqual(payload["furniture_shop_pages"]["2"], "生活")
+        groups = {category["id"]: category["entries"] for category in payload["categories"]}
+        self.assertEqual(groups["craft"][0]["note_category"], 7)
+        sofa = groups["furniture"][0]
+        self.assertEqual(sofa["shop_page"], 2)
+        self.assertEqual(len(sofa["craft_recipes"]), 1)
+        group = sofa["craft_recipes"][0]
+        self.assertEqual(group["level"], 1)
+        self.assertEqual(group["materials"], [{"id": 20005, "name": "木片", "count": 2},
+                                              {"id": 20003, "name": "废塑料", "count": 2}])
+        self.assertEqual([option["recipe_id"] for option in group["options"]], [341, 1073, 1074])
+        self.assertEqual(group["options"][0]["link"], {"category": "craft", "key": "Config_ProductionList:341"})
+        self.assertIsNone(group["options"][1]["link"])
+        self.assertEqual([dye["id"] for dye in group["options"][1]["dyes"]], [20363])
+        # Per-recipe relations are replaced by the grouped structure.
+        self.assertEqual(sofa["relations"], [])
+        self.assertEqual(next(field["value"] for field in sofa["highlights"] if field["field"] == "materials"),
+                         "木片 × 2、废塑料 × 2；另有 2 种染料配色")
+        self.assertEqual(next(field["value"] for field in sofa["highlights"] if field["field"] == "level"), "1级")
+        beacon = groups["furniture"][1]
+        self.assertEqual(beacon["craft_recipes"], [])
+        self.assertEqual([field["field"] for field in beacon["highlights"]], [])
+        documents = seo_documents(payload, "https://example.org/project/")
+        sofa_document = documents["guide/furniture/20002/index.html"]
+        self.assertIn("制造配方", sofa_document)
+        self.assertIn("另有 2 种染料配色", sofa_document)
+        self.assertIn('<a href="https://example.org/project/guide/craft/341/">原色</a>', sofa_document)
+        self.assertNotIn("制造材料（配方 ID", json.dumps(payload))
+        self.assertNotIn("PRIVATE_", json.dumps(payload))
+
     def test_planters_use_public_furniture_config_and_do_not_export_auxiliary_private_fields(self) -> None:
         with closing(sqlite3.connect(self.database)) as connection, connection:
             for furniture_id, current, config_id in ((30, 1, 17), (31, 0, 18), (32, 1, 999), (33, 1, 0)):

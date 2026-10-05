@@ -5,7 +5,7 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "" };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", craftGroup: "", materialId: null, materialUses: new Map(), craftNoteNames: {}, furniturePageNames: {}, planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "" };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
@@ -85,6 +85,15 @@
 
   function category(id = state.category) {
     return state.categories.find((item) => item.id === id);
+  }
+
+  function craftGroupId(categoryId, entry) {
+    return categoryId === "craft" ? entry.note_category : categoryId === "furniture" ? entry.shop_page : null;
+  }
+
+  function craftGroupName(categoryId, entry) {
+    const names = categoryId === "craft" ? state.craftNoteNames : state.furniturePageNames;
+    return names[craftGroupId(categoryId, entry)] || "";
   }
 
   function urlFor(categoryId, key) {
@@ -321,7 +330,51 @@
     i18n?.apply($("ingredientOptions"));
   }
 
+  function facetChip(label, count, active, action, extra = "") {
+    const button = node("button", "facet-chip " + extra);
+    button.type = "button";
+    button.dataset.facet = label;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.append(node("span", "", label), node("small", "", count));
+    button.addEventListener("click", action);
+    return button;
+  }
+
   function renderFacets() {
+    renderIngredientFacets();
+    renderCraftFacets();
+  }
+
+  function renderCraftFacets() {
+    const visible = state.category === "craft" || state.category === "furniture";
+    $("craftFacets").hidden = !visible;
+    if (!visible) return;
+    const entries = category().entries;
+    const groups = new Map();
+    for (const entry of entries) {
+      const id = craftGroupId(state.category, entry);
+      const group = groups.get(id) || {name: craftGroupName(state.category, entry) || "未分类", count: 0};
+      group.count += 1;
+      groups.set(id, group);
+    }
+    const sorted = [...groups].sort((a, b) => (a[0] ?? 99) - (b[0] ?? 99));
+    const groupChips = [facetChip("全部分类", entries.length, !state.craftGroup, () => { state.craftGroup = ""; render(); })];
+    for (const [id, group] of sorted) {
+      groupChips.push(facetChip(group.name, group.count, String(id) === state.craftGroup, () => {
+        state.craftGroup = state.craftGroup === String(id) ? "" : String(id); render();
+      }));
+    }
+    $("craftGroups").replaceChildren(...groupChips);
+    const groupOptions = [node("option", "", "全部分类")]; groupOptions[0].value = "";
+    for (const [id, group] of sorted) {
+      const option = node("option", "", group.name); option.value = String(id); groupOptions.push(option);
+    }
+    $("craftGroupFilter").replaceChildren(...groupOptions);
+    $("craftGroupFilter").value = state.craftGroup;
+  }
+
+  function renderIngredientFacets() {
     const visible = state.category === "food";
     $("ingredientFacets").hidden = !visible;
     if (!visible) return;
@@ -336,19 +389,9 @@
       group.count += 1;
       groups.set(food.sub_category_id, group);
     }
-    const chip = (label, count, active, action, extra = "") => {
-      const button = node("button", "facet-chip " + extra);
-      button.type = "button";
-      button.dataset.facet = label;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-      button.append(node("span", "", label), node("small", "", count));
-      button.addEventListener("click", action);
-      return button;
-    };
-    const groupChips = [chip("全部分类", entries.length, !state.group, () => { state.group = ""; render(); })];
+    const groupChips = [facetChip("全部分类", entries.length, !state.group, () => { state.group = ""; render(); })];
     for (const [id, group] of [...groups].sort((a, b) => a[0] - b[0])) {
-      groupChips.push(chip(group.name, group.count, state.group === String(id), () => {
+      groupChips.push(facetChip(group.name, group.count, state.group === String(id), () => {
         state.group = state.group === String(id) ? "" : String(id); render();
       }));
     }
@@ -361,10 +404,10 @@
     $("ingredientGroupFilter").value = state.group;
     $("ingredientTierFilter").value = state.tier;
     const inGroup = entries.filter(entry => !state.group || entry.food.sub_category_id === Number(state.group));
-    const tierChips = [chip("全部档位", inGroup.length, !state.tier, () => { state.tier = ""; render(); })];
+    const tierChips = [facetChip("全部档位", inGroup.length, !state.tier, () => { state.tier = ""; render(); })];
     for (const tier of [1, 2, 3, "none"]) {
       const count = inGroup.filter(entry => tier === "none" ? entry.food.tier === null : entry.food.tier === tier).length;
-      if (count) tierChips.push(chip(tierLabels[tier] || "不影响档位", count, state.tier === String(tier), () => {
+      if (count) tierChips.push(facetChip(tierLabels[tier] || "不影响档位", count, state.tier === String(tier), () => {
         state.tier = state.tier === String(tier) ? "" : String(tier); render();
       }, "tier-" + tier));
     }
@@ -542,6 +585,8 @@
     $("ingredientTierSelect").value = "";
     state.group = "";
     state.tier = "";
+    state.craftGroup = "";
+    state.materialId = null;
     if (resetPlanting) {
       for (const [id, value] of Object.entries({planterSelect: "", planterPower: "on", plantLight: "", plantCold: "",
           plantWeather: "sunny", plantColdWave: "0", plantLocation: "first", plantHeating: "none"})) $(id).value = value;
@@ -640,6 +685,8 @@
       (!renewableOnly || entry.sources?.some(source => ["plant", "prey"].includes(source.category))) &&
       (state.category !== "food" || !state.group || entry.food?.sub_category_id === Number(state.group)) &&
       (state.category !== "food" || !state.tier || (state.tier === "none" ? entry.food?.tier === null : entry.food?.tier === Number(state.tier))) &&
+      (state.category !== "craft" && state.category !== "furniture" || !state.craftGroup || String(craftGroupId(state.category, entry)) === state.craftGroup) &&
+      (state.category !== "craft" && state.category !== "furniture" || !state.materialId || entry.materialIds?.has(state.materialId)) &&
       (!specificOnly || entry.hasSpecificIngredients) &&
       entry.nameIndex.includes(name) && (state.category === "dish" ? (isPantry() ? state.pantryPlans.has(entry.key) : matchesSelectedMaterials(entry)) : materials.every((term) => entry.materialIndex.includes(term))) &&
       (state.category !== "dish" || level === "" || (Number.isInteger(entry.recipe?.min_level) && entry.recipe.min_level <= Number(level))) &&
@@ -670,7 +717,9 @@
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
       meta.append(node("span", "", entry.plant ? (entry.plant.food_harvest ? "食用收获" : "其他收获") :
-        player ? "分类：" + player.sub_category : entry.hidden ? "隐藏成就" : entry.group || category().label));
+        player ? "分类：" + player.sub_category :
+        state.category === "craft" || state.category === "furniture" ? craftGroupName(state.category, entry) || category().label :
+        entry.hidden ? "隐藏成就" : entry.group || category().label));
       if (state.category === "dish") {
         meta.append(node("span", "quality-label", qualityName($("qualitySelect").value) + "品质"));
         if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
@@ -711,7 +760,7 @@
     $("emptyState").hidden = state.entries.length !== 0;
     $("emptyState").querySelector("p").textContent = isPantry() ? "先添加冰箱食材和剩余用量；没有结果时，检查烹饪等级、品质或其他筛选条件。" : "换个关键词，或减少标签和属性筛选。";
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : "";
+    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : ["craft", "furniture"].includes(state.category) ? [state.craftGroup ? "已按分类筛选" : "", state.materialId ? "已按材料筛选" : ""].filter(Boolean).join(" · ") : "";
   }
 
   function section(title, caption = "") {
@@ -784,17 +833,106 @@
       group.append(node("div", "ingredient-label", readable));
       const values = node("div", "relation-values");
       for (const relation of relationsById.values()) {
-        const item = node(relation.link ? "a" : "span", "relation-item");
+        const clickable = !relation.link && relation.target_table === "Config_Item" &&
+          (state.category === "craft" || state.category === "furniture");
+        const item = node(relation.link ? "a" : clickable ? "button" : "span", "relation-item");
         const target = state.categories.flatMap((item) => item.entries).find((entry) => entry.key === relation.link?.key);
         if (target?.icon) item.append(art(target.icon, relation.link.category));
         item.append(node("span", "", (relation.target_name || "ID:" + relation.target_id) + (relation.quantity > 1 ? " × " + relation.quantity : "")));
         item.title = relation.target_table + " / ID " + relation.target_id;
         if (relation.link) item.href = urlFor(relation.link.category, relation.link.key);
+        if (clickable) {
+          item.type = "button";
+          item.title = "查看能用「" + (relation.target_name || "该材料") + "」制造的配方";
+          item.addEventListener("click", () => viewMaterial(relation.target_id, relation.target_name));
+        }
         values.append(item);
       }
       group.append(values);
       block.append(group);
     }
+    container.append(block);
+  }
+
+  function materialChips(materials) {
+    const values = node("div", "relation-values");
+    for (const material of materials) {
+      const id = material.target_id ?? material.id;
+      const name = material.target_name || material.name || "ID:" + id;
+      const chip = node("button", "relation-item material-link");
+      chip.type = "button";
+      chip.append(node("span", "", name + (material.count > 1 ? " × " + material.count : "")));
+      chip.title = "查看能用「" + name + "」制造的配方";
+      chip.addEventListener("click", () => viewMaterial(id, name));
+      values.append(chip);
+    }
+    return values;
+  }
+
+  function viewMaterial(id, name) {
+    if (mobile.matches) $("detailPanel").close();
+    state.category = "craft";
+    clearFilters();
+    configureControls();
+    state.materialId = id;
+    $("materialSearch").value = name || String(id);
+    state.key = "";
+    render();
+    $("entryList").scrollTop = 0;
+  }
+
+  function furnitureRecipesBlock(groups) {
+    const block = section("制造配方", "只差染料颜色的配方已合并展示");
+    for (const group of groups) {
+      const groupBlock = node("div", "recipe-group");
+      const head = node("div", "recipe-group-head");
+      const levelBadge = node("span", "recipe-level");
+      levelBadge.append(node("span", "", "要求等级"),
+        node("span", "", group.level === 0 ? "无" : group.level != null ? group.level + "级" : "未提供"));
+      head.append(levelBadge);
+      if (group.materials?.length) head.append(materialChips(group.materials));
+      groupBlock.append(head);
+      if (group.options?.length && group.options.some((option) => option.dyes?.length)) {
+        const dyeRow = node("div", "dye-row");
+        dyeRow.append(node("span", "dye-label", "染料配色"));
+        const values = node("div", "relation-values");
+        for (const option of group.options) {
+          const label = option.dyes?.length ? option.dyes.map((dye) => dye.name).join("、") : "原色";
+          const chip = node(option.link ? "a" : "span", "dye-chip");
+          chip.append(node("span", "", label));
+          chip.title = option.name + " · 配方 ID " + option.recipe_id;
+          if (option.link) chip.href = urlFor(option.link.category, option.link.key);
+          values.append(chip);
+        }
+        dyeRow.append(values);
+        groupBlock.append(dyeRow);
+      }
+      block.append(groupBlock);
+    }
+    return block;
+  }
+
+  function showMaterialUses(container, entry) {
+    const productIds = entry.relations.filter((relation) => relation.relation_type === "制造产物").map((relation) => relation.target_id);
+    if (!productIds.length) return;
+    const uses = new Map();
+    for (const id of productIds) for (const use of state.materialUses.get(id) || [])
+      if (use.key !== entry.key) uses.set(use.category + "|" + use.key, use);
+    if (!uses.size) return;
+    const block = section("这个材料能做什么", uses.size + " 个配方使用它");
+    for (const use of [...uses.values()].slice(0, 6)) {
+      const link = node("a", "recipe-link");
+      link.href = urlFor(use.category, use.key);
+      const name = node("span", "recipe-name", use.name);
+      name.append(node("span", "recipe-hint", use.category === "craft" ? "制造配方" : "家具制造"));
+      link.append(name);
+      block.append(link);
+    }
+    if (uses.size > 6) block.append(node("p", "stat-help", "已显示前 6 条，其余可用下方按钮查询。"));
+    const more = node("button", "more-recipes", "用「" + entry.name + "」查全部配方 →");
+    more.type = "button";
+    more.addEventListener("click", () => viewMaterial(productIds[0], entry.name));
+    block.append(more);
     container.append(block);
   }
 
@@ -956,11 +1094,30 @@
       fragment.append(tags);
       renderSources(fragment, entry);
       showRelatedDishes(fragment, entry);
+    } else if (state.category === "craft") {
+      const materialRelations = entry.relations.filter((relation) => relation.relation_type === "制造材料");
+      if (materialRelations.length) {
+        const counts = new Map();
+        for (const relation of materialRelations) {
+          const record = counts.get(relation.target_id) || {target_id: relation.target_id, target_name: relation.target_name, count: 0};
+          record.count += 1;
+          counts.set(relation.target_id, record);
+        }
+        const level = entry.highlights.find((field) => field.field === "Level");
+        const block = section("制作所需材料", level ? "要求等级 · " + level.value : "");
+        block.append(materialChips([...counts.values()]));
+        block.append(node("p", "stat-help", "点击材料，查看能用它制造的所有配方。"));
+        fragment.append(block);
+      }
+      showMaterialUses(fragment, entry);
+    } else if (state.category === "furniture" && entry.craft_recipes?.length) {
+      fragment.append(furnitureRecipesBlock(entry.craft_recipes));
     }
     renderPlantDetails(fragment, entry);
     if (entry.description) fragment.append(node("p", "detail-description", entry.description));
     const usefulHighlights = entry.highlights.filter((field) => !(player && ["acquisition", "ingredients"].includes(field.field)) &&
-      !(entry.plant && ["Size", "LightNeed", "ColdResistance"].includes(field.field)));
+      !(entry.plant && ["Size", "LightNeed", "ColdResistance"].includes(field.field)) &&
+      !((state.category === "craft" || state.category === "furniture") && ["materials", "level", "Level"].includes(field.field)));
     if (usefulHighlights.length) {
       const block = section(state.category === "dish" ? "制作信息" : "更多信息");
       const list = node("dl", "highlights");
@@ -975,6 +1132,7 @@
     }
     const otherRelations = entry.relations.filter((r) => {
       if (state.category === "dish") return !["具体食材", "食材分类", "完美产物", "良好产物", "普通产物", "失败产物"].includes(r.relation_type);
+      if (state.category === "craft") return r.relation_type !== "制造材料";
       if (player) return !/^FoodTag[123]$/.test(r.relation_type) && r.relation_type !== "子分类";
       return true;
     });
@@ -1094,6 +1252,9 @@
       ] : [item]);
       state.ingredients = data.cooking_ingredients || [];
       state.cookingModel = data.cooking_model || null;
+      state.craftNoteNames = data.craft_note_categories || {};
+      state.furniturePageNames = data.furniture_shop_pages || {};
+      state.materialUses = new Map();
       state.stock = {}; state.pantryPlanKey = "";
       restorePantry();
       renderCookingRules();
@@ -1115,9 +1276,10 @@
       state.ingredients.sort((a, b) => a.sub_category_id - b.sub_category_id || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id);
       const foods = state.ingredients;
       for (const item of state.categories) {
+        const grouped = item.id === "craft" || item.id === "furniture";
         for (const entry of item.entries) {
           entry.nameIndex = searchIndex([entry.name, entry.name_key, entry.id, entry.food?.sub_category, entry.food?.note,
-            entry.icon_source?.name,
+            entry.icon_source?.name, item.id === "craft" || item.id === "furniture" ? craftGroupName(item.id, entry) : "",
             ...(entry.food?.tags || []).map((tag) => tag.name), ...(entry.products || []).map((product) => product.note)]);
           const materialRelations = entry.relations.filter((relation) => /^(具体食材|食材分类|制造材料)/.test(relation.relation_type));
           const specific = materialRelations.filter((relation) => relation.relation_type === "具体食材");
@@ -1126,7 +1288,19 @@
           const eligible = specific.length ? foods.filter((food) => specific.some((r) => r.target_id === food.id)) :
             foods.filter((food) => groups.has(food.sub_category_id));
           entry.ingredientIds = new Set([...specific.map((r) => r.target_id), ...eligible.map((food) => food.id)]);
-          entry.materialIndex = searchIndex([...materialRelations.flatMap((r) => [r.target_name, r.target_id]), ...eligible.flatMap((food) => [food.name, food.id])]);
+          const materialSources = item.id === "furniture" ?
+            (entry.craft_recipes || []).flatMap((group) => [...(group.materials || []).map((material) => ({id: material.id, name: material.name})),
+              ...(group.options || []).flatMap((option) => (option.dyes || []).map((dye) => ({id: dye.id, name: dye.name})))]) :
+            materialRelations.map((relation) => ({id: relation.target_id, name: relation.target_name}));
+          entry.materialIds = new Set(materialSources.map((material) => material.id));
+          entry.materialIndex = searchIndex([...materialSources.flatMap((material) => [material.name, material.id]),
+            ...eligible.flatMap((food) => [food.name, food.id])]);
+        }
+      }
+      for (const item of state.categories) if (item.id === "craft" || item.id === "furniture") {
+        for (const entry of item.entries) for (const id of entry.materialIds) {
+          if (!state.materialUses.has(id)) state.materialUses.set(id, []);
+          state.materialUses.get(id).push({category: item.id, key: entry.key, name: entry.name});
         }
       }
       $("gameVersion").textContent = "数据 " + (data.metadata.game_version || "未标注");
@@ -1147,6 +1321,7 @@
   }
 
   ["nameSearch", "materialSearch"].forEach((id) => $(id).addEventListener("input", () => {
+    if (id === "materialSearch") state.materialId = null;
     clearTimeout(state.debounce);
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
@@ -1155,6 +1330,7 @@
   ["ingredientGroupSelect", "ingredientTierSelect"].forEach(id => $(id).addEventListener("change", renderIngredientOptions));
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
+  $("craftGroupFilter").addEventListener("change", () => { state.craftGroup = $("craftGroupFilter").value; render(); });
   ["tagSelect", "cookableOnly", "renewableOnly", "specificRecipesOnly", "sortSelect", "qualitySelect", "cookingLevelSelect", "tierFloorSelect"].forEach((id) => $(id).addEventListener("change", () => render()));
   plantingChoiceIds.forEach(id => $(id).addEventListener(["plantLight", "plantCold"].includes(id) ? "input" : "change", () => {
     savePlantingChoices(); $("entryList").scrollTop = 0; render();
