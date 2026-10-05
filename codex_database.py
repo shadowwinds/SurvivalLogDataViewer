@@ -682,7 +682,7 @@ def build_relations(
                 ("RemoveGet", "拆除获得", "Config_Item"),
                 ("PlantFurnitureID", "种植配置", "Config_FurniturePlant"),
                 ("CookFurnitureID", "烹饪配置", "Config_FurnitureCook"),
-                ("BagId", "包裹物品", "Config_Item"),
+                ("BagId", "包裹配置", "Config_Bag"),
                 ("ElectricalFurnitureID", "电力配置", "Config_FurnitureElectrical"),
                 ("RotProductOverride", "腐烂产物覆盖", "Config_Item"),
             ):
@@ -1963,7 +1963,7 @@ def main() -> int:
     parser.add_argument(
         "--game-root",
         type=Path,
-        default=Path(r"G:\SteamLibrary\steamapps\common\Survival Log"),
+        default=Path(r"E:\games\Steam\steamapps\common\Survival Log"),
         help="游戏安装目录",
     )
     parser.add_argument(

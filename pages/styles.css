@@ -110,6 +110,15 @@ button.tag:hover { border-color: #7e9e61; background: #e0ebd2; }
 .card-stat b.zero { color: #62735b; }
 .entry-description { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #62735b; font-size: 11px; line-height: 1.8; margin-top: 10px; }
 .entry-description.material-preview { -webkit-line-clamp: 1; }
+.effect-chip b { font: 600 12px Georgia, serif; color: #396952; margin-left: 3px; }
+.entry-materials { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px 10px; margin-top: 10px; align-items: center; }
+.entry-materials-level, .entry-material-note { color: var(--muted); font-size: 10px; }
+.entry-material { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-size: 11px; color: #526d45; }
+.entry-material .entry-art { width: 26px; height: 26px; border-radius: 5px; background: #f1f5e9; }
+.entry-material .entry-art img { padding: 1px; }
+.entry-material .entry-art svg { width: 16px; height: 16px; }
+.entry-material-name { overflow-wrap: anywhere; }
+.entry-material-count { font: 600 12px Georgia, serif; color: #396952; white-space: nowrap; }
 .loading-state { color: #768b73; padding: 45px 15px; grid-column: 1 / -1; }
 .empty-state { text-align: center; padding: 55px 20px; color: var(--muted); }
 .empty-state > span { font: 48px Georgia, serif; color: #7d9775; }

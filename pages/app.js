@@ -749,6 +749,17 @@
           node("span", "", "光照 ≥ " + number(entry.plant.light_need)),
           node("span", "", "寒冷 ≤ " + number(entry.plant.cold_resistance)));
         button.append(facts, node("span", "entry-description", "基础生长 " + growthHours(entry.plant.growth_seconds) + " 小时"));
+      } else if (state.category === "furniture") {
+        const facts = node("span", "plant-facts entry-effects");
+        furnitureEffectChips(entry).forEach((chip) => {
+          const chipNode = node("span", "effect-chip", chip.label + (chip.value ? " " : ""));
+          if (chip.value) chipNode.append(node("b", "", chip.value));
+          if (chip.title) chipNode.title = chip.title;
+          facts.append(chipNode);
+        });
+        button.append(facts);
+        const materials = furnitureMaterials(entry);
+        if (materials) button.append(materials);
       } else {
         button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
       }
@@ -861,6 +872,7 @@
       const name = material.target_name || material.name || "ID:" + id;
       const chip = node("button", "relation-item material-link");
       chip.type = "button";
+      if (material.icon) chip.append(art(material.icon, "craft"));
       chip.append(node("span", "", name + (material.count > 1 ? " × " + material.count : "")));
       chip.title = "查看能用「" + name + "」制造的配方";
       chip.addEventListener("click", () => viewMaterial(id, name));
@@ -879,6 +891,53 @@
     state.key = "";
     render();
     $("entryList").scrollTop = 0;
+  }
+
+  function furnitureEffectChips(entry, { includePrice = true } = {}) {
+    const chips = Array.isArray(entry.effect_chips) ? entry.effect_chips : [];
+    if (!includePrice) return chips;
+    const price = Number(entry.highlights.find((field) => field.field === "FurniturePrice")?.value);
+    return Number.isFinite(price) && price > 0
+      ? [{ label: "家具价格", value: price }, ...chips] : chips;
+  }
+
+  function furnitureMaterials(entry) {
+    const groups = entry.craft_recipes || [];
+    if (!groups.length) return null;
+    const block = node("span", "entry-materials");
+    for (const group of groups) {
+      if (groups.length > 1) {
+        block.append(node("span", "entry-materials-level",
+          "要求等级 " + (group.level === 0 ? "无" : group.level != null ? group.level + "级" : "未提供")));
+      }
+      for (const material of group.materials || []) {
+        const row = node("span", "entry-material");
+        if (material.icon) row.append(art(material.icon, "craft"));
+        row.append(node("span", "entry-material-name", material.name));
+        if (material.count > 1) row.append(node("b", "entry-material-count", "× " + material.count));
+        block.append(row);
+      }
+    }
+    const dyeCount = groups.reduce(
+      (sum, group) => sum + (group.options || []).filter((option) => option.dyes?.length).length, 0);
+    if (dyeCount) block.append(node("span", "entry-material-note", "另有 " + dyeCount + " 种染料配色"));
+    return block;
+  }
+
+  function furnitureEffectsBlock(entry) {
+    const chips = furnitureEffectChips(entry, { includePrice: false });
+    if (!chips.length) return null;
+    const block = section("设施效果", "按当前配置整理");
+    const list = node("dl", "highlights");
+    for (const chip of chips) {
+      const row = node("div", "highlight-row");
+      const value = node("dd", "", chip.value || "有");
+      if (chip.title) value.title = chip.title;
+      row.append(node("dt", "", chip.label), value);
+      list.append(row);
+    }
+    block.append(list);
+    return block;
   }
 
   function furnitureRecipesBlock(groups) {
@@ -1110,8 +1169,10 @@
         fragment.append(block);
       }
       showMaterialUses(fragment, entry);
-    } else if (state.category === "furniture" && entry.craft_recipes?.length) {
-      fragment.append(furnitureRecipesBlock(entry.craft_recipes));
+    } else if (state.category === "furniture") {
+      if (entry.craft_recipes?.length) fragment.append(furnitureRecipesBlock(entry.craft_recipes));
+      const effects = furnitureEffectsBlock(entry);
+      if (effects) fragment.append(effects);
     }
     renderPlantDetails(fragment, entry);
     if (entry.description) fragment.append(node("p", "detail-description", entry.description));

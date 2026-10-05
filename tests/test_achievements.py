@@ -122,7 +122,7 @@ class AchievementConditionTests(unittest.TestCase):
     def test_condition_catalog_covers_current_ids_and_ignores_resource_version(self) -> None:
         source_version, _common_notes, conditions = load_achievement_conditions()
         self.assertEqual(source_version, "1.0.15704 / catalog 2.3.1")
-        self.assertEqual(len(conditions), 93)
+        self.assertEqual(len(conditions), 115)
         rows = [
             ConfigRow(
                 "Config_Achievement",

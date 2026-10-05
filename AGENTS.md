@@ -10,7 +10,7 @@
 - 工具直接读取本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，不启动游戏。
 - 主要模块为 `codex_parser.py`、`codex_database.py`、`codex_save.py`、`codex_server.py`、`codex_launcher.py` 和 `codex_update.py`；静态网页资源位于 `web/`。
 - 源码根目录的 `survival_log_codex.sqlite3` 是跟踪的静态配置库，`survival_log_codex_runtime.sqlite3` 是未跟踪的完成状态、存档元数据和 runtime 缓存库；源码版不生成存档同步诊断日志。源码静态库随 Git 管理，个人状态需要单独备份 runtime 库；独立版使用 exe 同目录的单文件数据库，备份该单一文件即可，日志为 `SurvivalLogDataViewer.log`。
-- 当前默认游戏目录是 `G:\SteamLibrary\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他路径时，以命令参数为准。
+- 当前默认游戏目录是 `E:\games\Steam\steamapps\common\Survival Log`；用户通过 `--game-root` 指定其他路径时，以命令参数为准。
 - 输出目录通过 `--output-dir` 指定，默认是脚本所在目录下的 `snapshots/`。输出文件只能写入用户指定的输出目录。
 - UnityPy 默认安装在 `D:\Codex\SurvivalLogDataViewer\_vendor_unitypy`；`SURVIVALLOG_UNITYPY_DIR` 可以覆盖默认路径。
 

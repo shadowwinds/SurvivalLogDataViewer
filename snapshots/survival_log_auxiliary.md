@@ -1,11 +1,11 @@
 # Survival Log 图鉴辅助配置（离线解析）
 
-- 生成时间：2026-10-04T13:19:16+08:00
+- 生成时间：2026-10-05T17:16:54+08:00
 - 游戏资源版本：1.1.18293 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
 - 实际读取文件：`E:\games\Steam\steamapps\common\Survival Log\SurvivalLog_Data\StreamingAssets\PackageManifest\MainPackage\36e63204cc1526b87676160b32cf9815.bundle`
-- 条目数量：591
-- 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`FoodTag1`、`FoodTag2`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`
+- 条目数量：676
+- 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`FoodTag1`、`FoodTag2`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`、`Config_Bag`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：保存主图鉴条目引用的分类、等级和家具辅助配置；这些行不参与六类图鉴完成进度。
 
@@ -12867,3 +12867,770 @@
 - 伙伴配置：`[45000, 45001, 45002, 45003]`；解析：铅酸蓄电池（ID 45000）、家用UPS（ID 45001）、家用储电站（ID 45002）、超大型储电装置（ID 45003）
 - 缺失提示键：SR_Web_PurchaseSafety_Coupling_Solar_MissingBattery
 - 优先级权重：100
+
+## 背包与容器容量配置
+
+### 普通背包（ID 1）
+
+- ID：1
+- 名称键：Bag_Name_1
+- 名称：普通背包
+- 尺寸：[8, 7]
+- Burden：9600
+- UseOwnerName：0
+
+### 野外登山包（ID 2）
+
+- ID：2
+- 名称键：Bag_Name_2
+- 名称：野外登山包
+- 尺寸：[10, 8]
+- Burden：12000
+- UseOwnerName：0
+
+### 购物车（ID 3）
+
+- ID：3
+- 名称键：Bag_Name_3
+- 名称：购物车
+- 尺寸：[12, 8]
+- Burden：18000
+- UseOwnerName：0
+
+### 轿车（ID 4）
+
+- ID：4
+- 名称键：Bag_Name_4
+- 名称：轿车
+- 尺寸：[14, 10]
+- Burden：48000
+- UseOwnerName：0
+
+### 普通背包（ID 5）
+
+- ID：5
+- 名称键：Bag_Name_1
+- 名称：普通背包
+- 尺寸：[8, 8]
+- Burden：9600
+- UseOwnerName：0
+
+### 普通背包（ID 6）
+
+- ID：6
+- 名称键：Bag_Name_1
+- 名称：普通背包
+- 尺寸：[8, 9]
+- Burden：9600
+- UseOwnerName：0
+
+### 普通背包（ID 7）
+
+- ID：7
+- 名称键：Bag_Name_1
+- 名称：普通背包
+- 尺寸：[8, 10]
+- Burden：9600
+- UseOwnerName：0
+
+### 仓管背包（ID 8）
+
+- ID：8
+- 名称键：Bag_Name_8
+- 名称：仓管背包
+- 尺寸：[9, 8]
+- Burden：12480
+- UseOwnerName：0
+
+### 仓管背包（ID 9）
+
+- ID：9
+- 名称键：Bag_Name_9
+- 名称：仓管背包
+- 尺寸：[9, 9]
+- Burden：12480
+- UseOwnerName：0
+
+### 仓管背包（ID 10）
+
+- ID：10
+- 名称键：Bag_Name_10
+- 名称：仓管背包
+- 尺寸：[9, 10]
+- Burden：12480
+- UseOwnerName：0
+
+### 仓管背包（ID 11）
+
+- ID：11
+- 名称键：Bag_Name_11
+- 名称：仓管背包
+- 尺寸：[9, 11]
+- Burden：12480
+- UseOwnerName：0
+
+### 柜子1（ID 1001）
+
+- ID：1001
+- 名称键：Bag_Name_1001
+- 名称：柜子1
+- 尺寸：[8, 6]
+- Burden：14400
+- UseOwnerName：1
+
+### 柜子2（ID 1002）
+
+- ID：1002
+- 名称键：Bag_Name_1002
+- 名称：柜子2
+- 尺寸：[8, 10]
+- Burden：24000
+- UseOwnerName：1
+
+### 柜子3（ID 1003）
+
+- ID：1003
+- 名称键：Bag_Name_1003
+- 名称：柜子3
+- 尺寸：[8, 10]
+- Burden：24000
+- UseOwnerName：1
+
+### 双门冰箱（ID 1004）
+
+- ID：1004
+- 名称键：Bag_Name_1004
+- 名称：双门冰箱
+- 尺寸：[8, 7]
+- Burden：0
+- UseOwnerName：1
+
+### 柜子5（ID 1005）
+
+- ID：1005
+- 名称键：Bag_Name_1005
+- 名称：柜子5
+- 尺寸：[10, 14]
+- Burden：0
+- UseOwnerName：1
+
+### 矮柜（ID 1006）
+
+- ID：1006
+- 名称键：Bag_Name_1006
+- 名称：矮柜
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 无人机货舱（ID 1008）
+
+- ID：1008
+- 名称键：Bag_Name_1008
+- 名称：无人机货舱
+- 尺寸：[6, 7]
+- Burden：12000
+- UseOwnerName：0
+
+### 中控台货舱（ID 1009）
+
+- ID：1009
+- 名称键：Bag_Name_1009
+- 名称：中控台货舱
+- 尺寸：[10, 8]
+- Burden：24000
+- UseOwnerName：0
+
+### 纸箱（ID 1010）
+
+- ID：1010
+- 名称键：Bag_Name_1010
+- 名称：纸箱
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 转运枢纽货仓（ID 1011）
+
+- ID：1011
+- 名称键：Bag_Name_1011
+- 名称：转运枢纽货仓
+- 尺寸：[10, 8]
+- Burden：24000
+- UseOwnerName：0
+
+### 转运中心粮仓（ID 1012）
+
+- ID：1012
+- 名称键：Bag_Name_1012
+- 名称：转运中心粮仓
+- 尺寸：[10, 8]
+- Burden：24000
+- UseOwnerName：0
+
+### 窗台收纳（ID 1014）
+
+- ID：1014
+- 名称键：Bag_Name_1014
+- 名称：窗台收纳
+- 尺寸：[8, 5]
+- Burden：12000
+- UseOwnerName：0
+
+### 自行车车筐（ID 1021）
+
+- ID：1021
+- 名称键：Bag_Name_1021
+- 名称：自行车车筐
+- 尺寸：[5, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 小汽车后备箱（ID 1022）
+
+- ID：1022
+- 名称键：Bag_Name_1022
+- 名称：小汽车后备箱
+- 尺寸：[10, 8]
+- Burden：0
+- UseOwnerName：0
+
+### SUV后备箱（ID 1023）
+
+- ID：1023
+- 名称键：Bag_Name_1023
+- 名称：SUV后备箱
+- 尺寸：[12, 10]
+- Burden：0
+- UseOwnerName：0
+
+### 篮子（ID 1050）
+
+- ID：1050
+- 名称键：Bag_Name_1050
+- 名称：篮子
+- 尺寸：[5, 3]
+- Burden：12000
+- UseOwnerName：0
+
+### 门口暂存格（ID 1060）
+
+- ID：1060
+- 名称键：Bag_Name_1060
+- 名称：门口暂存格
+- 尺寸：[6, 4]
+- Burden：60000
+- UseOwnerName：0
+
+### HK 整理机器人背包（ID 1061）
+
+- ID：1061
+- 名称键：Bag_Name_1061
+- 名称：HK 整理机器人背包
+- 尺寸：[4, 2]
+- Burden：0
+- UseOwnerName：0
+
+### 燃料仓（ID 1062）
+
+- ID：1062
+- 名称键：Bag_Name_1062
+- 名称：燃料仓
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：0
+
+### HK 整理机器人背包（扩展）（ID 1063）
+
+- ID：1063
+- 名称键：Bag_Name_1063
+- 名称：HK 整理机器人背包（扩展）
+- 尺寸：[4, 3]
+- Burden：0
+- UseOwnerName：0
+
+### FX 维修机器人货舱（ID 1064）
+
+- ID：1064
+- 名称键：Bag_Name_1064
+- 名称：FX 维修机器人货舱
+- 尺寸：[2, 2]
+- Burden：0
+- UseOwnerName：0
+
+### 大型展示柜（非卖品）（ID 2001）
+
+- ID：2001
+- 名称键：Bag_Name_2001
+- 名称：大型展示柜（非卖品）
+- 尺寸：[16, 12]
+- Burden：0
+- UseOwnerName：1
+
+### 啤酒箱（ID 2002）
+
+- ID：2002
+- 名称键：Bag_Name_2002
+- 名称：啤酒箱
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 纸箱（ID 2003）
+
+- ID：2003
+- 名称键：Bag_Name_2003
+- 名称：纸箱
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 工具箱（ID 2004）
+
+- ID：2004
+- 名称键：Bag_Name_2004
+- 名称：工具箱
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 箱子（ID 3001）
+
+- ID：3001
+- 名称键：Bag_Name_3001
+- 名称：箱子
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 箱子（ID 3002）
+
+- ID：3002
+- 名称键：Bag_Name_3002
+- 名称：箱子
+- 尺寸：[6, 5]
+- Burden：0
+- UseOwnerName：1
+
+### 箱子（ID 3003）
+
+- ID：3003
+- 名称键：Bag_Name_3003
+- 名称：箱子
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 卡式炉操作台（ID 5001）
+
+- ID：5001
+- 名称键：Bag_Name_5001
+- 名称：卡式炉操作台
+- 尺寸：[6, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 电烤箱操作台（ID 5002）
+
+- ID：5002
+- 名称键：Bag_Name_5002
+- 名称：电烤箱操作台
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 微波炉操作台（ID 5003）
+
+- ID：5003
+- 名称键：Bag_Name_5003
+- 名称：微波炉操作台
+- 尺寸：[6, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 大型燃气灶操作台（ID 5004）
+
+- ID：5004
+- 名称键：Bag_Name_5004
+- 名称：大型燃气灶操作台
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 榨汁机操作台（ID 5005）
+
+- ID：5005
+- 名称键：Bag_Name_5005
+- 名称：榨汁机操作台
+- 尺寸：[4, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 咖啡机操作台（ID 5006）
+
+- ID：5006
+- 名称键：Bag_Name_5006
+- 名称：咖啡机操作台
+- 尺寸：[4, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 老鼠笼饲料仓（ID 5007）
+
+- ID：5007
+- 名称键：Bag_Name_5007
+- 名称：老鼠笼饲料仓
+- 尺寸：[5, 2]
+- Burden：0
+- UseOwnerName：0
+
+### 老鼠笼饲料仓（ID 5008）
+
+- ID：5008
+- 名称键：Bag_Name_5008
+- 名称：老鼠笼饲料仓
+- 尺寸：[7, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 老鼠笼饲料仓（ID 5009）
+
+- ID：5009
+- 名称键：Bag_Name_5009
+- 名称：老鼠笼饲料仓
+- 尺寸：[8, 5]
+- Burden：0
+- UseOwnerName：0
+
+### 工作台抽屉（ID 5010）
+
+- ID：5010
+- 名称键：Bag_Name_5010
+- 名称：工作台抽屉
+- 尺寸：[8, 5]
+- Burden：0
+- UseOwnerName：0
+
+### 电火锅操作台（ID 5011）
+
+- ID：5011
+- 名称键：Bag_Name_5011
+- 名称：电火锅操作台
+- 尺寸：[6, 4]
+- Burden：0
+- UseOwnerName：0
+
+### 工作台抽屉（ID 5012）
+
+- ID：5012
+- 名称键：Bag_Name_5010
+- 名称：工作台抽屉
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 工作台抽屉（ID 5013）
+
+- ID：5013
+- 名称键：Bag_Name_5010
+- 名称：工作台抽屉
+- 尺寸：[8, 7]
+- Burden：0
+- UseOwnerName：0
+
+### 老鼠笼饲料仓（ID 5014）
+
+- ID：5014
+- 名称键：Bag_Name_5014
+- 名称：老鼠笼饲料仓
+- 尺寸：[10, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 粉碎机投料斗（ID 5015）
+
+- ID：5015
+- 名称键：Bag_Name_5015
+- 名称：粉碎机投料斗
+- 尺寸：[8, 3]
+- Burden：0
+- UseOwnerName：0
+
+### 粉碎机接料仓（ID 5016）
+
+- ID：5016
+- 名称键：Bag_Name_5016
+- 名称：粉碎机接料仓
+- 尺寸：[8, 5]
+- Burden：0
+- UseOwnerName：0
+
+### 口粮压制槽（ID 5017）
+
+- ID：5017
+- 名称键：Bag_Name_5017
+- 名称：口粮压制槽
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 口粮产出格（ID 5018）
+
+- ID：5018
+- 名称键：Bag_Name_5018
+- 名称：口粮产出格
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 自动诱捕笼储物仓（ID 5019）
+
+- ID：5019
+- 名称键：Bag_Name_5019
+- 名称：自动诱捕笼储物仓
+- 尺寸：[8, 5]
+- Burden：0
+- UseOwnerName：0
+
+### 暖房工程台待交（ID 5020）
+
+- ID：5020
+- 名称键：Bag_Name_5010
+- 名称：暖房工程台待交
+- 尺寸：[8, 7]
+- Burden：0
+- UseOwnerName：0
+
+### 自动诱捕笼储物仓（ID 5021）
+
+- ID：5021
+- 名称键：Bag_Name_5019
+- 名称：自动诱捕笼储物仓
+- 尺寸：[8, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 自动诱捕笼储物仓（ID 5022）
+
+- ID：5022
+- 名称键：Bag_Name_5019
+- 名称：自动诱捕笼储物仓
+- 尺寸：[9, 6]
+- Burden：0
+- UseOwnerName：0
+
+### 单人床（ID 10001）
+
+- ID：10001
+- 名称键：Bag_Name_10001
+- 名称：单人床
+- 尺寸：[8, 1]
+- Burden：0
+- UseOwnerName：1
+
+### 金属柜（ID 10002）
+
+- ID：10002
+- 名称键：Bag_Name_10002
+- 名称：金属柜
+- 尺寸：[4, 8]
+- Burden：0
+- UseOwnerName：1
+
+### 工具箱（ID 10003）
+
+- ID：10003
+- 名称键：Bag_Name_10003
+- 名称：工具箱
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 垃圾桶（ID 10004）
+
+- ID：10004
+- 名称键：Bag_Name_10004
+- 名称：垃圾桶
+- 尺寸：[4, 5]
+- Burden：0
+- UseOwnerName：1
+
+### 生锈的金属柜（ID 10005）
+
+- ID：10005
+- 名称键：Bag_Name_10005
+- 名称：生锈的金属柜
+- 尺寸：[4, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 凹陷的铁皮柜（ID 10006）
+
+- ID：10006
+- 名称键：Bag_Name_10006
+- 名称：凹陷的铁皮柜
+- 尺寸：[4, 10]
+- Burden：0
+- UseOwnerName：1
+
+### 工具柜（ID 10007）
+
+- ID：10007
+- 名称键：Bag_Name_10007
+- 名称：工具柜
+- 尺寸：[6, 7]
+- Burden：0
+- UseOwnerName：1
+
+### 金属柜-409专属（ID 10008）
+
+- ID：10008
+- 名称键：Bag_Name_10002
+- 名称：金属柜-409专属
+- 尺寸：[7, 8]
+- Burden：0
+- UseOwnerName：1
+
+### 储物柜-80022专属（ID 10009）
+
+- ID：10009
+- 名称键：Bag_Name_1003
+- 名称：储物柜-80022专属
+- 尺寸：[10, 4]
+- Burden：24000
+- UseOwnerName：1
+
+### 大型置物架（ID 110000）
+
+- ID：110000
+- 名称键：Bag_Name_110000
+- 名称：大型置物架
+- 尺寸：[12, 10]
+- Burden：0
+- UseOwnerName：1
+
+### 中型置物架（ID 110001）
+
+- ID：110001
+- 名称键：Bag_Name_110001
+- 名称：中型置物架
+- 尺寸：[8, 10]
+- Burden：0
+- UseOwnerName：1
+
+### 小型置物架（ID 110002）
+
+- ID：110002
+- 名称键：Bag_Name_110002
+- 名称：小型置物架
+- 尺寸：[6, 8]
+- Burden：0
+- UseOwnerName：1
+
+### 床头柜（ID 110003）
+
+- ID：110003
+- 名称键：Bag_Name_110003
+- 名称：床头柜
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 衣柜（ID 110004）
+
+- ID：110004
+- 名称键：Bag_Name_110004
+- 名称：衣柜
+- 尺寸：[8, 10]
+- Burden：0
+- UseOwnerName：1
+
+### 玄关台（ID 110005）
+
+- ID：110005
+- 名称键：Bag_Name_110005
+- 名称：玄关台
+- 尺寸：[6, 7]
+- Burden：0
+- UseOwnerName：1
+
+### 衣柜（ID 110006）
+
+- ID：110006
+- 名称键：Bag_Name_110006
+- 名称：衣柜
+- 尺寸：[5, 3]
+- Burden：0
+- UseOwnerName：1
+
+### 大型置物架（ID 110007）
+
+- ID：110007
+- 名称键：Bag_Name_110000
+- 名称：大型置物架
+- 尺寸：[8, 7]
+- Burden：0
+- UseOwnerName：1
+
+### 超大型置物架（ID 110008）
+
+- ID：110008
+- 名称键：Bag_Name_110008
+- 名称：超大型置物架
+- 尺寸：[15, 12]
+- Burden：0
+- UseOwnerName：1
+
+### 材料架（ID 110009）
+
+- ID：110009
+- 名称键：Bag_Name_110009
+- 名称：材料架
+- 尺寸：[20, 12]
+- Burden：0
+- UseOwnerName：0
+
+### 双开门冰箱（ID 115000）
+
+- ID：115000
+- 名称键：Bag_Name_115000
+- 名称：双开门冰箱
+- 尺寸：[8, 7]
+- Burden：0
+- UseOwnerName：1
+
+### 冰柜（ID 115001）
+
+- ID：115001
+- 名称键：Bag_Name_115001
+- 名称：冰柜
+- 尺寸：[8, 10]
+- Burden：0
+- UseOwnerName：1
+
+### 堆肥箱（ID 115002）
+
+- ID：115002
+- 名称键：Bag_Name_115002
+- 名称：堆肥箱
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 货车车厢（ID 115003）
+
+- ID：115003
+- 名称键：Bag_Name_115003
+- 名称：货车车厢
+- 尺寸：[14, 10]
+- Burden：60000
+- UseOwnerName：0
+
+### 酿酒桶（ID 115004）
+
+- ID：115004
+- 名称键：Bag_Name_115004
+- 名称：酿酒桶
+- 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1

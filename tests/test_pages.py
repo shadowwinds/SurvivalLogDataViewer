@@ -249,8 +249,8 @@ class PagesExportTests(unittest.TestCase):
         self.assertEqual(len(sofa["craft_recipes"]), 1)
         group = sofa["craft_recipes"][0]
         self.assertEqual(group["level"], 1)
-        self.assertEqual(group["materials"], [{"id": 20005, "name": "木片", "count": 2},
-                                              {"id": 20003, "name": "废塑料", "count": 2}])
+        self.assertEqual(group["materials"], [{"id": 20005, "name": "木片", "icon": "", "count": 2},
+                                              {"id": 20003, "name": "废塑料", "icon": "", "count": 2}])
         self.assertEqual([option["recipe_id"] for option in group["options"]], [341, 1073, 1074])
         self.assertEqual(group["options"][0]["link"], {"category": "craft", "key": "Config_ProductionList:341"})
         self.assertIsNone(group["options"][1]["link"])
@@ -269,6 +269,75 @@ class PagesExportTests(unittest.TestCase):
         self.assertIn("另有 2 种染料配色", sofa_document)
         self.assertIn('<a href="https://example.org/project/guide/craft/341/">原色</a>', sofa_document)
         self.assertNotIn("制造材料（配方 ID", json.dumps(payload))
+        self.assertNotIn("PRIVATE_", json.dumps(payload))
+
+    def test_furniture_effects_are_category_specific_and_storage_gated(self) -> None:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.executemany(
+                "INSERT INTO recipe_items VALUES (?, ?, 0, 0, 0, '', 0, ?)",
+                [(20004, "铁皮", json.dumps({"ID": 20004, "Category": 9})),
+                 (20363, "鼠尾草绿染料", json.dumps({"ID": 20363, "Category": 21}))])
+            connection.executemany(
+                "INSERT INTO auxiliary_rows VALUES (?, ?, ?, ?)",
+                [("Config_Bag", 110008, "超大型置物架",
+                  json.dumps({"ID": 110008, "Size": [15, 12], "Burden": 0, "UseOwnerName": 0})),
+                 ("Config_Bag", 1060, "门口暂存格",
+                  json.dumps({"ID": 1060, "Size": [6, 4], "Burden": 60000, "UseOwnerName": 0})),
+                 ("Config_FurniturePlant", 28, "种植配置28",
+                  json.dumps({"ID": 28, "Capacity": 2, "AddLight": 0, "AddHeat": 0, "NeedPower": False,
+                              "ElectricLight": 0, "ElectricHeat": 0, "GrowthFaster": 0.0,
+                              "PestControl": -0.8, "WeedControl": 0.0, "DryControl": 0.0})),
+                 ("Config_FurnitureCook", 2, "烹饪配置2",
+                  json.dumps({"ID": 2, "CookType": 2, "CookMode": 0, "MaxFoodCount": 5,
+                              "MaxSeasoningCount": 0, "FuelSlotCount": 0, "FuelRate": 0.0,
+                              "SpeedRate": 1.2, "QualityBonus": 5, "AllowedRecipes": [], "InitialFuel": []})),
+                 ("Config_FurnitureElectrical", 1, "电力配置1",
+                  json.dumps({"ID": 1, "ElectricalType": 2, "BasePower": 6.0, "FuelCost": 0.0,
+                              "FuelSlotCount": 0, "FuelRate": 0.0, "InjectPower": 0.0,
+                              "Capacity": 0.0, "AllowedRooms": []}))])
+            furniture = [
+                (204, "超大型置物架", {"ID": 204, "ShopPage": 1, "FurniturePrice": 160, "FurnitureHP": 1000,
+                                     "FurnitureHPMax": 1000, "ShowStorage": 100, "BagId": 110008,
+                                     "FurnitureFunc": [1, 5, 215]}),
+                (30000, "加固木门", {"ID": 30000, "ShopPage": 3, "FurniturePrice": 30, "isShowHP": True,
+                                   "FurnitureHP": 800, "FurnitureHPMax": 1100, "DefReduceCoeff": 0.1,
+                                   "BagId": 1060}),
+                (60017, "防虫花盆（中）", {"ID": 60017, "ShopPage": 6, "FurniturePrice": 50,
+                                        "PlantFurnitureID": 28}),
+                (802, "电烤箱", {"ID": 802, "ShopPage": 5, "FurniturePrice": 120, "IsElectrical": True,
+                                "PowerCost": 40, "CookFurnitureID": 2, "BagId": 5002}),
+                (40000, "小型太阳能电板", {"ID": 40000, "ShopPage": 4, "FurniturePrice": 20,
+                                        "IsElectrical": True, "ElectricalType": 2, "ElectricalFurnitureID": 1}),
+            ]
+            for item_id, name, raw in furniture:
+                connection.execute(
+                    "INSERT INTO codex_entries VALUES (?, 'Config_Furniture', ?, ?, '', '', '', ?, 1)",
+                    (f"Config_Furniture:{item_id}", item_id, name, json.dumps(raw)))
+                connection.execute("INSERT INTO codex_entry_categories VALUES (?, 'furniture', ?)",
+                                   (f"Config_Furniture:{item_id}", item_id))
+        payload = export_data(self.database)
+        groups = {category["id"]: category["entries"] for category in payload["categories"]}
+        by_id = {entry["id"]: entry for entry in groups["furniture"]}
+        shelf = by_id[204]
+        self.assertEqual(shelf["effect_chips"], [{"label": "储物空间", "value": "180 格", "title": "背包格 15×12"}])
+        door = by_id[30000]
+        self.assertEqual(door["effect_chips"], [
+            {"label": "耐久", "value": "800～1100"},
+            {"label": "减伤", "value": "10%"}])
+        planter = by_id[60017]
+        self.assertEqual(planter["effect_chips"], [{"label": "种植位", "value": "2"},
+                                                   {"label": "防虫", "value": "80%"}])
+        oven = by_id[802]
+        self.assertEqual(oven["effect_chips"], [
+            {"label": "食材位", "value": "5"},
+            {"label": "烹饪速度", "value": "+20%"},
+            {"label": "品质", "value": "+5"},
+            {"label": "耗电", "value": "40"}])
+        solar = by_id[40000]
+        self.assertEqual(solar["effect_chips"], [{"label": "发电", "value": "6"}])
+        document = seo_documents(payload, "https://example.org/project/")["guide/furniture/204/index.html"]
+        self.assertIn("设施效果", document)
+        self.assertIn("180 格", document)
         self.assertNotIn("PRIVATE_", json.dumps(payload))
 
     def test_planters_use_public_furniture_config_and_do_not_export_auxiliary_private_fields(self) -> None:

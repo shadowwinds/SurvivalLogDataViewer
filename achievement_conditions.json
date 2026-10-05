@@ -233,7 +233,7 @@
     },
     {
       "id": 1104,
-      "name": "堡垒",
+      "name": "城市守护者",
       "category": "生存与结局",
       "hidden_in_text": true,
       "condition": "达成「安全屋」结局。内部条件是 `TAG_LINE_SHELTER_CHOSEN`、`TAG_FINAL_WAVE_SURVIVED`、`TAG_LINE_SHELTER_HELD`。",
@@ -464,6 +464,90 @@
       ]
     },
     {
+      "id": 1115,
+      "name": "一区之盾",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "完整达成「一区之盾」结局。需要实际结算为该结局，不能只选择对应路线或看完路线介绍。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 14.0,
+      "value_parameters": [
+        14.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1115",
+        "Config_Achievement.SteamAPI:ENDING_DISTRICT_SHIELD",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1116,
+      "name": "如约而至",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "完整达成「救援·如约而至」结局。需要实际结算为该结局，不能只选择对应路线或看完路线介绍。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 15.0,
+      "value_parameters": [
+        15.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1116",
+        "Config_Achievement.SteamAPI:ENDING_RENDEZVOUS",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1117,
+      "name": "营地灯火",
+      "category": "生存与结局",
+      "hidden_in_text": true,
+      "condition": "完整达成「陌生人·营地灯火」结局。需要实际结算为该结局，不能只选择对应路线或看完路线介绍。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 16.0,
+      "value_parameters": [
+        16.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1117",
+        "Config_Achievement.SteamAPI:ENDING_CAMP_LIGHT",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
+      "id": 1118,
+      "name": "另一条路",
+      "category": "生存与结局",
+      "hidden_in_text": false,
+      "condition": "集齐全部 3 种挑战结局。内部按已达成挑战结局的种类数计数，集齐 3 种后完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [
+        "同一存档只能成功承诺一条结局路线；挑战结局对应「结局挑战」分类的结局成就，需要多次游玩分别达成。"
+      ],
+      "numeric_threshold": null,
+      "value_parameters": [
+        0.0,
+        0.0,
+        3.0
+      ],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1118",
+        "Config_Achievement.SteamAPI:ALL_CHALLENGE_ENDINGS",
+        "Config_Achievement.Category:2"
+      ]
+    },
+    {
       "id": 1201,
       "name": "电工本色",
       "category": "家园与生活",
@@ -653,6 +737,69 @@
         "Config_Achievement.Category:3",
         "Config_Achievement.TriggerMode:3",
         "Config_Achievement.ConditionSetId:32107"
+      ]
+    },
+    {
+      "id": 1231,
+      "name": "有求必应",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "本轮在救助平台完成 12 次他人求助。计数器 `aidplatform.done` 达到 `12`；需实际完成求助交付，接下求助或查看平台不计。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 12.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1231",
+        "Config_Achievement.SteamAPI:AID_ANSWERED",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:aidplatform.done",
+        "Config_Achievement.Threshold:12.0",
+        "Config_Achievement.ProgressCounterKey:aidplatform.done",
+        "Config_Achievement.ProgressTarget:12.0"
+      ]
+    },
+    {
+      "id": 1232,
+      "name": "营地开张",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "让救助者营地建成开张。由条件组 `ConditionSetId:32157` 判定，营地建设完成并开张时触发。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1232",
+        "Config_Achievement.SteamAPI:CAMP_OPENED",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32157"
+      ]
+    },
+    {
+      "id": 1233,
+      "name": "档案齐了",
+      "category": "家园与生活",
+      "hidden_in_text": false,
+      "condition": "把四份档案全部读进记录仪。由条件组 `ConditionSetId:32153` 判定；四份档案都阅读完成后完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:1233",
+        "Config_Achievement.SteamAPI:TRUTH_ARCHIVE",
+        "Config_Achievement.Category:3",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32153"
       ]
     },
     {
@@ -1180,6 +1327,206 @@
       ]
     },
     {
+      "id": 2121,
+      "name": "第一个帮手",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "家里有了第一台机器人。HK 整理、GR 种植、FX 维修三种机器人充电座任意一台入驻后完成（条件组 `32154`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2121",
+        "Config_Achievement.SteamAPI:FIRST_HELPER",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32154"
+      ]
+    },
+    {
+      "id": 2122,
+      "name": "机器人小队",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "三种机器人各养两台。HK 整理、GR 种植、FX 维修机器人各拥有 2 台后完成（条件组 `32155`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2122",
+        "Config_Achievement.SteamAPI:ROBOT_SQUAD",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32155"
+      ]
+    },
+    {
+      "id": 2123,
+      "name": "调色盘",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "同时备齐 8 种植物染料。八种染料为鼠尾草绿、陶土橙、奶油黄、暮蓝、燕麦白、樱花粉、雾紫、赭红；同时拥有全部八种后完成（条件组 `32158`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2123",
+        "Config_Achievement.SteamAPI:PALETTE",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32158"
+      ]
+    },
+    {
+      "id": 2124,
+      "name": "今天吃什么",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "烹饪出 120 种不同菜肴。按菜肴图鉴已做过的种类计数，达到 120 完成（条件组 `32159`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2124",
+        "Config_Achievement.SteamAPI:DISH_CODEX",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32159"
+      ]
+    },
+    {
+      "id": 2125,
+      "name": "满墙图纸",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "集齐全部制造图鉴条目。按当前版本制造图鉴的全量条目判定（条件组 `32161`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2125",
+        "Config_Achievement.SteamAPI:ALL_BLUEPRINTS_II",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32161"
+      ]
+    },
+    {
+      "id": 2126,
+      "name": "猎人图鉴",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "集齐全部猎物图鉴（条件组 `32160`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2126",
+        "Config_Achievement.SteamAPI:PREY_CODEX",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32160"
+      ]
+    },
+    {
+      "id": 2127,
+      "name": "唱片收藏",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "把六张唱片都在留声机上放过一遍。每张唱片都需要实际播放过（条件组 `32162`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2127",
+        "Config_Achievement.SteamAPI:DISC_COLLECTOR",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32162"
+      ]
+    },
+    {
+      "id": 2131,
+      "name": "百草",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "集齐全部植物图鉴（条件组 `32165`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2131",
+        "Config_Achievement.SteamAPI:PLANT_CODEX",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32165"
+      ]
+    },
+    {
+      "id": 2132,
+      "name": "安家落户",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "集齐全部家具图鉴（条件组 `32166`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2132",
+        "Config_Achievement.SteamAPI:FURNITURE_CODEX",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32166"
+      ]
+    },
+    {
+      "id": 2133,
+      "name": "万事俱备",
+      "category": "生产与图鉴",
+      "hidden_in_text": false,
+      "condition": "把八种新设施全都建起来。指本次新增的八种设施类家具，全部建造后完成（条件组 `32168`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2133",
+        "Config_Achievement.SteamAPI:AUTUMN_FACILITIES",
+        "Config_Achievement.Category:5",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32168"
+      ]
+    },
+    {
       "id": 2201,
       "name": "第一滴血",
       "category": "战斗与防御",
@@ -1372,6 +1719,29 @@
         "Config_Achievement.Threshold:3.0",
         "Config_Achievement.ProgressCounterKey:crisis.survived",
         "Config_Achievement.ProgressTarget:3.0"
+      ]
+    },
+    {
+      "id": 2211,
+      "name": "人山人海",
+      "category": "战斗与防御",
+      "hidden_in_text": false,
+      "condition": "一波尸潮里同屏出现过 50 只丧尸。计数器 `wave.max_zombies` 记录单波同屏最大数量，达到 `50` 完成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 50.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2211",
+        "Config_Achievement.SteamAPI:ZOMBIE_TIDE",
+        "Config_Achievement.Category:6",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:wave.max_zombies",
+        "Config_Achievement.Threshold:50.0",
+        "Config_Achievement.ProgressCounterKey:wave.max_zombies",
+        "Config_Achievement.ProgressTarget:50.0"
       ]
     },
     {
@@ -1681,6 +2051,68 @@
       ]
     },
     {
+      "id": 2407,
+      "name": "威胁等级 20",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "无尽里的威胁等级达到 20（条件组 `32156`）。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2407",
+        "Config_Achievement.SteamAPI:THREAT_TIER_20",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32156"
+      ]
+    },
+    {
+      "id": 2408,
+      "name": "一街之盾",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "完成协防线「挑战一」。计数器 `shelteraid.milestone_day` 达到 `1`，即协防线第一个里程碑达成。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2408",
+        "Config_Achievement.SteamAPI:STREET_SHIELD",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:shelteraid.milestone_day",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
+      "id": 2409,
+      "name": "越冬之种",
+      "category": "无尽模式",
+      "hidden_in_text": false,
+      "condition": "让越冬一号在霜里结出第二茬。计数器 `greenhouse.cold_crop_day` 达到 `1`，即越冬一号在霜冻期间再次结果。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": 1.0,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:2409",
+        "Config_Achievement.SteamAPI:WINTER_SEED",
+        "Config_Achievement.Category:8",
+        "Config_Achievement.TriggerMode:1",
+        "Config_Achievement.CounterKey:greenhouse.cold_crop_day",
+        "Config_Achievement.Threshold:1.0"
+      ]
+    },
+    {
       "id": 3001,
       "name": "一次就好",
       "category": "结局挑战",
@@ -1980,6 +2412,26 @@
         "Config_Achievement.Category:10",
         "Config_Achievement.TriggerMode:3",
         "Config_Achievement.ConditionSetId:32145"
+      ]
+    },
+    {
+      "id": 9007,
+      "name": "旧物志",
+      "category": "隐藏杂项",
+      "hidden_in_text": true,
+      "condition": "把十四件旧物都收进屋里（条件组 `32167`）。旧物指纪念品类装饰家具。",
+      "method": "",
+      "role_restriction": "",
+      "notes": [],
+      "numeric_threshold": null,
+      "value_parameters": [],
+      "exclusions": [],
+      "config_references": [
+        "Config_Achievement.ID:9007",
+        "Config_Achievement.SteamAPI:NEW_SOUVENIRS",
+        "Config_Achievement.Category:10",
+        "Config_Achievement.TriggerMode:3",
+        "Config_Achievement.ConditionSetId:32167"
       ]
     }
   ],

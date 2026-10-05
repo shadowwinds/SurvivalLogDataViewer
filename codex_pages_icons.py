@@ -16,7 +16,7 @@ from codex_parser import decrypt_bundle, find_catalog, load_unitypy, parse_catal
 
 
 def web_icon_source(game_root: Path, web_icon: str) -> Path | None:
-    match = re.fullmatch(r"\.\./\.\./Res/(Food|Furniture|Structure|Material|Literature|icon|Consumable|Electrical|RobotModule)/([A-Za-z0-9_-]+\.png)", web_icon)
+    match = re.fullmatch(r"\.\./\.\./Res/(Achievement|Consumable|Electrical|Food|Furniture|Literature|Material|RobotModule|Structure|icon)/([A-Za-z0-9_-]+\.png)", web_icon)
     if not match:
         return None
     resource_dir = (game_root / "SurvivalLog_Data/StreamingAssets/WebUI/Res" / match[1]).resolve()
@@ -45,6 +45,9 @@ def extract_icons(database: Path, game_root: Path, output_dir: Path) -> None:
             raw = json.loads(raw_json)
             request(raw)
             referenced_items.update(related_icon_items(table, raw))
+        # 家具与制造列表卡片会展示配方的每个材料，材料图标一并提取。
+        referenced_items.update(row[0] for row in connection.execute(
+            "SELECT DISTINCT target_id FROM entry_relations WHERE relation_type LIKE '制造材料%'"))
         for item_id, raw_json in connection.execute("SELECT item_id, raw_json FROM recipe_items"):
             if item_id in referenced_items:
                 raw = json.loads(raw_json)

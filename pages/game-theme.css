@@ -270,6 +270,15 @@ body > footer a, body > main a { color: #e4c77f; }
 .planting-context details[open] { flex-basis: 100%; }
 .planting-context p { margin: 8px 0 0; max-width: 720px; line-height: 1.8; }
 .plant-facts { display: flex; flex-wrap: wrap; gap: 6px 11px; padding-top: 8px; border-top: 1px solid #575440; font-size: 11px; color: #d9c99e; }
+.effect-chip b { color: #e8c369; margin-left: 3px; }
+.entry-materials { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px 10px; margin-top: 11px; padding-top: 9px; border-top: 1px solid #575440; align-items: center; }
+.entry-materials-level, .entry-material-note { color: #b5ae9c; font-size: 10px; }
+.entry-material { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 11px; color: #ded4b6; }
+.entry-material .entry-art { width: 28px; height: 28px; border-radius: 4px; background: #31332a; border: 1px solid #5b584a; }
+.entry-material .entry-art img { padding: 1px; }
+.entry-material .entry-art svg { width: 16px; height: 16px; }
+.entry-material-name { overflow-wrap: anywhere; }
+.entry-material-count { color: #e8c369; white-space: nowrap; }
 .plant-requirements { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
 .plant-requirements > div { background: #313329; border: 1px solid #606247; padding: 12px 5px; text-align: center; }
 .plant-requirements dt { color: #c6bfa9; font-size: 10px; }

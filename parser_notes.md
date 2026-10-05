@@ -14,6 +14,8 @@
 
 只读核对本地 `1.1.18293 / catalog 2.3.1` 的 `Config_Plant`、`Config_FurniturePlant`、`Config_Furniture` 严格读取及 EOF，确认静态库相应行完全一致。当前游戏 `PlantPanel.html` 的 `checkSeedEnv` 使用 `actualLight >= lightNeed` 与 `coldStress <= coldResistance`；容量判定为植物 `Size <= Capacity`，种满用量为 `floor(Capacity / Size)`。寒冷是游戏环境数值，不转换成摄氏温度。容器下拉只收录公开家具，通过 `PlantFurnitureID` 解析被动 `AddLight` / `AddHeat`，通电时计入 `ElectricLight` / `ElectricHeat`。
 
+新增解析 `Config_Bag`（背包与容器容量配置）：schema 为 `ID`、`Name`、`Name_Local`、`Size`（背包格 [宽， 高]）、`Burden`（负重上限）、`UseOwnerName`，共 85 行，全部行按 6 字段读取并验证到达 EOF。本地 1.1.18293 中 `UseOwnerName` 语义为布尔但按 4 字节写入，取值仅 0/1，schema 按 i32 声明；字段名来自 IL2CPP 元数据 `Config_BagFormatter` 集群（`Size`/`Burden`/`UseOwnerName`）。家具的 `BagId` 实际指向 `Config_Bag.ID` 而不是 `Config_Item`，关联关系已从“包裹物品 → Config_Item”改写为“包裹配置 → Config_Bag”，储物格数用 `Size` 行 × 列计算（如超大型置物架 110008 为 15×12=180 格，冰柜 115001 为 8×10=80 格）；`Burden` 在当前家具背包中均为 0，不展示。
+
 `codex_pages_environment.py` 使用集中 schema，只读提取 `Config_Weather`（11 字段）、`Config_EnvArea`（6 字段）、`Config_EnvAreaWeather`（5 字段）、`Config_MapRoom`（5 字段）和供暖家具，验证成员数量、字段类型和 EOF。字段类型和顺序来自当前本地 IL2CPP 元数据；新增 schema 不改变六类注册表或默认辅助导出范围。刷新命令为 `python codex_pages_environment.py --game-root "游戏目录" --output pages/planting-environment.json`。版本化文件仅包含当前页面使用的天气、楼层、区域参数、供暖值和 `RoomTemp_Max`，没有游戏路径、原始资源或 runtime 状态。Pages 构建仅在预设版本与静态库版本一致时嵌入环境；否则提示手动输入，不套用其他版本数值。
 
 核对当前 native `EnvAreaHelper.GetLightMul` / `GetAreaTemperature` / `GetParamRow`（RVA `0x305C1F0` / `0x305BB90` / `0x305C5C0`）与 `PlantComponent.EvaluateEnvironment`（RVA `0x2DF7650`）：区域参数优先匹配当前天气 ID，回退 `WeatherID=0`；有效光照为天气 `LightValue × LightMul + 容器补光`；有效寒冷为 `max(0, ColdValue − 区域温度 − 容器加热)`。区域温度包含 `TempAdd` 与同一区域运行设备的 `HeatOutput`，区域 `DeviceHeat=false` 时不计设备；`RoomTemp_Max>0` 才限制区域温度，当前为 0。空调 ID 21007 供暖 2，燃料暖炉 ID 65001 供暖 1，未运行时不计。地下室对应区域 5（光照倍率 0、保温 2），一楼区域 1（0.5、1），二楼室内按区域 2 / 阳光房（1、1），二楼露台区域 3（1、0、不接受设备供暖）；所选楼层对应 `Config_MapRoom` 行的光照和保温与区域默认参数交叉校验。晴天、阴天、雨天分别使用 native 天气行 1/2/3，无寒潮至重度寒潮的晴天为 1/7/8/9、阴天为 2/4/5/6、雨天为 3/15/16/17；寒雨光照为 0，不把普通雨天光照 1 直接叠加寒潮。
@@ -27,6 +29,8 @@
 在线版提供名称/ID、菜肴食材选择和制造/家具材料检索，并使用相对路径适配 Pages 项目子目录。食品展示 `ValueDisplay1..5` 的饱腹、心态、精力、健康、生命值，数值全部来自当前跟踪的静态库。默认只展示非零属性，负数保留，缺失属性显示未提供；详情可展开完整五项。物品信息同时展示配置重量、尺寸、使用次数和基础保质期，不将静态保质期冒充实例剩余时间或冷藏时间。
 
 制造手册和家具与设施提供分类筛选与材料互链。制造条目按配置 `NoteCategory` 分组，名称取本地化 `ConstantText_Text_ToolTable_15..21`（1 基础材料、2 工具器件、3 陷阱狩猎、4 种植园艺、5 电力能源、6 防御设施、7 生活家具，本地 1.1.18293 已核对）；家具条目按 `ShopPage` 分组，页签名取 `ConstantText_Text_WebUI_BuildShop_8..14` 与 `GlobalSetting` 的 `ShopPageIcon1..7`（1 储物、2 生活、3 安保、4 能源、5 烹饪、6 种植、7 其他），`ShopPage 0` 的家具不出现在建造商店页签中，显示为“未上架”。家具的制造配方在网页导出层按“非装修材料组合 + 等级”合并：`Config_ProductionList` 关联关系里的逐配方材料改写为分组 `craft_recipes`（材料计数、染料选项、原色配方链接），染料即 `Config_Item.Category=21` 且参与配方的 8 种植物染料（已核对没有配方使用墙纸/地板等其余 Category 21 物品，也没有配方含多于一种染料）；未进图鉴的染色变体配方只经由家具分组展示，不进入制造列表。家具“制作所需材料”“要求等级”高亮改为分组文本，无配方的家具（当前仅燃料炉）不再输出这两个空字段。制造与家具详情中的材料可点击，按物品 ID 精确过滤制造列表；制造条目若其产物被其他制造或家具配方用作材料，显示“这个材料能做什么”及配方链接。网页滚动条统一为 WebKit 主题样式，去掉 Windows 经典滚动条箭头。英文界面按物品 ID 数字特例显示 `Lv.N`，移除原先贪婪匹配的 `{level}级` 词条，修复制造卡片英文描述被整体加 `Lv.` 前缀的问题。
+
+家具列表卡片与详情改为展示分类化“设施效果”：导出层把 `Config_Furniture`、`Config_FurniturePlant`、`Config_FurnitureCook`、`Config_FurnitureElectrical` 与新增 `Config_Bag` 汇总为结构化 `effects` 和展示用 `effect_chips`（中英文案由前端 i18n 与独立详情页共用）。分类语义：储物类显示 `Config_Bag.Size` 的行列格数（仅对 `FurnitureFunc` 含 215 或 `ShowStorage > 0` 的储物家具展示，门/窗的操作暂存包和烹饪操作台不按储物空间解读）；安保类显示 `isShowHP` 为真时的耐久 `FurnitureHP～FurnitureHPMax` 与 `DefReduceCoeff` 减伤百分比；种植类按 `PlantFurnitureID` 解析种植位 `Capacity`、生长加速 `GrowthFaster`、防虫 `PestControl`、防草 `WeedControl`、抗旱 `DryControl`（负值取相反数显示为百分比）、补光 `ElectricLight` 与御寒（`AddHeat`/`ElectricHeat`，通电时标注）；烹饪类按 `CookFurnitureID` 显示食材位、燃料位、`SpeedRate-1` 烹饪速度和 `QualityBonus` 品质加成；能源类仅对类型明确的 `ElectricalType`（2 太阳能、3 燃油发电、5 蓄电）显示发电/蓄电，燃料位通用显示，类型 6（老鼠笼）的内部数值不展示；通电家具显示 `PowerCost`，`HeatOutput` 显示供暖，床显示 `RestoreCoeff` 休息恢复倍率，花瓶显示 `VaseCapacity`。列表卡片材料按“非装修材料组合 + 等级”分组逐行展示图标 × 数量，价格 0（未上架）不显示价格 chips；效果数值全部来自配置原值，不发明单位。
 
 菜肴通过 `PerfectItemID`、`GoodItemID`、`NormalItemID`、`FailItemID` 引用静态库 `recipe_items` 中的成品，按品质展示五维属性和 `ItemDes2_Local` 食用说明，不使用配方的 `SatietyStandard` 冒充食用效果。只导出被引用成品的属性、标签、分类、说明和图标，不发布 `recipe_items` 全集。页面支持标签/可烹饪/正属性筛选和属性降序；食品、菜肴和猎物默认按当前显示品质的每次饱食降序，重置恢复该默认值；种植排序见上文，其余分类保留图鉴顺序。菜肴“仅专用菜谱”只保留有具体食材关系的配方，查询多个食材时仍逐槽位匹配重复用量；未输入食材时显示所有专用配方。食材关联菜肴以具体物品 ID 或烹饪子分类识别，分类匹配仅表示可以占用该类槽位，不能据此声称完整组合必定能做出该菜肴；仍需满足其余食材、档位和特色配方优先规则。
 
@@ -48,13 +52,13 @@
 
 本次将正式解析器、七份导出和静态库统一更新至当前本地版本。新版元数据确认 `Config_Item` 在 `UseAction` 前增加 `TradeSellRate: Single`（61 字段）；`Config_PlantLv` 末尾增加 `unlock_recipes: List<int>`（11 字段）；`Config_Furniture` 末尾增加 `BagAcceptCategory`、`RobotPlayerID`（59 字段）；`Config_FurnitureTag` 增加排序、维度及说明字段（10 字段）。`Config_ConstantText` 按三个字符串字段严格读取，验证非空唯一键和 EOF，仅提取食用标签进入导出，不公开完整常量表。所有配置保留对象成员数量与 EOF 校验，不静默兼容未知 schema。
 
-`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
+`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标，另把 `entry_relations` 中全部“制造材料”关联指向的物品（家具与制造列表卡片的配方材料）加入提取范围。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建只复制有公开引用的图标，工作流不读取游戏。
 
-本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器对缺失引用按同一配置的 `WebIcon`、`ICON` 或 `WebSmallIcon` 回退到游戏自带 `WebUI/Res` PNG，不按名称猜测、不访问网络。仅允许当前公开引用涉及的 Food、Furniture、Structure、Material、Literature、icon、Consumable、Electrical、RobotModule 目录中的单层 PNG 文件，拒绝越界与文件符号链接。回退图片同样缩放至最长边 192、保留透明通道，沿用配置图标路径的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
+本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器对缺失引用按同一配置的 `WebIcon`、`ICON` 或 `WebSmallIcon` 回退到游戏自带 `WebUI/Res` PNG，不按名称猜测、不访问网络。仅允许当前公开引用涉及的 Achievement、Consumable、Electrical、Food、Furniture、Literature、Material、RobotModule、Structure、icon 目录中的单层 PNG 文件，拒绝越界与文件符号链接；Achievement 目录为本次新内容更新中的成就图标补入。回退图片同样缩放至最长边 192、保留透明通道，沿用配置图标路径的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
 
-家具使用配置 `ICON`，成就使用 `WebIcon`；制造使用 `ProductID` 中第一个有图标的普通产物，并注明“制造产物”，不借用失败产物、完美额外产物或材料图标。植物沿用实际收获物图片，花卉共用图片时遵循游戏配置。上述图片同时用于交互列表、详情与独立 HTML / 分享信息；不更改图鉴分类、成就说明或条目数量。
+家具使用配置 `ICON`，成就使用 `WebIcon`；制造使用 `ProductID` 中第一个有图标的普通产物，并注明“制造产物”，不借用失败产物、完美额外产物或材料图标。植物沿用实际收获物图片，花卉共用图片时遵循游戏配置。家具配方分组中的每个材料与染料带各自图标，缺失时前端回退为纯文本 chips。上述图片同时用于交互列表、详情与独立 HTML / 分享信息；不更改图鉴分类、成就说明或条目数量。
 
-当前公开植物、制造、家具、成就的缺图数均为零；新增补齐植物 9、制造 163、家具 110、成就 93 条，实际发布使用 1039 张去重图标。图片字段与普通产物 ID 已逐项对照本地严格读取的配置表；发布构建仍只复制当前网页引用的图片。
+当前公开植物、制造、家具、成就的缺图数均为零；新增补齐植物 9、制造 163、家具 110、成就 115 条，实际发布使用 1088 张去重图标。图片字段与普通产物 ID 已逐项对照本地严格读取的配置表；发布构建仍只复制当前网页引用的图片。
 
 `codex_pages_seo.py` 从同一公开导出数据生成独立 HTML 详情。导航统一进入首页查询图鉴和补给推荐；旧 `/guide/` 和分类目录地址仅保留自动跳转到首页或对应查询分类的兼容页面，标为 `noindex,follow`，不再生成另一套目录列表。属性、标签、各品质效果、材料关联及成就说明直接存在于独立详情 HTML，不依赖 JavaScript 抓取；首页禁用 JavaScript 时在原页面提供可展开的条目链接。食品与猎物共享条目只生成首个分类下的详情地址，其他分类链接到该页。各页包含独立标题、描述、canonical、Open Graph / Twitter 信息和 WebPage / CollectionPage / BreadcrumbList JSON-LD；游戏菜肴不使用现实食谱的 Recipe 类型。`sitemap.xml` 仅列出首页、补给推荐及独立详情的完整网址，不收录兼容跳转页，不包含交互图鉴的 hash 状态，不虚构更新时间。
 
@@ -102,7 +106,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前原始主配置表数量为：`Config_Item` 3857、`Config_CookingRecipe` 524、`Config_Plant` 42、`Config_ProductionList` 820、`Config_Furniture` 1556。严格按展示规则导出的数量为：食品 191、菜肴 524、植物 38、猎物 23、制造 163、家具 110，六类分类映射合计 `1049`，去重条目 `1026`；辅助配置 `591` 行。当前 `Config_Achievement` 读取 93 行、21 个字段；静态库刷新保留原有人工成就说明。原始配置总量与 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数不能混用。
+当前原始主配置表数量为：`Config_Item` 3857、`Config_CookingRecipe` 524、`Config_Plant` 42、`Config_ProductionList` 820、`Config_Furniture` 1556。严格按展示规则导出的数量为：食品 191、菜肴 524、植物 38、猎物 23、制造 163、家具 110，六类分类映射合计 `1049`，去重条目 `1026`；辅助配置 `676` 行（含新增 `Config_Bag` 85 行）。当前 `Config_Achievement` 读取 115 行、21 个字段；游戏在版本号不变的情况下静默新增 22 个成就并把 1104「堡垒」更名为「城市守护者」，人工说明已同步补齐。原始配置总量与 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数不能混用。
 
 ## 2. 游戏图鉴和存档
 
@@ -136,7 +140,7 @@
 
 `Config_Achievement` 使用当前 bundle 中验证过的 21 字段 schema：ID、排序、名称/本地化名称、描述/本地化描述、Steam 成就键、图标、展示标记、成就类型、浮点 `Value` 列表、分类、触发模式、计数器键、比较方式、阈值、条件组 ID、隐藏标记、进度计数器键和进度目标。解析器验证对象数量、字段数量、浮点列表长度、重复 ID 和数据 EOF。
 
-人工整理的条件保存在跟踪文件 [`achievement_conditions.json`](./achievement_conditions.json)，由 `codex_achievements.py` 校验 ID 集合、名称和隐藏标记；`source_version` 只作为说明来源记录。每条说明包括分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项；当前版本的结局成就 1102-1108 还共享“必须实际触发结局、同一存档只能承诺一条路线、承诺事件消耗 9048、撑过最终尸潮”等边界说明。资源版本更新时自动更新只处理原有六类图鉴，不会重新读取或覆盖成就内容；用户需要手动整理成就说明后，再执行显式的成就导入/数据库构建。
+人工整理的条件保存在跟踪文件 [`achievement_conditions.json`](./achievement_conditions.json)，由 `codex_achievements.py` 校验 ID 集合、名称和隐藏标记；`source_version` 只作为说明来源记录。每条说明包括分类、完成条件、完成方法、数值门槛、角色限制、排除项、配置引用和注意事项；当前版本的结局成就 1102-1108 还共享“必须实际触发结局、同一存档只能承诺一条路线、承诺事件消耗 9048、撑过最终尸潮”等边界说明。资源版本更新时自动更新只处理原有六类图鉴，不会重新读取或覆盖成就内容；用户需要手动整理成就说明后，再执行显式的成就导入/数据库构建。2026-10 本机核对发现游戏在 `1.1.18293` 版本号不变的情况下新增 22 个成就（结局 1115-1118、救助平台 1231-1233、机器人/图鉴/收集 2121-2133、尸潮 2211、无尽 2407-2409、隐藏 9007）并把 1104「堡垒」更名为「城市守护者」；已按 `Config_Achievement` 的 `Des_Local`、`CounterKey`、`Threshold` 与 `ConditionSetId` 补齐手写说明，分类沿用既有编号映射，无法核实的游戏内机制不臆测。
 
 其中，图纸成就按制造图鉴解锁数判断，不按累计制作次数判断；社区成就按成功发送的社区群表态/回复次数判断，取消回复、普通私聊和独立八卦选项不计；纪念品成就要求指定 9300-9307 家具各至少有一个实例实际摆放，只有拥有或放在背包中不计。`3003` 的“预算”取灾变前配置预算，储蓄能力增加的是可用资金上限，不会改变该成就的原始预算门槛；是否满足仍以游戏实际触发的条件组和禁用标记为准。
 
@@ -212,7 +216,7 @@ python -m pip install --target "D:\Codex\SurvivalLogDataViewer\_vendor_unitypy" 
 
 ```powershell
 python "codex_parser.py" `
-  --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
+  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
   --output-dir "snapshots"
 ```
 
@@ -220,7 +224,7 @@ python "codex_parser.py" `
 
 ```powershell
 python "codex_parser.py" `
-  --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
+  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
   --category dish `
   --output "snapshots\survival_log_dish.md"
 ```
@@ -231,7 +235,7 @@ python "codex_parser.py" `
 
 ```powershell
 python "codex_database.py" `
-  --game-root "G:\SteamLibrary\steamapps\common\Survival Log" `
+  --game-root "E:\games\Steam\steamapps\common\Survival Log" `
   --database "survival_log_codex.sqlite3" `
   --runtime-database "survival_log_codex_runtime.sqlite3" `
   --save-file "$env:USERPROFILE\AppData\LocalLow\LLS\SLGame\Saves\HistorySave.bytes"

@@ -307,6 +307,12 @@ def entry_body(entry: dict[str, Any], category: str, routes: dict[str, str], bas
         threshold = entry.get("portion_model", {}).get("threshold")
         if threshold:
             body += f'<p>分份标准：{h(threshold)} 饱腹 / 次。可吃次数按整份总饱腹除以标准向上取整，至少 1 次。通用配方的总属性随实际食材、档位与品质变化。</p>'
+    if entry.get("effect_chips"):
+        body += '<section><h2>设施效果</h2><dl class="fields">' + "".join(
+            f'<div><dt>{h(chip["label"])}</dt><dd>{h(chip["value"])}'
+            + (f' <span class="muted">（{h(chip["title"])}）</span>' if chip.get("title") else "")
+            + '</dd></div>'
+            for chip in entry["effect_chips"]) + '</dl></section>'
     highlights = [field for field in entry["highlights"] if not entry.get("plant") or field["field"] not in {"Size", "LightNeed", "ColdResistance"}]
     if entry.get("craft_recipes"):
         body += '<section><h2>制造配方</h2>'

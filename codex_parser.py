@@ -391,6 +391,12 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("ID", "i32"), ("TriggerFurnitureId", "i32"), ("PartnerType", "i32"),
         ("PartnerConfigIds", "list_i32"), ("MissingHintKey", "str"), ("PriorityWeight", "i32"),
     ),
+    # 本地 1.1.18293 的 Config_Bag.UseOwnerName 虽语义为布尔，但线上按 4 字节写入；
+    # 全表 85 行按 i32 读取可到达 EOF 且取值仅为 0/1。
+    "Config_Bag": (
+        ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
+        ("Size", "list_i32"), ("Burden", "i32"), ("UseOwnerName", "i32"),
+    ),
     "Config_Achievement": (
         ("ID", "i32"), ("Order", "i32"), ("Name", "str"), ("Name_Local", "str"),
         ("Des", "str"), ("Des_Local", "str"), ("SteamAPI", "str"), ("WebIcon", "str"),
@@ -612,6 +618,7 @@ def build_extraction_context(
         "Config_FurnitureState",
         "Config_FurnitureTag",
         "Config_FurniturePartner",
+        "Config_Bag",
         "Config_ConstantText",
     ]
     if include_achievement:
@@ -987,7 +994,8 @@ def render_config_value(
     if field == "CutProductId" and isinstance(value, int):
         return resolve_id(value, context.item_names)
     if field == "BagId" and isinstance(value, int):
-        return resolve_id(value, context.item_names)
+        names = {row.row_id: config_row_name(row) for row in context.tables.get("Config_Bag", [])}
+        return resolve_id(value, names)
     if field == "PlantFurnitureID" and isinstance(value, int):
         return resolve_furniture_config_id(
             value, context, furniture_names, "Config_FurniturePlant", "种植配置", "PlantFurnitureID"
@@ -1151,6 +1159,7 @@ AUXILIARY_TABLES = (
     ("Config_FurnitureState", "家具状态配置"),
     ("Config_FurnitureTag", "家具标签配置"),
     ("Config_FurniturePartner", "家具伙伴配置"),
+    ("Config_Bag", "背包与容器容量配置"),
 )
 
 
@@ -1278,7 +1287,7 @@ def main() -> int:
     parser.add_argument(
         "--game-root",
         type=Path,
-        default=Path(r"G:\SteamLibrary\steamapps\common\Survival Log"),
+        default=Path(r"E:\games\Steam\steamapps\common\Survival Log"),
         help="游戏安装目录",
     )
     parser.add_argument(

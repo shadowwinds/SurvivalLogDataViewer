@@ -25,7 +25,7 @@ from codex_server import _achievement_payload, _build_detail_fields
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
-DEFAULT_GAME_ROOT = Path(r"G:\SteamLibrary\steamapps\common\Survival Log")
+DEFAULT_GAME_ROOT = Path(r"E:\games\Steam\steamapps\common\Survival Log")
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
           "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
@@ -64,6 +64,10 @@ def furniture_recipe_groups(relations: list[dict[str, Any]],
                             items: dict[int, tuple[str, dict[str, Any]]]) -> list[dict[str, Any]]:
     """Group a furniture entry's crafting recipes that differ only in decoration items (dyes)."""
 
+    def material(target_id: int, target_name: str) -> dict[str, Any]:
+        raw = items.get(target_id, ("", {}))[1]
+        return {"id": target_id, "name": target_name, "icon": public_icon(icon_asset(raw))}
+
     recipes: dict[int, dict[str, Any]] = {}
     order: list[int] = []
     for relation in relations:
@@ -80,7 +84,7 @@ def furniture_recipe_groups(relations: list[dict[str, Any]],
         if recipe is None:
             continue
         if relation["relation_type"].startswith("制造材料"):
-            item = {"id": relation["target_id"], "name": relation["target_name"]}
+            item = material(relation["target_id"], relation["target_name"])
             raw = items.get(relation["target_id"], ("", {}))[1]
             if raw.get("Category") == DECORATION_ITEM_CATEGORY:
                 if item not in recipe["dyes"]:
@@ -98,11 +102,14 @@ def furniture_recipe_groups(relations: list[dict[str, Any]],
         if group is None:
             names: dict[int, str] = {}
             counts: dict[int, int] = {}
+            icons: dict[int, str] = {}
             for item in recipe["materials"]:
                 names.setdefault(item["id"], item["name"])
+                icons.setdefault(item["id"], item.get("icon", ""))
                 counts[item["id"]] = counts.get(item["id"], 0) + 1
             group = {"level": recipe["level"],
-                     "materials": [{"id": item_id, "name": names[item_id], "count": count}
+                     "materials": [{"id": item_id, "name": names[item_id],
+                                    "icon": icons[item_id], "count": count}
                                    for item_id, count in counts.items()],
                      "options": []}
             groups[key] = group
@@ -131,6 +138,135 @@ def furniture_recipe_materials_text(groups: list[dict[str, Any]]) -> str:
 def furniture_recipe_levels_text(groups: list[dict[str, Any]]) -> str:
     levels = sorted({group["level"] for group in groups if group["level"] is not None})
     return "、".join("无" if level == 0 else f"{level}级" for level in levels)
+
+
+def furniture_effects(raw: dict[str, Any], plant_configs: dict[int, dict[str, Any]],
+                      cook_configs: dict[int, dict[str, Any]],
+                      electrical_configs: dict[int, dict[str, Any]],
+                      bags: dict[int, dict[str, Any]]) -> dict[str, Any]:
+    """Category-facing facility stats for the furniture list and detail cards."""
+
+    effects: dict[str, Any] = {}
+    # 储物空间沿用存档同步的储物家具判定：FurnitureFunc 包含 215 或 ShowStorage > 0。
+    is_storage = 215 in (raw.get("FurnitureFunc") or []) or \
+        (isinstance(raw.get("ShowStorage"), int) and raw["ShowStorage"] > 0)
+    bag = bags.get(raw.get("BagId")) if is_storage else None
+    size = bag.get("Size") if isinstance(bag, dict) else None
+    if (isinstance(size, list) and len(size) == 2
+            and all(isinstance(value, int) and value > 0 for value in size)):
+        effects["bag"] = {"cols": size[0], "rows": size[1], "slots": size[0] * size[1]}
+    if raw.get("isShowHP") is True:
+        defense: dict[str, Any] = {"hp": raw.get("FurnitureHP"), "hp_max": raw.get("FurnitureHPMax")}
+        coeff = raw.get("DefReduceCoeff")
+        if isinstance(coeff, (int, float)) and math.isfinite(coeff) and coeff > 0:
+            defense["def_reduce"] = coeff
+        effects["defense"] = defense
+    plant = plant_configs.get(raw.get("PlantFurnitureID"))
+    if plant:
+        effects["planting"] = {
+            "capacity": plant.get("Capacity"), "add_heat": plant.get("AddHeat"),
+            "need_power": plant.get("NeedPower") is True,
+            "electric_light": plant.get("ElectricLight"), "electric_heat": plant.get("ElectricHeat"),
+            "growth_faster": plant.get("GrowthFaster"), "pest_control": plant.get("PestControl"),
+            "weed_control": plant.get("WeedControl"), "dry_control": plant.get("DryControl"),
+        }
+    cook = cook_configs.get(raw.get("CookFurnitureID"))
+    if cook:
+        effects["cooking"] = {
+            "max_food_count": cook.get("MaxFoodCount"), "fuel_slot_count": cook.get("FuelSlotCount"),
+            "speed_rate": cook.get("SpeedRate"), "quality_bonus": cook.get("QualityBonus"),
+        }
+    electrical = electrical_configs.get(raw.get("ElectricalFurnitureID"))
+    if electrical:
+        effects["generator"] = {
+            "electrical_type": electrical.get("ElectricalType"),
+            "base_power": electrical.get("BasePower"), "capacity": electrical.get("Capacity"),
+            "fuel_slot_count": electrical.get("FuelSlotCount"),
+        }
+    power_cost = raw.get("PowerCost")
+    if raw.get("IsElectrical") is True and isinstance(power_cost, int) and power_cost > 0:
+        effects["power_cost"] = power_cost
+    heat_output = raw.get("HeatOutput")
+    if isinstance(heat_output, int) and heat_output > 0:
+        effects["heat_output"] = heat_output
+    restore_coeff = raw.get("RestoreCoeff")
+    if isinstance(restore_coeff, (int, float)) and math.isfinite(restore_coeff) and restore_coeff > 0:
+        effects["restore_coeff"] = restore_coeff
+    vase_capacity = raw.get("VaseCapacity")
+    if isinstance(vase_capacity, int) and vase_capacity > 0:
+        effects["vase_capacity"] = vase_capacity
+    return effects
+
+
+def furniture_effect_chips(effects: dict[str, Any]) -> list[dict[str, str]]:
+    """Render facility effects as display chips shared by the list, detail and SEO pages."""
+
+    def percent(value: float) -> str:
+        return f"{round(value * 100)}%"
+
+    def number(value: Any) -> str:
+        return f"{value:g}"
+
+    chips: list[dict[str, str]] = []
+    bag = effects.get("bag")
+    if bag:
+        chips.append({"label": "储物空间", "value": f"{bag['slots']} 格",
+                      "title": f"背包格 {bag['cols']}×{bag['rows']}"})
+    defense = effects.get("defense")
+    if defense and defense.get("hp") is not None:
+        hp = str(defense["hp"])
+        if defense.get("hp_max") and defense["hp_max"] != defense["hp"]:
+            hp += f"～{defense['hp_max']}"
+        chips.append({"label": "耐久", "value": hp})
+        if defense.get("def_reduce"):
+            chips.append({"label": "减伤", "value": percent(defense["def_reduce"])})
+    planting = effects.get("planting")
+    if planting:
+        if planting.get("capacity"):
+            chips.append({"label": "种植位", "value": str(planting["capacity"])})
+        if (planting.get("growth_faster") or 0) > 0:
+            chips.append({"label": "生长", "value": "+" + percent(planting["growth_faster"])})
+        for key, label in (("pest_control", "防虫"), ("weed_control", "防草"), ("dry_control", "抗旱")):
+            if (planting.get(key) or 0) < 0:
+                chips.append({"label": label, "value": percent(-planting[key])})
+        if (planting.get("electric_light") or 0) > 0:
+            chips.append({"label": "补光", "value": f"Lv.{planting['electric_light']}"})
+        if (planting.get("add_heat") or 0) > 0 and (planting.get("electric_heat") or 0) > 0:
+            chips.append({"label": "御寒", "value": "通电恒温"})
+        elif (planting.get("add_heat") or 0) > 0:
+            chips.append({"label": "御寒", "value": "恒温"})
+        elif (planting.get("electric_heat") or 0) > 0:
+            chips.append({"label": "御寒", "value": "通电加热"})
+    cooking = effects.get("cooking")
+    if cooking:
+        if cooking.get("max_food_count"):
+            chips.append({"label": "食材位", "value": str(cooking["max_food_count"])})
+        if cooking.get("fuel_slot_count"):
+            chips.append({"label": "燃料位", "value": str(cooking["fuel_slot_count"])})
+        if cooking.get("speed_rate") and cooking["speed_rate"] != 1:
+            chips.append({"label": "烹饪速度", "value": "+" + percent(cooking["speed_rate"] - 1)})
+        if cooking.get("quality_bonus"):
+            chips.append({"label": "品质", "value": f"+{cooking['quality_bonus']}"})
+    generator = effects.get("generator")
+    if generator:
+        # 发电/蓄电只对语义明确的类型展示：2 太阳能、3 燃油发电、5 蓄电；
+        # 类型 6（老鼠笼内部数值）与 7（燃料供暖）不按发电/蓄电解读。
+        electrical_type = generator.get("electrical_type")
+        if electrical_type in (2, 3) and (generator.get("base_power") or 0) > 0:
+            chips.append({"label": "发电", "value": number(generator["base_power"])})
+        if electrical_type == 5 and (generator.get("capacity") or 0) > 0:
+            chips.append({"label": "蓄电", "value": number(generator["capacity"])})
+        if (generator.get("fuel_slot_count") or 0) > 0:
+            chips.append({"label": "燃料位", "value": str(generator["fuel_slot_count"])})
+    if effects.get("power_cost"):
+        chips.append({"label": "耗电", "value": str(effects["power_cost"])})
+    if effects.get("heat_output"):
+        chips.append({"label": "供暖", "value": f"+{effects['heat_output']}"})
+    if effects.get("restore_coeff"):
+        chips.append({"label": "休息恢复", "value": f"×{effects['restore_coeff']:g}"})
+    if effects.get("vase_capacity"):
+        chips.append({"label": "插花位", "value": str(effects["vase_capacity"])})
+    return chips
 
 
 def icon_filename(asset_path: str) -> str:
@@ -225,6 +361,14 @@ def export_data(database_path: Path) -> dict[str, Any]:
             for field in ("FoodTag1", "FoodTag2")}
         groups = {row["row_id"]: row["name"] for row in connection.execute(
             "SELECT row_id, name FROM auxiliary_rows WHERE table_name='Config_ItemSubCategory'")}
+        planter_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurniturePlant'")}
+        cook_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurnitureCook'")}
+        electrical_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurnitureElectrical'")}
+        bags = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
+            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_Bag'")}
         items = {row["item_id"]: (row["name"], json.loads(row["raw_json"]))
                  for row in connection.execute("SELECT item_id, name, raw_json FROM recipe_items")}
         rules = {row["sub_category"]: dict(row) for row in connection.execute(
@@ -326,6 +470,9 @@ def export_data(database_path: Path) -> dict[str, Any]:
                             break
                 elif category == "furniture":
                     entry["shop_page"] = raw.get("ShopPage") if isinstance(raw.get("ShopPage"), int) else None
+                    effects = furniture_effects(raw, planter_configs, cook_configs, electrical_configs, bags)
+                    entry["effects"] = effects
+                    entry["effect_chips"] = furniture_effect_chips(effects)
                     recipe_groups = furniture_recipe_groups(related, items)
                     entry["craft_recipes"] = recipe_groups
                     # The per-recipe relations are re-exported as grouped craft_recipes.
@@ -370,8 +517,6 @@ def export_data(database_path: Path) -> dict[str, Any]:
                 }
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})
-        planter_configs = {row["row_id"]: json.loads(row["raw_json"]) for row in connection.execute(
-            "SELECT row_id, raw_json FROM auxiliary_rows WHERE table_name='Config_FurniturePlant'")}
         planters = add_planting_data(categories, raw_entries, items, planter_configs, public_icon)
         environment = json.loads((SOURCE_DIR / "planting-environment.json").read_text(encoding="utf-8"))
         if environment["format_version"] != 1 or environment["game_version"] != metadata.get("game_version"):

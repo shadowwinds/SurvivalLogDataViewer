@@ -29,6 +29,7 @@ class PagesIconTests(unittest.TestCase):
                 connection.execute("CREATE TABLE codex_entries(source_table TEXT, raw_json TEXT, is_current INTEGER)")
                 connection.execute("CREATE TABLE recipe_items(item_id INTEGER, raw_json TEXT)")
                 connection.execute("CREATE TABLE achievements(raw_json TEXT)")
+                connection.execute("CREATE TABLE entry_relations(source_entry_key TEXT, relation_type TEXT, target_id INTEGER)")
                 for path, web in ((icon, "../../Res/Food/pheasant.png"), (absent, "../../Res/Food/absent.png")):
                     connection.execute("INSERT INTO codex_entries VALUES ('Config_Item', ?, 1)",
                                        (json.dumps({"Icon": path, "WebIcon": web}),))
@@ -62,7 +63,8 @@ class PagesIconTests(unittest.TestCase):
             root = Path(temporary)
             game, output, database = root / "game", root / "icons", root / "codex.sqlite3"
             refs = ["../../Res/Food/flower.png", "../../Res/Food/flower_seeds.png",
-                    "../../Res/Material/paper.png", "../../Res/Furniture/planter.png", "../../Res/icon/trophy.png"]
+                    "../../Res/Material/paper.png", "../../Res/Furniture/planter.png", "../../Res/icon/trophy.png",
+                    "../../Res/Material/nail.png"]
             for ref in refs:
                 file = game / "SurvivalLog_Data/StreamingAssets/WebUI" / ref.removeprefix("../../")
                 file.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +73,7 @@ class PagesIconTests(unittest.TestCase):
                 connection.execute("CREATE TABLE codex_entries(source_table TEXT, raw_json TEXT, is_current INTEGER)")
                 connection.execute("CREATE TABLE recipe_items(item_id INTEGER, raw_json TEXT)")
                 connection.execute("CREATE TABLE achievements(raw_json TEXT)")
+                connection.execute("CREATE TABLE entry_relations(source_entry_key TEXT, relation_type TEXT, target_id INTEGER)")
                 for table, raw, current in (("Config_Plant", {"Gain": [20, 20], "Perfect_Gain": [20, 21]}, 1),
                                             ("Config_ProductionList", {"ProductID": [30], "FailedID": [31], "perfect_item_id": [32]}, 1),
                                             ("Config_Furniture", {"ICON": refs[3]}, 1),
@@ -79,6 +82,13 @@ class PagesIconTests(unittest.TestCase):
                 for item_id, ref in ((20, refs[0]), (21, refs[1]), (30, refs[2]), (31, "FAILED_ICON"),
                                      (32, "PERFECT_ICON"), (40, "PRIVATE_UNUSED_ICON")):
                     connection.execute("INSERT INTO recipe_items VALUES (?, ?)", (item_id, json.dumps({"WebIcon": ref})))
+                # Furniture crafting materials participate in recipes but are not codex entries;
+                # their icons are still requested for the grouped recipe cards.
+                connection.execute("INSERT INTO recipe_items VALUES (?, ?)", (55, json.dumps({"WebIcon": refs[5]})))
+                connection.execute("INSERT INTO entry_relations VALUES (?, ?, ?)",
+                                   ("Config_Furniture:20002", "制造材料（配方 ID 1）", 55))
+                connection.execute("INSERT INTO entry_relations VALUES (?, ?, ?)",
+                                   ("Config_Furniture:20002", "制造配方", 40))
                 connection.execute("INSERT INTO achievements VALUES (?)", (json.dumps({"WebIcon": refs[4]}),))
             with patch("codex_pages_icons.find_catalog", return_value=game / "catalog"), \
                  patch("codex_pages_icons.parse_catalog", return_value=({}, [], "test")), \
