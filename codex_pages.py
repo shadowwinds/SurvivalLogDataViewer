@@ -40,6 +40,35 @@ CRAFT_NOTE_CATEGORIES = {1: "基础材料", 2: "工具器件", 3: "陷阱狩猎"
 FURNITURE_SHOP_PAGES = {0: "未上架", 1: "储物", 2: "生活", 3: "安保", 4: "能源", 5: "烹饪", 6: "种植", 7: "其他"}
 # 制造配方中的装修材料 Category；当前版本只有 8 种植物染料参与配方。
 DECORATION_ITEM_CATEGORY = 21
+# 猎物页陷阱狩猎模型与书籍列表的版本化预设文件（由 codex_pages_prey.py / codex_pages_books.py 生成）。
+PREY_MODEL_FILE = "prey-model.json"
+BOOKS_MODEL_FILE = "books-model.json"
+BOOK_CATEGORY = {"id": "books", "label": "书籍"}
+
+
+def load_versioned_model(name: str, game_version: str | None) -> dict[str, Any] | None:
+    """Load a pages model JSON and keep it only when the game version matches."""
+
+    try:
+        model = json.loads((SOURCE_DIR / name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(model, dict) or model.get("format_version") != 1:
+        return None
+    if game_version is not None and model.get("game_version") != game_version:
+        return None
+    return model
+
+
+def map_model_icons(model: dict[str, Any]) -> dict[str, Any]:
+    """Map raw icon asset paths in a prey model to public icon files."""
+
+    model["bait_icons"] = [public_icon(path) for path in model.get("bait_icons", [])]
+    for section in ("prey", "traps", "cages"):
+        for entry in model.get(section, []):
+            if entry.get("icon"):
+                entry["icon"] = public_icon(entry["icon"])
+    return model
 
 
 def icon_asset(raw: dict[str, Any]) -> str:
@@ -518,6 +547,28 @@ def export_data(database_path: Path) -> dict[str, Any]:
                 }
             )
         categories.append({"id": "achievements", "label": "成就", "entries": achievements})
+        books_model = load_versioned_model(BOOKS_MODEL_FILE, metadata.get("game_version"))
+        if books_model:
+            book_entries = []
+            for raw in books_model.get("books", []):
+                highlights = []
+                if raw.get("price") is not None:
+                    highlights.append({"field": "price", "label": "价格", "value": str(raw["price"])})
+                if raw.get("stack") not in (None, 0, 1):
+                    highlights.append({"field": "stack", "label": "堆叠上限", "value": str(raw["stack"])})
+                book_entries.append({
+                    "key": f"Config_Item:{raw['id']}",
+                    "id": raw["id"],
+                    "source_table": "Config_Item",
+                    "name": raw["name"],
+                    "name_key": None,
+                    "description": raw.get("description") or raw.get("flavor") or "",
+                    "highlights": highlights,
+                    "fields": config_fields(raw.get("raw") or {"ID": raw["id"]}),
+                    "relations": [],
+                    "icon": public_icon(raw.get("icon") or ""),
+                })
+            categories.append({**BOOK_CATEGORY, "entries": book_entries})
         planters = add_planting_data(categories, raw_entries, items, planter_configs, public_icon)
         environment = json.loads((SOURCE_DIR / "planting-environment.json").read_text(encoding="utf-8"))
         if environment["format_version"] != 1 or environment["game_version"] != metadata.get("game_version"):
@@ -565,9 +616,13 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     if database_path.is_relative_to(output_dir) or SOURCE_DIR.is_relative_to(output_dir):
         raise ValueError("输出目录不能包含源数据库或网页源码目录")
     payload = export_data(database_path)
+    prey_model = load_versioned_model(PREY_MODEL_FILE, payload["metadata"].get("game_version"))
+    if prey_model:
+        prey_model = map_model_icons(prey_model)
     documents = seo_documents(payload, site_url, {
         "recommendations/index.html": recommendation_document(payload, site_url)})
-    validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll", *documents])
+    validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll",
+                                         *documents, *( [PREY_MODEL_FILE] if prey_model else [])])
     output_dir.mkdir(parents=True, exist_ok=True)
     for name in (*ASSETS, "data.json", ".nojekyll"):
         if (output_dir / name).is_symlink():
@@ -585,6 +640,10 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     # 必然存在于源码 icons 目录；按实际引用统一扫描复制，新增展示字段后不会漏发导致 404。
     referenced = json.dumps(payload, ensure_ascii=False)
     referenced += "".join(documents.values())
+    prey_json = ""
+    if prey_model:
+        prey_json = json.dumps(prey_model, ensure_ascii=False, separators=(",", ":")) + "\n"
+        referenced += prey_json
     icons = set(re.findall(r"\./icons/[a-f0-9]{20}\.png", referenced))
     if icons:
         icon_dir = output_dir / "icons"
@@ -602,6 +661,11 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
                    ensure_ascii=False, separators=(",", ":"), allow_nan=False),
         encoding="utf-8",
     )
+    if prey_model:
+        target = output_dir / PREY_MODEL_FILE
+        if target.is_symlink():
+            raise ValueError(f"输出文件不能是符号链接：{PREY_MODEL_FILE}")
+        target.write_text(prey_json, encoding="utf-8")
     (output_dir / ".nojekyll").write_text("", encoding="ascii")
     return output_dir
 

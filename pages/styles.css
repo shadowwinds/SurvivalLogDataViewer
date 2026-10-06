@@ -299,3 +299,7 @@ a.relation-item:hover { border-color: #80a06b; background: #e6efdb; }
   .main-content { animation: arrive .3s ease-out; }
   @keyframes arrive { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 }
+
+/* 猎物页：稀有度星级与捕获信息卡片 */
+.prey-rarity { color: #cf963c; font-size: 12px; letter-spacing: 2px; }
+.entry-meta .prey-rarity + span::before { content: "· "; }

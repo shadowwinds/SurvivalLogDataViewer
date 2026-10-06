@@ -5,20 +5,31 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", craftGroup: "", materialId: null, materialUses: new Map(), craftNoteNames: {}, furniturePageNames: {}, planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "" };
+  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", craftGroup: "", materialId: null, materialUses: new Map(), craftNoteNames: {}, furniturePageNames: {}, planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "", dataVersion: "", preyModel: null, preyModelPromise: null, preyModelFailed: false, preyById: new Map(), trapById: new Map(), baitById: new Map(), roomById: new Map() };
+  const preyModes = new Set(["prey", "traps", "baits", "cages"]);
+  const preyModeHelp = {
+    prey: "先看哪些陷阱能抓到、放什么诱饵最有效；食用属性移到了后面。",
+    traps: "比较耐久、检查间隔与各猎物的基础概率；点击猎物可查看推荐诱饵。",
+    baits: "搜索手头的食物或专用诱饵，看它对哪些猎物更有效。",
+    cages: "活捉笼抓到的活鼠放进老鼠笼，投喂食物就能持续发电。",
+  };
   const qualities = ["普通", "良好", "完美", "失败"];
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
   const qualityName = (value) => value === "良好" ? "优良" : value;
-  const titles = { food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", plant: "种植手册", prey: "猎物图鉴", craft: "制造手册", furniture: "家具与设施", achievements: "成就指南" };
+  const titles = { food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", plant: "种植手册", prey: "猎物图鉴", traps: "陷阱图鉴", baits: "诱饵图鉴", cages: "老鼠笼发电", craft: "制造手册", furniture: "家具与设施", books: "书籍列表", achievements: "成就指南" };
   const intros = {
     food: "看属性、查标签，掌握每份食材的可用次数。",
     "ready-food": "不用于烹饪的食品与饮品，直接查看食用次数与效果。",
     dish: "先看吃完的效果，再决定今天做什么。",
     plant: "选天气、位置与供暖，查现在能种什么。",
-    prey: "查找猎物的属性与获取信息。",
+    prey: "先看哪些陷阱能抓到、放什么诱饵最有效。",
+    traps: "比较耐久、检查间隔与各猎物的基础概率。",
+    baits: "搜索手头的食物或专用诱饵，看它对哪些猎物更有效。",
+    cages: "活鼠跑笼发电：容量、电力与饲养消耗。",
     craft: "材料与产物，一次查清。",
     furniture: "从生活设施到生存据点。",
+    books: "可阅读的书籍：技能、属性与染料手记。",
     achievements: "查条件、看方法，补齐你的生存记录。",
   };
   const icons = {
@@ -28,6 +39,7 @@
     prey: '<ellipse cx="12" cy="16" rx="5" ry="4"/><ellipse cx="5" cy="9" rx="2" ry="3"/><ellipse cx="10" cy="5" rx="2" ry="3"/><ellipse cx="16" cy="5" rx="2" ry="3"/><ellipse cx="20" cy="10" rx="2" ry="3"/>',
     craft: '<path d="M14 4a6 6 0 0 0-8 8L3 18l3 3 6-3a6 6 0 0 0 8-8l-5 3-4-4z"/>',
     furniture: '<path d="M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5M5 17v4m14-4v4M3 11h3v4h12v-4h3v7H3z"/>',
+    books: '<path d="M5 19.5V6a2 2 0 0 1 2-2h12v14H7a2 2 0 0 0-2 1.5zm0 0A2.5 2.5 0 0 0 7.5 22H19v-4"/>',
     achievements: '<path d="M7 3h10v7a5 5 0 0 1-10 0zM7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4M12 15v5m-4 1h8"/>',
   };
 
@@ -81,6 +93,49 @@
       wrapper.append(image);
     } else fallback();
     return wrapper;
+  }
+
+  const percent = (value) => Number.isFinite(value) ? Math.round(value * 100) + "%" : "—";
+  const stars = (rarity) => rarity > 0 ? "★".repeat(rarity) : "";
+
+  function ensurePreyModel() {
+    if (state.preyModel || state.preyModelFailed) return Promise.resolve();
+    if (!state.preyModelPromise) {
+      state.preyModelPromise = fetch(new URL("./prey-model.json", location.href))
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
+        .then((model) => {
+          if (!model || model.format_version !== 1 || model.game_version !== state.dataVersion) {
+            throw new Error("prey model version mismatch");
+          }
+          state.preyModel = model;
+          state.preyById = new Map(model.prey.map((entry) => [entry.id, entry]));
+          state.trapById = new Map(model.traps.map((trap) => [trap.id, trap]));
+          state.baitById = new Map(model.baits.map((bait) => [bait.id, bait]));
+          state.roomById = new Map(model.rooms.map((room) => [room.id, room]));
+          state.categories.push(
+            { id: "traps", label: "陷阱图鉴", entries: model.traps.map((trap) => ({
+                key: "Trap:" + trap.id, id: trap.id, source_table: "Config_Trap", name: trap.name,
+                description: trap.description, icon: trap.icon, trap,
+                highlights: [], relations: [], fields: [],
+                nameIndex: searchIndex([trap.name, trap.id, trap.description]) })) },
+            { id: "baits", label: "诱饵图鉴", entries: model.baits.map((bait) => ({
+                key: "Bait:" + bait.id, id: bait.id, source_table: "Config_TrapBait", name: bait.name,
+                icon: model.bait_icons[bait.icon] || "", bait,
+                highlights: [], relations: [], fields: [],
+                nameIndex: searchIndex([bait.name, bait.id]) })) },
+            { id: "cages", label: "老鼠笼发电", entries: model.cages.map((cage) => ({
+                key: "Cage:" + cage.id, id: cage.id, source_table: "Config_Furniture", name: cage.name,
+                description: cage.description, icon: cage.icon, cage,
+                highlights: [], relations: [], fields: [],
+                nameIndex: searchIndex([cage.name, cage.id, cage.description]) })) },
+          );
+          buildNav();
+          configureControls();
+          readHash(false);
+        })
+        .catch(() => { state.preyModelFailed = true; });
+    }
+    return state.preyModelPromise;
   }
 
   function category(id = state.category) {
@@ -481,7 +536,7 @@
 
   function buildNav() {
     const fragment = document.createDocumentFragment();
-    for (const id of ["food", "ready-food", "dish", "plant", "prey", "craft", "furniture", "achievements"]) {
+    for (const id of ["food", "ready-food", "dish", "plant", "prey", "craft", "furniture", "books", "achievements"]) {
       const item = category(id);
       if (!item) continue;
       if (id === "food" || id === "plant") fragment.append(node("div", "nav-caption", id === "food" ? "吃什么 · 怎么做" : "更多生存手册"));
@@ -500,15 +555,22 @@
   }
 
   function configureControls() {
-    const isFood = ["food", "ready-food", "prey"].includes(state.category);
+    const isFood = ["food", "ready-food"].includes(state.category);
     const isDish = state.category === "dish";
+    const preyFamily = preyModes.has(state.category);
     $("categoryTitle").textContent = titles[state.category];
     $("categoryIntro").textContent = intros[state.category];
     $("pageHelp").querySelector("p").textContent = state.category === "plant" ?
       "选择当前天气、寒潮强度、种植位置与正在运行的供暖设备。勾选只看当前可种；取消后可查看光照、寒冷或空间不满足的原因。默认食用作物优先，再按基础收获时间排列。" :
+      state.category === "prey" ? "每个猎物列出能抓住它的陷阱、推荐诱饵和房间倾向；数值为配置原始值，实际概率由陷阱、诱饵、房间和陷阱技能共同决定。" :
       "选择食材查配方；同种食材可重复添加。完整组合按食材档位匹配，专用配方优先。品质影响效果；技能与状态的档位保底另行选择。";
-    $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : "搜索图鉴";
+    $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : state.category === "baits" ? "找诱饵" : state.category === "books" ? "找一本书" : "搜索图鉴";
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
+    $("preyModeField").hidden = !preyFamily || !state.preyModel;
+    if (preyFamily && state.preyModel) {
+      $("preyMode").value = state.category;
+      $("preyModeHelp").textContent = preyModeHelp[state.category];
+    }
     $("materialField").hidden = !["craft", "furniture"].includes(state.category);
     $("ingredientField").hidden = !isDish;
     $("cookingModeField").hidden = !isDish;
@@ -573,7 +635,7 @@
 
   function defaultSort() {
     if (state.category === "plant") return "plant-food";
-    return ["food", "ready-food", "dish", "prey"].includes(state.category) ? "ValueDisplay1" : "default";
+    return ["food", "ready-food", "dish"].includes(state.category) ? "ValueDisplay1" : "default";
   }
 
   function clearFilters(resetPlanting = false) {
@@ -704,6 +766,7 @@
 
   function renderList() {
     const fragment = document.createDocumentFragment();
+    const preyCards = state.category === "prey" && state.preyModel;
     for (const entry of state.entries) {
       const button = node("button", "entry-card");
       button.type = "button";
@@ -712,56 +775,100 @@
       button.setAttribute("aria-pressed", String(entry.key === state.key));
       const player = profile(entry);
       const statsText = player?.stats.map((stat) => stat.label + signed(stat.value)).join("，");
-      button.setAttribute("aria-label", entry.name + (player ? "，" + usageText(player, state.category === "dish", entry.portion_model?.mode === "fixed") : "") + (statsText ? "，" + statsText : "") + "，查看详情");
+      button.setAttribute("aria-label", entry.name + (player && !preyCards ? "，" + usageText(player, state.category === "dish", entry.portion_model?.mode === "fixed") : "") + (statsText && !preyCards ? "，" + statsText : "") + "，查看详情");
       const top = node("span", "card-top");
       const heading = node("span", "card-heading");
       const meta = node("span", "entry-meta");
-      meta.append(node("span", "", entry.plant ? (entry.plant.food_harvest ? "食用收获" : "其他收获") :
-        player ? "分类：" + player.sub_category :
-        state.category === "craft" || state.category === "furniture" ? craftGroupName(state.category, entry) || category().label :
-        entry.hidden ? "隐藏成就" : entry.group || category().label));
-      if (state.category === "dish") {
-        meta.append(node("span", "quality-label", qualityName($("qualitySelect").value) + "品质"));
-        if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
-      }
-      else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
       const name = node("span", "entry-name-row");
       name.append(node("span", "entry-name", entry.name));
-      if (entry.food?.cookable) name.append(tierBadge(entry.food.tier));
-      heading.append(name, meta);
-      top.append(addUsage(art(player?.icon || entry.icon), player, state.category === "dish", entry.portion_model?.mode === "fixed"), heading);
-      button.append(top);
-      if (player) {
-        button.append(node("span", "card-tags", foodTagLine(player)),
-          node("span", "card-stat-caption", isPantry() ? "每锅总恢复" : state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
-        if (state.category === "dish") {
-          const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
-          if (estimate) button.append(node("span", "pantry-recipe", comboText(estimate)),
-            node("span", "entry-description", "这组材料最多可做 " + possiblePots(estimate) + " 锅"));
-          else button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
-        }
-      } else if (entry.plant) {
-        const reasons = window.Planting.problems(entry, plantingConditions());
-        button.append(node("span", "plant-verdict " + (reasons.length ? "blocked" : "suitable"),
-          reasons.length ? reasons.join(" · ") : "满足当前条件"));
-        const facts = node("span", "plant-facts");
-        facts.append(node("span", "", "空间 " + number(entry.plant.size)),
-          node("span", "", "光照 ≥ " + number(entry.plant.light_need)),
-          node("span", "", "寒冷 ≤ " + number(entry.plant.cold_resistance)));
-        button.append(facts, node("span", "entry-description", "基础生长 " + growthHours(entry.plant.growth_seconds) + " 小时"));
-      } else if (state.category === "furniture") {
-        const facts = node("span", "plant-facts entry-effects");
-        furnitureEffectChips(entry).forEach((chip) => {
-          const chipNode = node("span", "effect-chip", chip.label + (chip.value ? " " : ""));
-          if (chip.value) chipNode.append(node("b", "", chip.value));
-          if (chip.title) chipNode.title = chip.title;
-          facts.append(chipNode);
-        });
-        button.append(facts);
-        const materials = furnitureMaterials(entry);
-        if (materials) button.append(materials);
+      if (preyCards) {
+        const model = state.preyById.get(entry.id);
+        if (model?.rarity) meta.append(node("span", "prey-rarity", stars(model.rarity)));
+        meta.append(node("span", "", model ? (model.traps.map((trap) => state.trapById.get(trap.id)?.name || "ID:" + trap.id).join(" · ") || "没有陷阱能捕获") : "陷阱数据未加载"));
+        heading.append(name, meta);
+        top.append(addUsage(art(player?.icon || entry.icon), player, false, false), heading);
+        button.append(top);
+        const baitLine = (model?.top_baits || []).slice(0, 3).map(([baitId, coefficient]) => {
+          const bait = state.baitById.get(baitId);
+          return (bait?.name || "ID:" + baitId) + " " + coefficient;
+        }).join(" · ");
+        button.append(node("span", "entry-description", baitLine ? "推荐诱饵：" + baitLine : "没有匹配的诱饵数据"));
+      } else if (state.category === "traps" && entry.trap) {
+        const trap = entry.trap;
+        meta.append(node("span", "", "耐久 " + number(trap.durability) + " · 每 " + number(trap.interval_hours) + " 小时检查"));
+        heading.append(name, meta);
+        top.append(art(entry.icon), heading);
+        button.append(top);
+        button.append(node("span", "entry-description", (trap.description || "") + (trap.description ? " · " : "") + "可捕 " + trap.prey.length + " 种猎物"));
+      } else if (state.category === "baits" && entry.bait) {
+        const bait = entry.bait;
+        meta.append(node("span", "", state.preyModel.bait_effects[bait.effect] || "诱饵"));
+        heading.append(name, meta);
+        top.append(art(entry.icon), heading);
+        button.append(top);
+        const line = bait.uniform ? "对各类猎物效果相同" :
+          (bait.top || []).map(([preyId, coefficient]) => (state.preyById.get(preyId)?.name || "ID:" + preyId) + " " + coefficient).join(" · ");
+        button.append(node("span", "entry-description", line || "对猎物的吸引系数未提供"));
+      } else if (state.category === "books") {
+        const price = entry.highlights.find((field) => field.field === "price")?.value;
+        if (price) meta.append(node("span", "", "价格 " + price));
+        heading.append(name, meta);
+        top.append(art(entry.icon), heading);
+        button.append(top);
+        button.append(node("span", "entry-description", entry.description || ""));
+      } else if (state.category === "cages" && entry.cage) {
+        const cage = entry.cage;
+        meta.append(node("span", "", "容纳 " + number(cage.capacity_mice) + " 只 · 每只 " + number(cage.power_per_mouse) + " 电力"));
+        heading.append(name, meta);
+        top.append(art(entry.icon), heading);
+        button.append(top);
+        button.append(node("span", "entry-description", "价格 " + number(cage.price) + " · 饲料仓 " + number(cage.bag_slots) + " 格"));
       } else {
-        button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
+        meta.append(node("span", "", entry.plant ? (entry.plant.food_harvest ? "食用收获" : "其他收获") :
+          player ? "分类：" + player.sub_category :
+          state.category === "craft" || state.category === "furniture" ? craftGroupName(state.category, entry) || category().label :
+          entry.hidden ? "隐藏成就" : entry.group || category().label));
+        if (state.category === "dish") {
+          meta.append(node("span", "quality-label", qualityName($("qualitySelect").value) + "品质"));
+          if (Number.isInteger(entry.recipe?.min_level)) meta.append(node("span", "", "烹饪 Lv." + entry.recipe.min_level));
+        }
+        else if (entry.food?.cookable) meta.append(node("span", "", "可烹饪"));
+        if (entry.food?.cookable) name.append(tierBadge(entry.food.tier));
+        heading.append(name, meta);
+        top.append(addUsage(art(player?.icon || entry.icon), player, state.category === "dish", entry.portion_model?.mode === "fixed"), heading);
+        button.append(top);
+        if (player) {
+          button.append(node("span", "card-tags", foodTagLine(player)),
+            node("span", "card-stat-caption", isPantry() ? "每锅总恢复" : state.category === "dish" && !player.per_use_stats ? "整份配置参考 · 实际随食材变化" : "每次食用"), statGrid(player.stats, true));
+          if (state.category === "dish") {
+            const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
+            if (estimate) button.append(node("span", "pantry-recipe", comboText(estimate)),
+              node("span", "entry-description", "这组材料最多可做 " + possiblePots(estimate) + " 锅"));
+            else button.append(node("span", "entry-description material-preview", entry.highlights.find((field) => field.field === "ingredients")?.value || "未配置食材"));
+          }
+        } else if (entry.plant) {
+          const reasons = window.Planting.problems(entry, plantingConditions());
+          button.append(node("span", "plant-verdict " + (reasons.length ? "blocked" : "suitable"),
+            reasons.length ? reasons.join(" · ") : "满足当前条件"));
+          const facts = node("span", "plant-facts");
+          facts.append(node("span", "", "空间 " + number(entry.plant.size)),
+            node("span", "", "光照 ≥ " + number(entry.plant.light_need)),
+            node("span", "", "寒冷 ≤ " + number(entry.plant.cold_resistance)));
+          button.append(facts, node("span", "entry-description", "基础生长 " + growthHours(entry.plant.growth_seconds) + " 小时"));
+        } else if (state.category === "furniture") {
+          const facts = node("span", "plant-facts entry-effects");
+          furnitureEffectChips(entry).forEach((chip) => {
+            const chipNode = node("span", "effect-chip", chip.label + (chip.value ? " " : ""));
+            if (chip.value) chipNode.append(node("b", "", chip.value));
+            if (chip.title) chipNode.title = chip.title;
+            facts.append(chipNode);
+          });
+          button.append(facts);
+          const materials = furnitureMaterials(entry);
+          if (materials) button.append(materials);
+        } else {
+          button.append(node("span", "entry-description", entry.highlights.map((field) => field.label + "：" + field.value).join(" · ") || entry.description));
+        }
       }
       button.addEventListener("click", () => selectEntry(entry.key, true));
       fragment.append(button);
@@ -771,7 +878,7 @@
     $("emptyState").hidden = state.entries.length !== 0;
     $("emptyState").querySelector("p").textContent = isPantry() ? "先添加冰箱食材和剩余用量；没有结果时，检查烹饪等级、品质或其他筛选条件。" : "换个关键词，或减少标签和属性筛选。";
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
-    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food", "prey"].includes(state.category) ? "绿色为增益 · 红色为减益" : ["craft", "furniture"].includes(state.category) ? [state.craftGroup ? "已按分类筛选" : "", state.materialId ? "已按材料筛选" : ""].filter(Boolean).join(" · ") : "";
+    $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food"].includes(state.category) ? "绿色为增益 · 红色为减益" : ["craft", "furniture"].includes(state.category) ? [state.craftGroup ? "已按分类筛选" : "", state.materialId ? "已按材料筛选" : ""].filter(Boolean).join(" · ") : "";
   }
 
   function section(title, caption = "") {
@@ -995,6 +1102,154 @@
     container.append(block);
   }
 
+  function craftRecipeLink(craftKey) {
+    if (!craftKey || !category("craft")?.entries.some((item) => item.key === craftKey)) return null;
+    const block = section("制作配方");
+    const link = node("a", "recipe-link");
+    link.href = urlFor("craft", craftKey);
+    const name = node("span", "recipe-name", category("craft").entries.find((item) => item.key === craftKey)?.name || craftKey);
+    name.append(node("span", "recipe-hint", "制造手册 · 陷阱狩猎"));
+    link.append(name);
+    block.append(link);
+    return block;
+  }
+
+  function renderPreyCapture(container, entry) {
+    const model = state.preyById.get(entry.id);
+    if (!model) {
+      container.append(node("p", "stat-help", "陷阱狩猎数据未加载或版本不匹配，以下仅显示食用属性。"));
+      return;
+    }
+    const trapsBlock = section("捕获渠道", "各陷阱针对该猎物的基础率（配置值）");
+    const links = node("div", "source-links");
+    for (const trap of model.traps) {
+      const link = node("a", "source-link");
+      link.href = urlFor("traps", "Trap:" + trap.id);
+      const label = (state.trapById.get(trap.id)?.name || "ID:" + trap.id) + " · 基础率 " + percent(trap.base_rate);
+      link.append(node("span", "", label), node("span", "", "→"));
+      links.append(link);
+    }
+    trapsBlock.append(links);
+    container.append(trapsBlock);
+    const baitBlock = section("推荐诱饵", "对这种猎物吸引系数最高");
+    const baits = node("div", "relation-values");
+    for (const [baitId, coefficient] of model.top_baits) {
+      const bait = state.baitById.get(baitId);
+      const chip = node("a", "relation-item");
+      chip.href = urlFor("baits", "Bait:" + baitId);
+      if (bait?.icon) chip.append(art(bait.icon, "prey"));
+      chip.append(node("span", "", (bait?.name || "ID:" + baitId) + " ×" + coefficient));
+      if (bait) chip.title = state.preyModel.bait_effects[bait.effect] || "";
+      baits.append(chip);
+    }
+    if (baits.children.length) baitBlock.append(baits);
+    else baitBlock.append(node("p", "stat-help", "没有找到有效诱饵。"));
+    baitBlock.append(node("p", "stat-help", "系数越高越容易吸引；系数相同的诱饵效果相同。实际概率还受陷阱、房间与陷阱技能影响。"));
+    container.append(baitBlock);
+    const roomBlock = section("房间倾向", "各房间的环境系数");
+    const rooms = node("div", "relation-values");
+    for (const room of model.rooms) {
+      const chip = node("span", "relation-item", (state.roomById.get(room.id)?.name || "ID:" + room.id) + " " + room.coefficient);
+      chip.title = state.roomById.get(room.id)?.description || "";
+      rooms.append(chip);
+    }
+    roomBlock.append(rooms);
+    roomBlock.append(node("p", "stat-help", "系数为 0 表示该房间几乎不会出现这种猎物；把陷阱放在系数更高的房间更划算。"));
+    container.append(roomBlock);
+  }
+
+  function renderTrapDetails(container, entry) {
+    const trap = entry.trap;
+    const block = section("陷阱属性", "配置原始值");
+    const list = node("dl", "highlights");
+    const rows = [["耐久", number(trap.durability)], ["每次捕获消耗耐久", number(trap.capture_cost)],
+      ["检查间隔", number(trap.interval_hours) + " 小时"], ["空手权重", number(trap.empty_weight)],
+      ["可放置房间", trap.rooms.join("、") || "未提供"],
+      ["诱饵位", trap.bait_capacity > 0 ? number(trap.bait_capacity) : "手动放一个诱饵"],
+      ["容纳猎物", trap.prey_capacity > 0 ? number(trap.prey_capacity) + " 只" : "1 只（捕获后收取）"],
+      ["回收获得", trap.trap_get.join("、") || "无"]];
+    for (const [label, value] of rows) {
+      const row = node("div", "highlight-row");
+      row.append(node("dt", "", label), node("dd", "", value));
+      list.append(row);
+    }
+    block.append(list);
+    block.append(node("p", "stat-help", "空手权重是“什么都没抓到”的抽取权重，越低越容易捕获；陷阱技能可以降低它，稀有猎物权重由技能提升。"));
+    container.append(block);
+    const craft = craftRecipeLink(trap.craft_key);
+    if (craft) container.append(craft);
+    const preyBlock = section("可捕获猎物", "基础率（配置值）· 从高到低");
+    const values = node("div", "relation-values");
+    for (const prey of [...trap.prey].sort((a, b) => b.base_rate - a.base_rate)) {
+      const chip = node("a", "relation-item");
+      chip.href = urlFor("prey", "Config_Item:" + prey.id);
+      const target = state.preyById.get(prey.id);
+      if (target?.icon) chip.append(art(target.icon, "prey"));
+      chip.append(node("span", "", prey.name + " " + percent(prey.base_rate)));
+      chip.title = "捕获图鉴经验 " + prey.discovery_exp;
+      values.append(chip);
+    }
+    preyBlock.append(values);
+    const slots = state.preyModel.slots || [];
+    if (slots.length) preyBlock.append(node("p", "stat-help",
+      "全屋可放置陷阱位：" + slots.map((slot) => slot.name + " " + slot.count + " 处").join(" · ")));
+    container.append(preyBlock);
+    const levels = state.preyModel.trap_levels || [];
+    if (levels.length) {
+      const details = node("details", "secondary-stats");
+      details.append(node("summary", "", "陷阱技能加成（所有陷阱共享）"));
+      const levelList = node("dl", "highlights");
+      for (const level of levels) {
+        const row = node("div", "highlight-row");
+        row.append(node("dt", "", "Lv." + level.lv + " · 经验 " + number(level.exp)),
+          node("dd", "", level.info.split("\n").join("；")));
+        levelList.append(row);
+      }
+      details.append(levelList);
+      container.append(details);
+    }
+  }
+
+  function renderBaitDetails(container, entry) {
+    const bait = entry.bait;
+    const effectText = state.preyModel.bait_effects[bait.effect] || "";
+    const block = section("对各猎物的吸引系数", bait.uniform ? "对全部猎物相同" : "从高到低");
+    const values = node("div", "relation-values");
+    for (const [preyId, coefficient] of bait.top || []) {
+      const chip = node("a", "relation-item");
+      chip.href = urlFor("prey", "Config_Item:" + preyId);
+      const target = state.preyById.get(preyId);
+      if (target?.icon) chip.append(art(target.icon, "prey"));
+      chip.append(node("span", "", (target?.name || "ID:" + preyId) + " ×" + coefficient));
+      values.append(chip);
+    }
+    if (values.children.length) block.append(values);
+    else block.append(node("p", "stat-help", "这种物品没有列出有效的吸引系数。"));
+    block.append(node("p", "stat-help", (effectText ? effectText + "。" : "") +
+      "系数是配置相对值：同一陷阱、同一房间里系数越高越容易被吸引；未列出的猎物系数更低，但被打包在完整系数表内。"));
+    container.append(block);
+  }
+
+  function renderCageDetails(container, entry) {
+    const cage = entry.cage;
+    const block = section("发电属性", "配置原始值");
+    const list = node("dl", "highlights");
+    const rows = [["容纳活鼠", number(cage.capacity_mice) + " 只"], ["每只电力", number(cage.power_per_mouse)],
+      ["饲养消耗系数", String(cage.fuel_rate ?? "未提供")], ["价格", number(cage.price)],
+      ["安装时间", number(cage.install_time)], ["耐久", number(cage.hp)],
+      ["饲料仓", cage.bag_size ? cage.bag_size.join("×") + "（" + cage.bag_slots + " 格）" : "未提供"]];
+    for (const [label, value] of rows) {
+      const row = node("div", "highlight-row");
+      row.append(node("dt", "", label), node("dd", "", value));
+      list.append(row);
+    }
+    block.append(list);
+    block.append(node("p", "stat-help", "把活捉笼抓到的活鼠放进老鼠笼并投喂食物，老鼠跑笼就会持续发电。饲养消耗系数是游戏原始配置值，配置未标注单位。"));
+    container.append(block);
+    const craft = craftRecipeLink(cage.craft_key);
+    if (craft) container.append(craft);
+  }
+
   function relatedDishes(entry) {
     if (!entry.food?.cookable) return [];
     return (category("dish")?.entries || []).filter((dish) => dish.ingredientIds.has(entry.id) && matchesSelectedMaterials(dish, [{ id: entry.id }])).sort((a, b) => {
@@ -1061,15 +1316,17 @@
     const heading = node("h2", "", entry.name);
     heading.id = "detailName";
     text.append(node("div", "detail-category", titles[state.category] + (entry.hidden ? " / 隐藏成就" : "")), heading, node("div", "detail-id", "ID " + entry.id));
-    const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
-    permalink.href = entry.detailPath;
-    text.append(permalink);
+    if (entry.detailPath) {
+      const permalink = node("a", "detail-permalink", "打开独立详情页 ↗");
+      permalink.href = entry.detailPath;
+      text.append(permalink);
+    }
     if (entry.icon_source) text.append(node("p", "image-credit", "图片：" + entry.icon_source.name +
       (entry.icon_source.kind === "product" ? "（制造产物）" : "（收获物）")));
-    if (player) text.append(node("div", "item-tag-line", foodTagLine(player)));
+    if (player && state.category !== "prey") text.append(node("div", "item-tag-line", foodTagLine(player)));
     hero.append(addUsage(art(player?.icon || entry.icon, state.category, true), player, state.category === "dish", entry.portion_model?.mode === "fixed"), text);
     fragment.append(hero);
-    if (player) fragment.append(foodFacts(player, state.category === "dish", entry.portion_model?.mode === "fixed"));
+    if (player && state.category !== "prey") fragment.append(foodFacts(player, state.category === "dish", entry.portion_model?.mode === "fixed"));
     if (state.category === "dish") {
       const fixed = entry.portion_model?.mode === "fixed";
       const estimate = isPantry() ? state.pantryPlans.get(entry.key) : null;
@@ -1137,6 +1394,7 @@
         fragment.append(block);
       }
     } else if (player) {
+      if (state.category === "prey") renderPreyCapture(fragment, entry);
       const block = section("直接食用的属性", "增益 + / 减益 −");
       block.append(statGrid(player.stats));
       addFullStats(block, player.stats);
@@ -1173,6 +1431,12 @@
       if (entry.craft_recipes?.length) fragment.append(furnitureRecipesBlock(entry.craft_recipes));
       const effects = furnitureEffectsBlock(entry);
       if (effects) fragment.append(effects);
+    } else if (state.category === "traps" && entry.trap) {
+      renderTrapDetails(fragment, entry);
+    } else if (state.category === "baits" && entry.bait) {
+      renderBaitDetails(fragment, entry);
+    } else if (state.category === "cages" && entry.cage) {
+      renderCageDetails(fragment, entry);
     }
     renderPlantDetails(fragment, entry);
     if (entry.description) fragment.append(node("p", "detail-description", entry.description));
@@ -1212,7 +1476,8 @@
       fields.append(row);
     });
     details.append(fields);
-    fragment.append(details, node("div", "detail-source", entry.source_table + " / " + (entry.name_key || "ID:" + entry.id) + (entry.source_version ? " · 说明参考版本 " + entry.source_version : "")));
+    if (entry.fields.length) fragment.append(details);
+    fragment.append(node("div", "detail-source", entry.source_table + " / " + (entry.name_key || "ID:" + entry.id) + (entry.source_version ? " · 说明参考版本 " + entry.source_version : "")));
     $("detailContent").replaceChildren(fragment);
     for (const details of $("detailContent").querySelectorAll("details")) details.open = expanded.includes(details.className);
     const portionInput = $("detailContent").querySelector(".portion-form input");
@@ -1241,8 +1506,9 @@
   function render(preserveDetailScroll = false, preservePantryInputs = false) {
     if (!category()) return;
     if (location.hash) document.title = titles[state.category] + " · 生存日志 Survival Log";
+    const navId = ({traps: "prey", baits: "prey", cages: "prey"})[state.category] || state.category;
     document.querySelectorAll(".category-button").forEach((button) => {
-      const active = button.dataset.category === state.category;
+      const active = button.dataset.category === navId;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -1367,11 +1633,13 @@
       $("gameVersion").textContent = "数据 " + (data.metadata.game_version || "未标注");
       $("footerVersion").textContent = "数据版本 " + (data.metadata.game_version || "未标注");
       $("gameVersion").title = "图鉴效果来自仓库静态库；图标单独提取，不会改变图鉴数值";
+      state.dataVersion = data.metadata.game_version || "";
       buildNav();
       renderIngredientOptions();
       configureControls();
       readHash(Boolean(location.hash));
       ["nameSearch", "materialSearch", "ingredientSearch", "resetSearch"].forEach((id) => { $(id).disabled = false; });
+      ensurePreyModel();
     } catch (error) {
       $("loadError").hidden = false;
       $("errorMessage").textContent = error.message + "。请稍后重试。";
@@ -1398,6 +1666,9 @@
   }));
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
+  });
+  $("preyMode").addEventListener("change", () => {
+    location.hash = urlFor($("preyMode").value, "");
   });
   $("pageHelp").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("pageHelp").open = false; $("pageHelp").querySelector("summary").focus(); }

@@ -11,8 +11,53 @@ from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
 
-from codex_pages import icon_asset, icon_filename, related_icon_items
+from codex_pages import SOURCE_DIR, icon_asset, icon_filename, related_icon_items
 from codex_parser import decrypt_bundle, find_catalog, load_unitypy, parse_catalog
+
+
+def database_game_version(database: Path) -> str | None:
+    """Read the static database version; icon requests skip models without a match."""
+
+    try:
+        with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as connection:
+            row = connection.execute("SELECT value FROM metadata WHERE key='game_version'").fetchone()
+            return row[0] if row else None
+    except sqlite3.Error:
+        return None
+
+
+def model_icon_requests(game_version: str | None) -> list[dict]:
+    """Icon asset paths referenced by the versioned prey and books models.
+
+    Only models matching the database game version are considered, so test
+    databases without matching metadata do not request unrelated icons.
+    """
+
+    if not game_version:
+        return []
+    requests: list[dict] = []
+    for name in ("prey-model.json", "books-model.json"):
+        try:
+            model = json.loads((SOURCE_DIR / name).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(model, dict) or model.get("format_version") != 1 \
+                or model.get("game_version") != game_version:
+            continue
+        for icon in model.get("bait_icons", []):
+            if isinstance(icon, str) and icon:
+                requests.append({"Icon": icon})
+        stack = [model]
+        while stack:
+            value = stack.pop()
+            if isinstance(value, dict):
+                icon = value.get("icon")
+                if isinstance(icon, str) and icon:
+                    requests.append({"Icon": icon})
+                stack.extend(value.values())
+            elif isinstance(value, list):
+                stack.extend(value)
+    return requests
 
 
 def web_icon_source(game_root: Path, web_icon: str) -> Path | None:
@@ -54,6 +99,9 @@ def extract_icons(database: Path, game_root: Path, output_dir: Path) -> None:
                 request(raw)
         for (raw_json,) in connection.execute("SELECT raw_json FROM achievements"):
             request(json.loads(raw_json))
+    # 陷阱、诱饵、老鼠笼与书籍来自版本化模型文件，图标一并提取。
+    for raw in model_icon_requests(database_game_version(database)):
+        request(raw)
     catalog = find_catalog(game_root)
     assets, bundles, version = parse_catalog(catalog)
     asset_lookup = {path.removesuffix(".png").lower(): path for path in assets}

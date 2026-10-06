@@ -6,6 +6,24 @@
 
 `codex_pages_i18n.py` 只读提取本地 `LocalTxt/Main.bytes` 和 `LocalTxt/English.bytes`，按 MemoryPack 字符串字典严格验证条目数量、非空唯一键和 EOF。仅将当前公开网页用到的文本写入 `pages/locales/game-en.json`，不导出完整语言表、资源包或私人数据。刷新命令为 `python codex_pages_i18n.py --game-root "游戏目录" --output-dir pages/locales`；Pages 构建与 CI 直接复制已生成的公开语言文件，无需安装游戏。
 
+## 猎物页陷阱狩猎数据
+
+猎物页以捕获信息为主（可捕获陷阱、推荐诱饵、房间倾向、老鼠笼发电），食用属性与菜肴入口保留为次要区块。数据来自 `codex_pages_prey.py` 只读导出的 `pages/prey-model.json`（格式版本 1 + 游戏版本），前端按版本匹配后启用“猎物 / 陷阱 / 诱饵 / 老鼠笼”四个子页；版本不一致或文件缺失时回退为纯食用属性视图，不套用其他版本数值。刷新命令为 `python codex_pages_prey.py --game-root "游戏目录" --output pages/prey-model.json`。
+
+解析集中 schema 新增五张严格表（字段名与顺序来自 IL2CPP 元数据 fields 表，全部行解析到 EOF 验证，本地 1.1.18293 / catalog 2.3.1 核对）：`Config_Trap`（23 字段：`ID`、`Name`、`Name_Local`、`Description`、`Description_Local`、`Trap_Type`、`Durability_Max`、`Capture_Cost`、`Capture_Interval`、`Capture_Room`、`Bait_id`、`Prey_Id`、`Discovery_Exp`、`Base_Rate`、`Empty_Weight`、`WebIcon`、`Model`、`Model_Captured`、`Remove_Action`、`Look_Action`、`Trap_Get`、`Bait_Capacity`、`Prey_Capacity`；其中 `Capture_Room`/`Bait_id`/`Prey_Id`/`Discovery_Exp`/`Base_Rate`/`Trap_Get` 为列表，`Discovery_Exp` 与 `Base_Rate` 按 `Prey_Id` 顺序逐猎物对齐）；`Config_TrapBait`（6 字段，ID 为诱饵物品 ID，`Prey_Id` 与 `Bait_coefficient` 为该物品对每种猎物的吸引系数，`Des_name_Local` 实际存名称键）；`Config_TrapLv`（10 字段，陷阱技能 1-5 级的空手权重减免、稀有猎物权重加成、耐久消耗减免与解锁配方）；`Config_TrapRoomBias`（7 字段，按房间 × 猎物的环境系数，`Des1` 存本地化房名、`Des_name_Local` 存本地化键）；`Config_TrapSlot`（4 字段，全屋 35 个陷阱放置位）。
+
+捕获模型与游戏 `TrapManager`（`GetBaitCoefficient` / `GetRoomCoefficient` / `CalculateNormalizedWeights` / `PerformCaptureRoll`）一致：各猎物权重 = 陷阱 `Base_Rate` × 诱饵系数 × 房间系数，与陷阱 `Empty_Weight`（“空手而归”权重）一起归一化决定捕获结果；陷阱技能等级降低空手权重、提升稀有猎物权重。网页只展示这些配置系数与排序，不冒充最终百分比。`Config_TrapBait` 有 18 行 ID 不在任一陷阱 `Bait_id` 内的通用档位行（ID 1/2/3/7、2000-2004、10001-10010），不是实际物品，导出时按“可放置并集”排除；名称含“开发者/测试/通用读条”的物品不进入推荐诱饵排行。诱饵即食物物品本身（2215 种可放置，含菜肴与猎物材料），名称与图标取 `Config_Item`；诱饵名称键 `TrapBait_Name_*` 在 `Config_ConstantText` 与 `LocalTxt` 中均不存在，展示名一律用物品名，效果类型取 `Effect_Des_Local`（广谱/偏好/均衡）。
+
+老鼠笼发电（`Config_Furniture` 42009/42010/42011/42012 + `Config_FurnitureElectrical` 12/13/14/17）导出容纳活鼠数（2/4/8/16）、每只电力（`BasePower` 6）、饲养消耗系数（`FuelRate` 0.0868，配置未标注单位）、价格、耐久与 `BagId` 对应饲料仓格数；制作配方链接经包裹物品 `TargetFurnitureID` 反查 `Config_ProductionList`。陷阱制作链接取产物为 `Config_Item.Trap` 对应物品的制造配方。图标沿用 `public_icon` 机制：模型内保存原始资源路径，Pages 构建时映射为已提取的 `./icons/<hash>.png`，未提取的不产生 404；`codex_pages_icons.py` 会额外从两个模型文件提取图标（仅当模型版本与静态库一致）。
+
+## 书籍列表独立页
+
+`codex_pages_books.py` 只读导出 `Config_Item` 中 `Category=3`（书籍）的全部 49 条为 `pages/books-model.json`（格式版本 1 + 游戏版本），包含名称、图标、`ItemDes2` 阅读效果、价格与原始配置字段。`codex_pages.py` 在模型版本与静态库一致时把书籍作为独立分类 `books` 追加进 data.json（带导航入口与 `guide/books/<id>/` 静态详情页），否则整个分类不出现。刷新命令为 `python codex_pages_books.py --game-root "游戏目录" --output pages/books-model.json`。
+
+## 通用构建说明
+
+`codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。`prey-model.json` 在构建时同样按版本校验：一致则映射图标后随站点发布，不一致则不发布该文件，前端回退为纯食用属性视图。
+
 烹饪食材按 `Config_ItemSubCategory` 提供分类按钮与数量，支持分类和高/中/低档组合筛选；没有参与档位规则的分类明确显示“不影响档位”。列表名称旁以颜色和文字同时标明档位。菜肴食材选择器同样支持分类、档位筛选与图标卡片，重复点击仍按独立用量累计。小视口允许页面滚动，保持结果列表有足够空间。
 
 烹饪食材的“仅可种植 / 捕捉”筛选以当前条目的 `sources` 中存在 `plant` 或 `prey` 关联为准，与分类、档位、搜索、标签和属性条件取交集；重置清除该条件，其他分区不应用它。浏览提示仅保留标题旁的问号图标，点击展开、点外部或按 Escape 收起，保留中英文可访问名称。

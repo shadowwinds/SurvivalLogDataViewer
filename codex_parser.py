@@ -406,6 +406,38 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("ConditionSetId", "i32"), ("IsHidden", "bool"),
         ("ProgressCounterKey", "str"), ("ProgressTarget", "f32"),
     ),
+    # 陷阱狩猎五表。字段名与顺序来自 IL2CPP 元数据 fields 表（fieldStart 2759-2805），
+    # wire 布局已按全部行解析到 EOF 验证；Config_TrapRoomBias 的 Des1 存本地化名、
+    # Des_name_Local 存本地化键，Config_TrapBait 的 Des_name_Local 存名称键。
+    "Config_Trap": (
+        ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
+        ("Description", "str"), ("Description_Local", "str"),
+        ("Trap_Type", "i32"), ("Durability_Max", "i32"), ("Capture_Cost", "i32"),
+        ("Capture_Interval", "i32"), ("Capture_Room", "list_i32"),
+        ("Bait_id", "list_i32"), ("Prey_Id", "list_i32"),
+        ("Discovery_Exp", "list_i32"), ("Base_Rate", "list_f32"), ("Empty_Weight", "f32"),
+        ("WebIcon", "str"), ("Model", "str"), ("Model_Captured", "str"),
+        ("Remove_Action", "i32"), ("Look_Action", "i32"), ("Trap_Get", "list_i32"),
+        ("Bait_Capacity", "i32"), ("Prey_Capacity", "i32"),
+    ),
+    "Config_TrapBait": (
+        ("ID", "i32"), ("Des_name_Local", "str"), ("Prey_Id", "list_i32"),
+        ("Bait_coefficient", "list_f32"), ("Effect_Des", "str"), ("Effect_Des_Local", "str"),
+    ),
+    "Config_TrapLv": (
+        ("Lv", "i32"), ("EXP", "i32"), ("Info", "str"), ("Info_Local", "str"),
+        ("required_condition", "list_i32"), ("empty_weight_reduction", "f32"),
+        ("rare_prey_bonus", "f32"), ("capture_cost_reduction", "i32"),
+        ("interval_reduction", "f32"), ("unlock_recipes", "list_i32"),
+    ),
+    "Config_TrapRoomBias": (
+        ("ID", "i32"), ("Des1", "str"), ("Des_name_Local", "str"),
+        ("Prey_Id", "list_i32"), ("Room_coefficient", "list_f32"),
+        ("Effect_Des", "str"), ("Effect_Des_Local", "str"),
+    ),
+    "Config_TrapSlot": (
+        ("ID", "i32"), ("Map_Id", "i32"), ("Room_Id", "i32"), ("Position", "str"),
+    ),
 }
 
 
