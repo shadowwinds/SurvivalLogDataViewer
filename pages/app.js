@@ -110,7 +110,7 @@
           state.preyModel = model;
           state.preyById = new Map(model.prey.map((entry) => [entry.id, entry]));
           state.trapById = new Map(model.traps.map((trap) => [trap.id, trap]));
-          state.baitById = new Map(model.baits.map((bait) => [bait.id, bait]));
+          state.baitById = new Map(model.baits.map((bait) => [bait.id, { ...bait, icon: model.bait_icons[bait.icon] || "" }]));
           state.roomById = new Map(model.rooms.map((room) => [room.id, room]));
           state.categories.push(
             { id: "traps", label: "陷阱图鉴", entries: model.traps.map((trap) => ({
@@ -1705,5 +1705,50 @@
     if (!mobile.matches) $("detailPanel").show();
   });
   if (mobile.matches) $("detailPanel").close();
+
+  function initStarPrompt() {
+    const DAY = 86400000;
+    const showCount = (value) => {
+      const count = $("githubStarCount");
+      count.textContent = value >= 1000 ? (Math.round(value / 100) / 10).toString().replace(/\.0$/, "") + "k" : String(value);
+      count.hidden = false;
+    };
+    try {
+      const cached = JSON.parse(localStorage.getItem("survival-log-star-count") || "null");
+      if (cached && Number.isFinite(cached.v) && Date.now() - cached.t < DAY) showCount(cached.v);
+      else fetch("https://api.github.com/repos/shadowwinds/SurvivalLogDataViewer")
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
+        .then((repo) => {
+          if (!Number.isFinite(repo.stargazers_count)) return;
+          showCount(repo.stargazers_count);
+          localStorage.setItem("survival-log-star-count", JSON.stringify({ v: repo.stargazers_count, t: Date.now() }));
+        }).catch(() => { /* 徽标失败可静默，按钮本身仍可点击。 */ });
+    } catch { /* Storage can be disabled. */ }
+    $("githubStarLink").addEventListener("click", () => {
+      try { localStorage.setItem("survival-log-star-prompt", String(Date.now())); } catch { /* Storage can be disabled. */ }
+    });
+    const prompt = $("starPrompt");
+    const hide = () => { prompt.hidden = true; };
+    $("starPromptClose").addEventListener("click", hide);
+    $("starPromptCta").addEventListener("click", hide);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !prompt.hidden) hide(); });
+    let lastShown = 0;
+    try { lastShown = Number(localStorage.getItem("survival-log-star-prompt")) || 0; } catch { /* Storage can be disabled. */ }
+    if (Date.now() - lastShown < 30 * DAY) return;
+    const show = () => {
+      prompt.hidden = false;
+      try { localStorage.setItem("survival-log-star-prompt", String(Date.now())); } catch { /* Storage can be disabled. */ }
+      i18n?.apply(prompt);
+    };
+    const tryShow = () => {
+      if (document.visibilityState !== "visible") { document.addEventListener("visibilitychange", tryShow, { once: true }); return; }
+      if (mobile.matches && $("detailPanel").open) { $("detailPanel").addEventListener("close", tryShow, { once: true }); return; }
+      show();
+    };
+    const timer = setTimeout(tryShow, 45000);
+    timer?.unref?.();
+  }
+
+  initStarPrompt();
   load();
 })();

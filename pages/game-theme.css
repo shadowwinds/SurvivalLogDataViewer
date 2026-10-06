@@ -338,3 +338,24 @@ body > footer a, body > main a { color: #e4c77f; }
   .pantry-item label { flex: 1; justify-content: space-between; min-width: 0; }
   .pantry-item label > span { overflow-wrap: anywhere; }
 }
+.header-action-row { display: flex; gap: 8px; align-items: center; }
+.github-star { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #565040; color: #ded5bf; background: #252522; font-weight: 700; font-size: 11px; text-decoration: none; white-space: nowrap; border-radius: 3px; }
+.github-star svg { width: 14px; height: 14px; fill: currentColor; stroke: none; flex-shrink: 0; }
+.github-star:hover { color: #f4c342; border-color: #93763b; }
+.github-star strong { font: 10px/1 Georgia, serif; color: #c4b89c; background: #141511; border: 1px solid #514d3c; border-radius: 2px; padding: 3px 5px; }
+.star-prompt { position: fixed; right: 18px; bottom: 18px; z-index: 30; width: min(300px, calc(100vw - 36px)); padding: 16px 16px 14px; background: linear-gradient(150deg, #2a2b24, #1b1c17 80%); border: 1px solid #93763b; border-radius: 4px; box-shadow: 0 14px 34px #000a; }
+.star-prompt-title { margin: 0 0 6px; font-weight: 900; color: #f4c342; font-size: 14px; }
+.star-prompt-text { margin: 0 0 12px; color: #cfc7b2; font-size: 12px; line-height: 1.7; }
+.star-prompt-cta { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid #93763b; color: #f4c342; background: #332e21; font-weight: 700; font-size: 12px; text-decoration: none; border-radius: 3px; }
+.star-prompt-cta svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.star-prompt-cta:hover { color: #ffe7a3; background: #3d3826; }
+.star-prompt-close { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; border: 0; background: transparent; color: #8f8672; font-size: 17px; line-height: 1; }
+.star-prompt-close:hover { color: #f4c342; }
+@media (max-width: 480px) {
+  .star-prompt { right: 12px; left: 12px; bottom: 12px; width: auto; }
+  .github-star span { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .star-prompt:not([hidden]) { animation: star-prompt-arrive .3s ease-out; }
+  @keyframes star-prompt-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+}

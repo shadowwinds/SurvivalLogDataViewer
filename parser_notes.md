@@ -14,11 +14,13 @@
 
 捕获模型与游戏 `TrapManager`（`GetBaitCoefficient` / `GetRoomCoefficient` / `CalculateNormalizedWeights` / `PerformCaptureRoll`）一致：各猎物权重 = 陷阱 `Base_Rate` × 诱饵系数 × 房间系数，与陷阱 `Empty_Weight`（“空手而归”权重）一起归一化决定捕获结果；陷阱技能等级降低空手权重、提升稀有猎物权重。网页只展示这些配置系数与排序，不冒充最终百分比。`Config_TrapBait` 有 18 行 ID 不在任一陷阱 `Bait_id` 内的通用档位行（ID 1/2/3/7、2000-2004、10001-10010），不是实际物品，导出时按“可放置并集”排除；名称含“开发者/测试/通用读条”的物品不进入推荐诱饵排行。诱饵即食物物品本身（2215 种可放置，含菜肴与猎物材料），名称与图标取 `Config_Item`；诱饵名称键 `TrapBait_Name_*` 在 `Config_ConstantText` 与 `LocalTxt` 中均不存在，展示名一律用物品名，效果类型取 `Effect_Des_Local`（广谱/偏好/均衡）。
 
-老鼠笼发电（`Config_Furniture` 42009/42010/42011/42012 + `Config_FurnitureElectrical` 12/13/14/17）导出容纳活鼠数（2/4/8/16）、每只电力（`BasePower` 6）、饲养消耗系数（`FuelRate` 0.0868，配置未标注单位）、价格、耐久与 `BagId` 对应饲料仓格数；制作配方链接经包裹物品 `TargetFurnitureID` 反查 `Config_ProductionList`。陷阱制作链接取产物为 `Config_Item.Trap` 对应物品的制造配方。图标沿用 `public_icon` 机制：模型内保存原始资源路径，Pages 构建时映射为已提取的 `./icons/<hash>.png`，未提取的不产生 404；`codex_pages_icons.py` 会额外从两个模型文件提取图标（仅当模型版本与静态库一致）。
+老鼠笼发电（`Config_Furniture` 42009/42010/42011/42012 + `Config_FurnitureElectrical` 12/13/14/17）导出容纳活鼠数（2/4/8/16）、每只电力（`BasePower` 6）、饲养消耗系数（`FuelRate` 0.0868，配置未标注单位）、价格、耐久与 `BagId` 对应饲料仓格数；制作配方链接经包裹物品 `TargetFurnitureID` 反查 `Config_ProductionList`。陷阱制作链接取产物为 `Config_Item.Trap` 对应物品的制造配方。图标沿用 `public_icon` 机制：模型内保存原始资源路径，Pages 构建时映射为已提取的 `./icons/<hash>.png`，未提取的不产生 404；`codex_pages_icons.py` 会额外从两个模型文件提取图标（仅当模型版本与静态库一致）。注意 `bait_icons` 是路径去重表，诱饵条目的 `icon` 字段是该表的数字索引；前端 `baitById` 需先把索引解析为映射后的 URL，详情页"推荐诱饵"图标直接使用解析结果，索引 0 不能当真值判断。
 
 ## 书籍列表独立页
 
 `codex_pages_books.py` 只读导出 `Config_Item` 中 `Category=3`（书籍）的全部 49 条为 `pages/books-model.json`（格式版本 1 + 游戏版本），包含名称、图标、`ItemDes2` 阅读效果、价格与原始配置字段。`codex_pages.py` 在模型版本与静态库一致时把书籍作为独立分类 `books` 追加进 data.json（带导航入口与 `guide/books/<id>/` 静态详情页），否则整个分类不出现。刷新命令为 `python codex_pages_books.py --game-root "游戏目录" --output pages/books-model.json`。
+
+在线站点的 GitHub Star 引导只在前端实现：头部按钮的 star 数通过 GitHub API 获取并在 localStorage 缓存 24 小时，失败时静默隐藏数字；弹窗在页面停留 45 秒且标签页可见时才出现，每 30 天至多一次（localStorage 记录），移动端详情打开时推迟到关闭后显示，可随时关闭。站点本身不因此新增构建期依赖。
 
 ## 通用构建说明
 

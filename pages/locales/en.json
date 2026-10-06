@@ -812,5 +812,10 @@
   "基础率 {v}": "base rate {v}",
   "手动放一个诱饵": "one manual bait",
   "1 只（捕获后收取）": "1 (collect after capture)",
-  "打开陷阱列表": "Open trap list"
+  "打开陷阱列表": "Open trap list",
+  "觉得这份图鉴有用吗？": "Finding this field guide helpful?",
+  "去 GitHub 给项目点个 Star，让更多幸存者找到这里。": "Give the project a Star on GitHub to help more survivors find it.",
+  "去点 Star": "Star on GitHub",
+  "关闭": "Close",
+  "GitHub Star 提示": "GitHub star notice"
 }
