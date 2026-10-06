@@ -133,7 +133,7 @@ def page_schema(title: str, description: str, url: str, base: str,
 
 def directory_links(payload: dict[str, Any], prefix: str = "./") -> str:
     routes = entry_routes(payload)
-    return f'<p><a href="{h(prefix)}recommendations/">生存补给计划</a></p>' + "".join(
+    return f'<p><a href="{h(prefix)}recommendations/">生存补给计划</a> · <a href="{h(prefix)}trade/">交易行情</a></p>' + "".join(
         f'<details><summary>{h(CATEGORY_INTROS[category["id"]][0])}</summary><nav class="directory-links">' + "".join(
             f'<a href="{h(prefix + routes[entry["key"]])}">{h(entry["name"])}</a>'
             for entry in category["entries"]) + '</nav></details>'
@@ -155,7 +155,8 @@ def home_seo(payload: dict[str, Any], template: str, base: str) -> str:
 
 
 def shell(title: str, description: str, path: str, base: str, body: str,
-          crumbs: list[tuple[str, str]], version: str, icon: str = "", collection: bool = False) -> str:
+          crumbs: list[tuple[str, str]], version: str, icon: str = "", collection: bool = False,
+          extra_head: str = "") -> str:
     depth = len(PurePosixPath(path).parts)
     root = "../" * depth
     url = base + path
@@ -174,12 +175,13 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     <link rel="icon" href="{root}favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="{root}guide.css">
     <link rel="stylesheet" href="{root}game-theme.css">
+    {extra_head}
     <script src="{root}i18n.js" defer></script>
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易行情</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
     <main>{breadcrumb}{body}</main>
-    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
+    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易行情</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
 </html>
 '''
@@ -410,3 +412,105 @@ def validate_output_targets(output_dir: Path, names: list[str]) -> None:
             if path.exists() and ((path == target and not path.is_file()) or
                                   (path != target and not path.is_dir())):
                 raise ValueError(f"静态页面输出路径类型不正确：{name}")
+
+
+TRADE_TITLE = "生存日志交易行情｜联络地图据点货架与交易价值 · Survival Log"
+TRADE_DESCRIPTION = ("Survival Log 联络地图十个交易据点的货架清单：每种物品的库存、交易价值、灾前价格与"
+                     "每份使用次数，多据点在售物品比价。成交比率随据点需求、好感与鉴价在游戏内浮动。")
+
+
+def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
+                   shared_ids: set[int]) -> str:
+    icon = public_image(base, entry.get("icon") or "")
+    art = (f'<img class="trade-icon" src="{h(icon)}" width="48" height="48" loading="lazy" alt="">'
+           if icon else '<span class="trade-icon trade-icon-empty" aria-hidden="true"></span>')
+    name = clean_text(entry["name"])
+    codex = entry.get("codex")
+    name_cell = (f'<a href="{h(base + "#" + codex + "/" + quote("Config_Item:" + str(entry["id"]), safe=""))}">{h(name)}</a>'
+                 if codex else h(name))
+    cat = entry.get("cat")
+    cat_label = categories.get(str(cat), f"分类 {cat}") if cat is not None else "—"
+    count = entry.get("count")
+    tv = entry.get("trade_value")
+    price = entry.get("price")
+    uses = entry.get("use_times")
+    badge = '<span class="shared-badge">多据点</span>' if entry["id"] in shared_ids else ""
+    return (f'<tr data-cat="{h(str(cat))}" data-tv="{tv if isinstance(tv, (int, float)) else ""}"'
+            f' data-uses="{uses if isinstance(uses, (int, float)) else ""}"'
+            f' data-name="{h(name)}"{"" if entry["id"] not in shared_ids else " data-shared"}>'
+            f'<td class="trade-cell-icon">{art}</td>'
+            f'<th scope="row">{name_cell}{badge}</th>'
+            f'<td><span class="trade-cat" data-cat="{h(str(cat))}">{h(cat_label)}</span></td>'
+            f'<td class="num">{h("—" if count is None else count)}</td>'
+            f'<td class="num">{h("—" if not isinstance(tv, (int, float)) else tv)}</td>'
+            f'<td class="num">{h("—" if not isinstance(price, (int, float)) else price)}</td>'
+            f'<td class="num">{h("—" if not uses else uses)}</td></tr>')
+
+
+def trade_table(rows: list[str], shared_header: bool = False) -> str:
+    head = ("<tr><th scope=\"col\">图标</th><th scope=\"col\">物品</th><th scope=\"col\">类别</th>"
+            "<th scope=\"col\">库存</th><th scope=\"col\">交易价值</th><th scope=\"col\">灾前价格</th>"
+            + ("<th scope=\"col\">在售据点数</th>" if shared_header else "<th scope=\"col\">每份次数</th>")
+            + "</tr>")
+    return f'<div class="table-scroll"><table class="trade-table">{head}{"".join(rows)}</table></div>'
+
+
+def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str:
+    crumbs = [("生存日志 · 幸存者图鉴", base), ("交易行情", base + "trade/")]
+    if not model:
+        body = ('<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / TRADE</p>'
+                '<h1>交易行情</h1></div></div>'
+                '<p>当前公开数据版本没有匹配的交易据点模型文件。请用与本站静态库一致的游戏版本运行'
+                ' <code>python codex_pages_trade.py</code> 重新生成后重建网页。</p>')
+        return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version)
+
+    shared_ids = {entry["id"] for entry in model.get("shared", [])}
+    categories = {str(key): value for key, value in (model.get("categories") or {}).items()}
+    body = ('<div class="trade-hero"><div><p class="eyebrow">SURVIVAL LOG / TRADE</p><h1>交易行情</h1>'
+            '<p class="trade-subtitle">联络地图十个交易据点的货架与交易价值基准。</p></div></div>')
+    body += ('<section class="trade-mechanics"><h2>比率是怎么算的</h2>'
+             '<p>游戏成交估值的基准是物品的<strong>交易价值</strong>（TradeValue），不是灾前价格。只读核对当前版本的'
+             '原生估值函数后，交出物品的估值为：数量 × 交易价值 × 剩余用量比例 × 品质缩放（默认 1）×（需求加成或 1 ＋ 鉴价加成）。'
+             '换走的物品按交易价值计价，成交时交出估值须达到换走估值（含成交线折扣）。</p>'
+             '<p>“该据点当前想要什么”的需求轮换、来往好感与关系等级、鉴价加成、谈判折扣、货架受损和库存余量都是'
+             '游戏内存档里的运行时状态，会随日期变化；同一物品在不同据点的实际兑换比率因此不同。'
+             '本页只发布静态配置基准，不推断实时比率。</p>'
+             '<p>两条静态规则：据点不收自己货架上已有的物品（“他们货架上就有 X，不收”），'
+             '每种物资的收礼数量有上限（“他那儿的 X 已经够多了”）。</p></section>')
+    body += ('<form id="trade-controls" hidden class="trade-controls">'
+             '<label>找物品<input id="trade-search" type="search" autocomplete="off" placeholder="例如：种子、绷带"></label>'
+             '<label>类别<select id="trade-cat"><option value="">全部类别</option></select></label>'
+             '<label>排序<select id="trade-sort"><option value="default">默认顺序</option>'
+             '<option value="tv">交易价值降序</option><option value="uses">每份次数降序</option></select></label>'
+             '<label class="trade-shared-only"><input id="trade-shared-only" type="checkbox">只看多据点在售</label>'
+             '</form><p id="trade-status" role="status"></p>')
+    body += '<nav class="trade-points-nav" aria-label="据点跳转">' + "".join(
+        f'<a href="#p{h(str(point["id"]))}">{h(clean_text(point["name"]))}</a>' for point in model["points"]) + '</nav>'
+    for point in model["points"]:
+        rows = [trade_item_row(entry, base, categories, shared_ids) for entry in point["items"]]
+        offer = "、".join(categories.get(str(cat), f"分类 {cat}") for cat in point.get("offer_cats") or [])
+        body += f'<section class="trade-point" id="p{h(str(point["id"]))}">'
+        body += (f'<h2>{h(clean_text(point["name"]))}<span class="trade-shop-id">货架 {h(str(point["shop_id"]))}</span></h2>')
+        if point.get("hint"):
+            body += f'<p class="trade-hint">解锁提示：{h(clean_text(point["hint"]))}</p>'
+        if offer:
+            body += f'<p class="trade-offer">货架分类：{h(offer)}</p>'
+        body += trade_table(rows)
+        body += '</section>'
+    shared_rows = []
+    for entry in model.get("shared", []):
+        row = trade_item_row(entry, base, categories, shared_ids)
+        owners = "、".join(clean_text(next(p["name"] for p in model["points"] if p["id"] == owner))
+                           for owner in entry.get("points") or [])
+        shared_rows.append(row.replace('</tr>', f'<td>{h(owners)}</td></tr>'))
+    body += '<section class="trade-point" id="trade-shared"><h2>多据点在售</h2>'
+    body += '<p>这些物品同时在多个据点的货架上，静态交易价值相同；实际兑换比率仍随各据点的需求状态浮动。</p>'
+    body += trade_table(shared_rows, shared_header=True)
+    body += ('</section><p class="trade-note">交易价值与价格均为静态配置；游戏内成交还要经过需求加成、'
+             '鉴价、谈判折扣与无人机容量限制。数据由 <code>codex_pages_trade.py</code> 从本地游戏配置只读导出。</p>')
+    # 与补给推荐页一致：JSON 合法的 unicode 转义防止 </script> 截断，不做 HTML 转义。
+    data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \
+        .replace("<", "\\u003c").replace("&", "\\u0026")
+    body += f'<script id="trade-data" type="application/json">{data_json}</script>'
+    return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version,
+                 extra_head='<link rel="stylesheet" href="../trade.css"><script src="../trade.js" defer></script>')

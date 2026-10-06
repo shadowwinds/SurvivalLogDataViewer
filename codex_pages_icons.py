@@ -27,7 +27,7 @@ def database_game_version(database: Path) -> str | None:
 
 
 def model_icon_requests(game_version: str | None) -> list[dict]:
-    """Icon asset paths referenced by the versioned prey and books models.
+    """Icon asset paths referenced by the versioned prey, books and trade models.
 
     Only models matching the database game version are considered, so test
     databases without matching metadata do not request unrelated icons.
@@ -36,7 +36,7 @@ def model_icon_requests(game_version: str | None) -> list[dict]:
     if not game_version:
         return []
     requests: list[dict] = []
-    for name in ("prey-model.json", "books-model.json"):
+    for name in ("prey-model.json", "books-model.json", "trade-model.json"):
         try:
             model = json.loads((SOURCE_DIR / name).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

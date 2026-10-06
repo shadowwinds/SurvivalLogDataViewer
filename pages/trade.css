@@ -1,0 +1,53 @@
+/* 交易行情页（/trade/）：静态基准表格 + 轻量筛选，样式沿用游戏主题变量。 */
+
+body > main .trade-hero { border-bottom: 1px solid #735e38; padding: 12px 0 26px; }
+.trade-hero h1 { font-size: clamp(32px, 4vw, 52px); color: #f0be37; text-shadow: 3px 3px #080a06; margin: 10px 0; letter-spacing: .05em; }
+.trade-subtitle { color: #c3b79c; font-size: 15px; margin: 4px 0 0; }
+
+.trade-mechanics { border: 1px solid #6d5a36; background: linear-gradient(110deg, #2c2c22, #23241d); padding: 16px 20px; margin: 22px 0; box-shadow: inset 3px 0 #8d7844; }
+.trade-mechanics h2 { margin: 0 0 10px; font-size: 20px; color: #efd49b; }
+.trade-mechanics p { margin: 8px 0; color: #d8cdb2; font-size: 14px; line-height: 1.75; }
+.trade-mechanics strong { color: #f1c14a; }
+.trade-mechanics code { background: #1b1c16; border: 1px solid #4d4636; padding: 1px 6px; font-size: 12px; color: #e8d9ae; }
+
+.trade-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 18px 0 6px; }
+.trade-controls label { font-size: 12px; color: #c7b897; }
+.trade-controls input, .trade-controls select { display: block; margin-top: 6px; min-height: 42px; padding: 9px 11px; border: 1px solid #7c6842; border-radius: 2px; background: #22251e; color: #f1e6ca; font: inherit; font-size: 14px; }
+.trade-controls input[type="search"] { min-width: 220px; }
+.trade-controls .trade-shared-only { display: flex; align-items: center; gap: 7px; min-height: 42px; font-size: 13px; }
+.trade-controls .trade-shared-only input { display: inline-block; min-height: auto; margin: 0; padding: 0; accent-color: #e1b537; }
+#trade-status { color: #e5c780; font-size: 13px; margin: 4px 0; min-height: 20px; }
+
+.trade-points-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+body > main .trade-points-nav a { padding: 8px 13px; text-decoration: none; font-size: 13px; color: #e2d5b7; border: 1px solid #6a5836; background: #26271f; }
+body > main .trade-points-nav a:hover { border-color: #d8b45a; color: #f4d98c; }
+
+.trade-point { margin: 30px 0 36px; }
+.trade-point h2 { font-size: 24px; color: #efd49b; margin: 0 0 8px; }
+.trade-shop-id { margin-left: 12px; font-size: 12px; font-weight: 400; color: #b5a279; border: 1px solid #5c5138; padding: 3px 9px; vertical-align: 4px; }
+.trade-hint, .trade-offer { margin: 5px 0; font-size: 13px; color: #c3b89f; }
+.trade-hint::before { content: "❝ "; color: #8d7844; }
+
+.table-scroll { overflow-x: auto; }
+.trade-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.trade-table th, .trade-table td { border-bottom: 1px solid #453f30; padding: 8px 10px; text-align: left; vertical-align: middle; }
+.trade-table thead th, .trade-table tr:first-child th[scope="col"] { color: #b5a279; font-size: 12px; font-weight: 400; border-bottom: 1px solid #6d5a36; white-space: nowrap; }
+.trade-table tbody th { font-weight: 400; }
+.trade-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trade-table td.num { color: #f0e3c0; }
+.trade-table a { color: #ede0bd; text-decoration: none; border-bottom: 1px dotted #8d7844; }
+.trade-table a:hover { color: #f4d98c; }
+.shared-badge { margin-left: 8px; font-size: 10px; color: #72551a; background: #e3b434; padding: 1px 6px; vertical-align: 2px; white-space: nowrap; }
+.trade-icon { width: 40px; height: 40px; image-rendering: auto; display: block; }
+.trade-icon-empty { border: 1px dashed #514b3e; border-radius: 2px; }
+.trade-cat { display: inline-block; font-size: 11px; color: #d8cdb2; border: 1px solid #5c5138; background: #2a2b22; padding: 2px 8px; white-space: nowrap; }
+.trade-table tr[hidden] { display: none; }
+
+.trade-note { color: #b5ae9c; font-size: 13px; margin: 26px 0; }
+.trade-note code { background: #1b1c16; border: 1px solid #4d4636; padding: 1px 6px; font-size: 12px; }
+
+@media (max-width: 720px) {
+  .trade-table th, .trade-table td { padding: 7px 7px; }
+  .trade-controls input[type="search"] { min-width: 0; width: 100%; }
+  .trade-controls label { flex: 1 1 45%; }
+}

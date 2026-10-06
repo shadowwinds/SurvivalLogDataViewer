@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,31 @@ def public_strings(value: Any) -> set[str]:
     return set()
 
 
+def trade_model_strings(source_dir: Path, game_version: str | None) -> set[str]:
+    """Collect display strings from the trade model when its version matches."""
+
+    try:
+        model = json.loads((source_dir / "trade-model.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if not isinstance(model, dict) or model.get("format_version") != 1 \
+            or (game_version is not None and model.get("game_version") != game_version):
+        return set()
+    from codex_pages_seo import clean_text
+
+    strings: set[str] = set()
+    for point in model.get("points", []):
+        if isinstance(point.get("name"), str):
+            strings.add(point["name"])
+        for item in point.get("items", []):
+            if isinstance(item.get("name"), str):
+                strings.add(item["name"])
+    for entry in model.get("shared", []):
+        if isinstance(entry.get("name"), str):
+            strings.add(entry["name"])
+    return {clean_text(text) for text in strings}
+
+
 def export_game_translations(game_root: Path, database: Path, output_dir: Path) -> Path:
     from codex_pages import export_data
     from codex_pages_seo import clean_text
@@ -48,6 +74,18 @@ def export_game_translations(game_root: Path, database: Path, output_dir: Path) 
     if output_dir == game_root or output_dir.is_relative_to(game_root):
         raise ValueError("本地化输出目录不能位于游戏目录")
     used = {clean_text(text) for text in public_strings(export_data(database))}
+    game_version = None
+    try:
+        connection = sqlite3.connect(f"{database.expanduser().resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            row = connection.execute(
+                "SELECT value FROM metadata WHERE key='game_version'").fetchone()
+            game_version = row[0] if row else None
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        game_version = None
+    used |= trade_model_strings(Path(__file__).resolve().parent / "pages", game_version)
     tables = {}
     for language in ("Main", "English"):
         raw, *_ = load_text_asset(game_root, f"Assets/RuntimeAssets/Config/MemoryPack/LocalTxt/{language}.bytes")

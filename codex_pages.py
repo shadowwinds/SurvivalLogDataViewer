@@ -19,7 +19,7 @@ from codex_database import CATEGORY_LABELS, CATEGORY_ORDER, DATABASE_SCHEMA_VERS
 from codex_parser import FIELD_LABELS, format_scalar
 from codex_pages_planting import add_planting_data
 from codex_pages_recommendations import build_recommendations, recommendation_document
-from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, validate_output_targets
+from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, trade_document, validate_output_targets
 from codex_server import _achievement_payload, _build_detail_fields
 
 
@@ -27,7 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -43,6 +43,8 @@ DECORATION_ITEM_CATEGORY = 21
 # 猎物页陷阱狩猎模型与书籍列表的版本化预设文件（由 codex_pages_prey.py / codex_pages_books.py 生成）。
 PREY_MODEL_FILE = "prey-model.json"
 BOOKS_MODEL_FILE = "books-model.json"
+# 交易行情模型由 codex_pages_trade.py 生成，构建时内嵌进独立页面而不是单独发布。
+TRADE_MODEL_FILE = "trade-model.json"
 BOOK_CATEGORY = {"id": "books", "label": "书籍"}
 
 
@@ -57,6 +59,15 @@ def load_versioned_model(name: str, game_version: str | None) -> dict[str, Any] 
         return None
     if game_version is not None and model.get("game_version") != game_version:
         return None
+    return model
+
+
+def map_trade_model_icons(model: dict[str, Any]) -> dict[str, Any]:
+    for section in ("points", "shared"):
+        for entry in model.get(section, []):
+            for item in entry.get("items", []) if section == "points" else [entry]:
+                if item.get("icon"):
+                    item["icon"] = public_icon(item["icon"])
     return model
 
 
@@ -619,8 +630,12 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     prey_model = load_versioned_model(PREY_MODEL_FILE, payload["metadata"].get("game_version"))
     if prey_model:
         prey_model = map_model_icons(prey_model)
+    trade_model = load_versioned_model(TRADE_MODEL_FILE, payload["metadata"].get("game_version"))
+    if trade_model:
+        trade_model = map_trade_model_icons(trade_model)
     documents = seo_documents(payload, site_url, {
-        "recommendations/index.html": recommendation_document(payload, site_url)})
+        "recommendations/index.html": recommendation_document(payload, site_url),
+        "trade/index.html": trade_document(trade_model, site_url, payload["metadata"].get("game_version", "未提供"))})
     validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll",
                                          *documents, *( [PREY_MODEL_FILE] if prey_model else [])])
     output_dir.mkdir(parents=True, exist_ok=True)

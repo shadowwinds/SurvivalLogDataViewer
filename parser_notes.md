@@ -22,6 +22,16 @@
 
 在线站点的 GitHub Star 引导只在前端实现：头部按钮的 star 数通过 GitHub API 获取并在 localStorage 缓存 24 小时，失败时静默隐藏数字；弹窗在页面停留 45 秒且标签页可见时才出现，每 30 天至多一次（localStorage 记录），移动端详情打开时推迟到关闭后显示，可随时关闭。站点本身不因此新增构建期依赖。
 
+## 交易行情页（联络地图据点）
+
+游戏交易系统在代码里叫 StrangerTrade（`GameCore.HotUpdate.StrangerTrade`）。联络地图上的据点定义在 `Config_MapPoint` 中 `PointCategory=3` 的行（当前版本 ID 1100-1109），每行引用一张货架 `Config_Shop`（ID 911-920，`ShopName_Local` 与据点名一致），货架物品再关联 `Config_Item`。辅助表：`Config_StrangerStock`（随机库存抽取池，24 行，联系人 ID 14/16/20/24/25/26/29/30、2100-2111 与 9901/9902/9903/9999）、`Config_StrangerProfile`（据点模拟参数：初始饱食 144、种植地块数、材料/燃料消耗与捡拾、生病和意外概率，20 行）。`Config_Shop` 的 81 行同时包含灾前商店、建筑商店与交易货架，ID 不连续。
+
+两张表的 MemoryPack 线序与 IL2CPP 元数据 backing-field 顺序不一致（应为 `MemoryPackOrder` 特性所致），且存在以下线格式差异，专用解码已核对：`Config_Shop` 的 `DemoTwoMode` 按四字节写入，而 `Config_MapPoint` 的 `IsUnlock` 为单字节布尔；`Config_Shop` 中 `RandomID=1` 的随机货架行（当前版本 ID 8「临期产品优惠」、11「VIP限定柜台」）在两个物品列表之后携带未解码的随机池数据，按 12 字段布局会“成功”读出但字节偏短，必须从行首重同步跳过；`Config_MapPoint` 尾部多个字段在交易行中为空字符串，与整数 0 共用同一编码，导出器只发布语义已核实的字段（名称、章节、解锁键 `TradePointUnlock_110N` / `CrossTradePointUnlock`、解锁提示文本、ShelfShopId 911-920），行边界由“下一行成员数 48 + 合理行 ID + 字符串标记”锚定，全部行验证成员数量、行数与数据 EOF。
+
+成交估值已通过只读反汇编当前版本 `GameAssembly.dll` 核实（`TradeBalanceCalculator.GivenValueOf`，RVA `0x2CED1F0`）：交出物品估值 = 数量 × `TradeValue` × 剩余用量比例（`Uses` 为浮点）× 品质缩放（`ValueScale` ≤ 0 时回退 1.0）×（行被标记需求时用需求加成，否则 1.0，另恒常叠加鉴价加成）；常量 1.0 位于 `0x450CD6C`，`DealEpsilon=0.001`，成交条默认刻度 120。`Config_Item.TradeSellRate` 仅 18 个机器人模块为 0.6，是回收折价特例。据点估值是运行时动态系统：`WebUI_Trade_HeaderMsg` 下发 `apprPct`（估价 +N%）、`dealCut`（谈判让步）、`peerBond`、`campRelationTier/Next`、`wantExceptJson`（“想要：除 X 以外”）、`demandLine` 与 `offerCatsJson`（货架分类标签）；本地化词条确认据点不收自己货架已有的物品（`SR_Web_TradeUI_PopOnShelf`）、收礼有每种上限（`PopSupplyFull`）、非需求物品折价收购（`BubbleSellRate_Active`）、受损据点“货架变薄 N 天”、关系升级“货架上会有新东西”。两个周目的多个 `Save_*.bytes` 快照中 `CommissionPersonDay`、`TradePointSeen/Unlock_110N` 等运行时状态逐存档变化，静态配置中没有也不应有固定“每据点汇率表”。
+
+`codex_pages_trade.py` 只读导出 `pages/trade-model.json`（格式版本 1 + 游戏版本）：十个据点的货架物品（名称、分类、库存、交易价值、灾前价格、每份次数）、由货架分类推导的“提供”标签、解锁提示与多据点在售比价列表；模型不含任何运行时状态。刷新命令为 `python codex_pages_trade.py --game-root "游戏目录" --output pages/trade-model.json`。`codex_pages.py` 构建时按版本校验后把模型内嵌进独立页 `/trade/`（`codex_pages_seo.trade_document` 生成无脚本可读的静态表格，`pages/trade.js` 只做搜索、类别筛选与排序的 DOM 过滤，不重建内容）；版本不一致时页面显示回退说明。页面与文档都明确标注：交易价值是静态基准，实际兑换比率随据点需求、好感、鉴价与成交折扣浮动。
+
 ## 通用构建说明
 
 `codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。`prey-model.json` 在构建时同样按版本校验：一致则映射图标后随站点发布，不一致则不发布该文件，前端回退为纯食用属性视图。
