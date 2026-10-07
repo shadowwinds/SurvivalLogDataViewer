@@ -433,6 +433,10 @@ def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
     tv = entry.get("trade_value")
     uses = entry.get("use_times")
     full_value = tv * max(1, uses or 1) if isinstance(tv, (int, float)) else None
+    size = entry.get("size")
+    area = size[0] * size[1] if (isinstance(size, list) and len(size) == 2
+                                and all(isinstance(n, int) and n > 0 for n in size)) else None
+    density = full_value / area if full_value is not None and area else None
     badge = '<span class="shared-badge">多据点</span>' if entry["id"] in shared_ids else ""
     return (f'<tr data-cat="{h(str(cat))}" data-tv="{tv if isinstance(tv, (int, float)) else ""}"'
             f' data-uses="{uses if isinstance(uses, (int, float)) else ""}"'
@@ -443,13 +447,16 @@ def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
             f'<td class="num">{h("—" if count is None else count)}</td>'
             f'<td class="num">{h("—" if not isinstance(tv, (int, float)) else tv)}</td>'
             f'<td class="num">{h("—" if full_value is None else full_value)}</td>'
-            f'<td class="num">{h("—" if not uses else uses)}</td></tr>')
+            f'<td class="num">{h("—" if not uses else uses)}</td>'
+            f'<td class="num">{h("—" if area is None else f"{size[0]} × {size[1]} = {area}")}</td>'
+            f'<td class="num">{h("—" if density is None else format(density, ".2f"))}</td></tr>')
 
 
 def trade_table(rows: list[str], shared_header: bool = False) -> str:
     head = ("<tr><th scope=\"col\">图标</th><th scope=\"col\">物品</th><th scope=\"col\">类别</th>"
             "<th scope=\"col\">配置数量</th><th scope=\"col\">每用量基值</th><th scope=\"col\">完整一件基值</th>"
             + ("<th scope=\"col\">在售据点数</th>" if shared_header else "<th scope=\"col\">每份次数</th>")
+            + "<th scope=\"col\">占格</th><th scope=\"col\">每格基值</th>"
             + "</tr>")
     return f'<div class="table-scroll"><table class="trade-table">{head}{"".join(rows)}</table></div>'
 
@@ -498,14 +505,23 @@ def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str
 <div id="trade-comparison"></div><div id="trade-breakdown"></div>
 <p class="trade-help">换入数量是估值上限，成交还需当前有货、双方物品能装进无人机。本页不推测装箱和实时库存。</p></section>
 </div>
-<section class="trade-processing"><h2><span class="trade-step">03</span> 要不要先加工</h2>
+<section class="trade-cargo"><h2><span class="trade-step">03</span> 格子有限，先带哪些</h2>
+<p class="trade-help">每格交出价值 = 一件物资的交出估值 ÷ 占格数。会应用当前对象的折价、需求、鉴价和清单剩余比例；指定目标时，只比较能换到目标的对象。</p>
+<div class="trade-controls"><label>携带范围<select id="cargo-scope"><option value="stock">只看清单余量</option><option value="all">全部物品，找携带方向</option></select></label>
+<label>找高价值物资<input id="cargo-search" type="search" placeholder="物品名称或 ID"></label>
+<label>类别<select id="cargo-cat"><option value="">全部类别</option></select></label>
+<label>排序<select id="cargo-sort"><option value="density">每格交出价值最高</option><option value="value">单件交出价值最高</option></select></label></div>
+<p id="cargo-status" class="trade-help" role="status"></p><div id="cargo-results"></div>
+<button id="cargo-more" type="button" hidden>再看 20 种物资</button>
+<p class="trade-help">全部物品按完整一件计算；清单余量按填写的剩余比例计算。所需件数是假设只交出该物资，不会自动扣减清单。格数为面积合计，仍需核对无人机的宽高、摆放和负重。</p></section>
+<section class="trade-processing"><h2><span class="trade-step">04</span> 要不要先加工</h2>
 <p class="trade-help">看加工比直接交换多赚多少价值。比较所有据点时，原料按各自最优据点的直接交换价计成本。每行是独立方案，材料不能在多行里重复投入。</p>
 <div class="trade-controls"><label>备料范围<select id="process-scope"><option value="stock">只看清单里能做的</option><option value="all">全部配方，找备料方向</option></select></label>
 <label>加工方式<select id="process-kind"><option value="">烹饪与制造</option><option value="cook">烹饪</option><option value="craft">制造</option></select></label>
 <label>烹饪等级<select id="process-cook-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option></select></label>
 <label>制造等级<select id="process-craft-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option><option value="4">4级</option><option value="5">5级</option></select></label>
 <label>菜肴品质<select id="process-quality"><option>普通</option><option>良好</option><option>完美</option></select></label>
-<label>排序<select id="process-sort"><option value="gain">每次加工增值最多</option><option value="ratio">原料增值比例最高</option><option value="total">现有余量总增值最多</option></select></label>
+<label>排序<select id="process-sort"><option value="gain">每次加工增值最多</option><option value="ratio">原料增值比例最高</option><option value="total">现有余量总增值最多</option><option value="density">成品每格价值最高</option></select></label>
 <label>找配方<input id="process-search" type="search" placeholder="配方、成品或原料名称"></label>
 <label class="trade-check"><input id="process-positive" type="checkbox" checked>只看有增值</label></div>
 <p id="process-status" class="trade-help" role="status"></p><div id="process-results"></div>

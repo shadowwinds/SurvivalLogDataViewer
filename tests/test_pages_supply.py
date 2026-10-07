@@ -67,7 +67,7 @@ const close = (a,b) => assert.ok(Math.abs(a-b) < 1e-6, `${a} != ${b}`);
 
         tables = {
             "Config_Item": [row("Config_Item", ID=i, ItemName_Local=f"item-{i}", Category=9,
-                                TradeValue=i * 10, UseTimes=2 if i == 3 else 0) for i in (1, 2, 3)],
+                                TradeValue=i * 10, Size=[i, 2], UseTimes=2 if i == 3 else 0) for i in (1, 2, 3)],
             "Config_ConstantText": [],
             "Config_MapPoint": [row("Config_MapPoint", ID=1100, PointCategory=3, ShelfShopId=911,
                                     TradeCategory=9, Name_Local="outpost</script>")],
@@ -85,6 +85,7 @@ const close = (a,b) => assert.ok(Math.abs(a-b) < 1e-6, `${a} != ${b}`);
             model = extract_trade_model(Path("unused"))
         self.assertEqual(model["rules"]["self_stock_rate"], .5)
         self.assertEqual([(r["id"], r["level"]) for r in model["crafts"]], [(1, 1)])
+        self.assertEqual(model["items"][0]["size"], [1, 2])
         self.assertNotIn("private-marker", json.dumps(model))
         html = trade_document(model, "../", "test")
         self.assertIn('id="trade-planner"', html)
@@ -184,7 +185,7 @@ assert.equal(T.options({boost:.9},{...rules,demand_boost_max:.5}).boost,.5);
         self.run_model(r"""
 const T=sandbox.window.Trade, rules={self_stock_rate:.5,demand_boost_max:-1,deal_discount:0,deal_discount_max:60,camp_medicine_rate:2};
 const a={id:1,cat:9,trade_value:10,use_times:0,sell_rate:1}, b={id:2,cat:1,trade_value:12,use_times:7,sell_rate:1};
-const wire={id:3,cat:9,trade_value:36,use_times:0,sell_rate:1}, dish={id:4,cat:1,trade_value:40,use_times:1,sell_rate:1};
+const wire={id:3,cat:9,trade_value:36,use_times:0,sell_rate:1,size:[2,1]}, dish={id:4,cat:1,trade_value:40,use_times:1,sell_rate:1,size:[2,2]};
 const ingredients=[{id:2,tier:3,sub_category_id:1,stats:[100,0,0,0,0],price:7,use_times:7}];
 const entry={id:20,key:'r20',recipe:{specific_items:[2,2],tier:3},portion_model:{mode:'fixed',threshold:30},
 products:[{id:4,quality:'普通',stats:[1,2,3,4,5].map((i,n)=>({field:'ValueDisplay'+i,value:n===0?120:0}))}]};
@@ -196,12 +197,52 @@ const basket={1:{quantity:10,remaining:100},2:{quantity:1,remaining:50}};
 let rows=T.processing(model,basket,input), w=rows.find(r=>r.kind==='craft'), d=rows.find(r=>r.kind==='cook');
 assert.equal(w.cost,30); assert.equal(w.value,36); assert.equal(w.gain,6); assert.equal(w.batches,3); assert.equal(w.total,18);
 assert.equal(d.servings,4); assert.equal(d.value,40); assert.equal(d.cost,24); assert.equal(d.batches,1); // Servings cannot multiply full-pot trade value.
+assert.equal(w.outputCells,2); assert.equal(w.density,18); assert.equal(d.outputCells,4); assert.equal(d.density,10);
+model.crafts[0].outputs=[3,3];
+w=T.processing(model,basket,{...input,sort:'density'}).find(r=>r.kind==='craft');
+assert.equal(w.outputCells,4); assert.equal(w.value,72); assert.equal(w.density,18);
+model.crafts[0].outputs=[3];
 model.points[1].items=[{...dish,count:1}];
 rows=T.processing(model,basket,{...input,destination:'11'}); assert.equal(rows.some(r=>r.kind==='cook'),false);
 model.points[1].items=[{...b,count:1}];
 d=T.processing(model,basket,{...input,destination:'11'}).find(r=>r.kind==='cook'); assert.equal(d.fallback,true); assert.equal(d.cost,24);
 assert.equal(T.processing(model,{1:{quantity:2,remaining:100}},input).length,0);
 assert.equal(T.processing(model,{}, {...input,scope:'all'}).find(r=>r.kind==='craft').batches,null);
+""")
+
+    def test_cargo_density_partial_uses_target_stock_and_integer_threshold(self) -> None:
+        self.run_model(r"""
+const T=sandbox.window.Trade, rules={self_stock_rate:.5,demand_boost_max:-1,deal_discount:0,deal_discount_max:60,camp_medicine_rate:2};
+const iron={id:1,cat:9,trade_value:10,use_times:0,size:[1,1]}, rice={id:2,cat:1,trade_value:13,use_times:7,size:[3,4]};
+const medicine={id:3,cat:2,trade_value:50,use_times:2,size:[1,2]}, big={id:4,cat:6,trade_value:160,size:[2,2]}, small={id:5,cat:6,trade_value:60,size:[1,1]};
+const model={rules,items:[iron,rice,medicine,big,small,{id:6,cat:6,trade_value:999,size:[0,2]}],points:[
+ {id:10,half_value_cat:9,items:[{id:1,count:3},{id:2,count:3},{id:3,count:5}]},
+ {id:11,half_value_cat:10,items:[{id:3,count:5}]}]};
+const basket={1:{quantity:11,remaining:100},2:{quantity:2,remaining:50},4:{quantity:1,remaining:100},5:{quantity:2,remaining:100}};
+const input={destination:'all',cargoScope:'stock'};
+let rows=T.cargo(model,basket,input);
+assert.equal(rows[0].item.id,5); assert.equal(rows[0].density,60); // Smaller item wins despite lower item value.
+assert.equal(rows.find(r=>r.item.id===1).point.id,11); // Rejection at the recycling point applies.
+assert.equal(rows.find(r=>r.item.id===2).area,12); close(rows.find(r=>r.item.id===2).density,45.5/12);
+rows=T.cargo(model,basket,{...input,target:3,targetCount:2,discount:40});
+assert.equal(rows.find(r=>r.item.id===1).needed,16); assert.equal(rows.find(r=>r.item.id===1).neededCells,16);
+assert.equal(rows.find(r=>r.item.id===4).needed,1); assert.equal(rows.find(r=>r.item.id===5).needed,3);
+assert.equal(T.cargo(model,basket,{...input,target:3,absent:{'11:3':true}}).some(r=>r.item.id===1),false);
+assert.equal(T.cargo(model,basket,{...input,target:99}).length,4); // Missing target is ignored, as in the comparison engine.
+rows=T.cargo(model,{}, {...input,cargoScope:'all'});
+assert.equal(rows.at(-1).item.id,6); assert.equal(rows.at(-1).density,null);
+assert.equal(rows.find(r=>r.item.id===2).value,91); assert.equal(rows.find(r=>r.item.id===2).quantity,null);
+for (const count of [1,17,9999]) {
+ const options={...input,target:3,targetCount:count,appraisal:37,discount:7};
+ const row=T.cargo(model,basket,options).find(r=>r.item.id===1), o=T.options(options,rules);
+ const threshold=100*count-7;
+ assert.ok(T.given(iron,row.needed,1,row.point,o,rules)+.001>=threshold);
+ assert.ok(T.given(iron,row.needed-1,1,row.point,o,rules)+.001<threshold);
+}
+const contact=T.cargo(model,basket,{...input,destination:'contact',boost:.9,demand:[1]}).find(r=>r.item.id===2);
+close(contact.density,T.given(rice,1,.5,contact.point,T.options({boost:.9,demand:[1]},rules),rules)/12);
+assert.equal(T.cells({size:[2]}),null); assert.equal(T.cells({size:[2,1.5]}),null);
+assert.equal(T.cargo(model,basket,{...input,excluded:[10,11]}).length,0);
 """)
 
     def test_growing_budget_rounds_containers_and_costs(self) -> None:

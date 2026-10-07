@@ -75,12 +75,16 @@ def extract_trade_model(game_root: Path) -> dict[str, Any]:
             raise ValueError(f"交易模型引用未知物品 ID:{item_id}")
         raw = item_map[item_id]
         cat = raw["Category"]
+        size = raw["Size"]
+        if not (isinstance(size, list) and len(size) == 2
+                and all(isinstance(v, int) and v > 0 for v in size)):
+            size = None
         codex = "prey" if raw["InCodex"] and raw["Prey_Rarity"] > 0 else \
             "food" if raw["InCodex"] and cat == 1 else "books" if cat == 3 else None
         return {"id": item_id, "name": raw["ItemName_Local"] or raw["ItemName"] or f"ID:{item_id}",
                 "cat": cat, "icon": next((raw[k] for k in ITEM_ICON_FIELDS if raw.get(k)), ""),
                 "count": count, "trade_value": raw["TradeValue"], "price": raw["price"],
-                "use_times": raw["UseTimes"], "sell_rate": raw["TradeSellRate"],
+                "use_times": raw["UseTimes"], "sell_rate": raw["TradeSellRate"], "size": size,
                 "cookable": cat == 1 and raw["CanCook"], "codex": codex}
 
     owners: dict[int, list[int]] = {}

@@ -3,6 +3,8 @@
   const host = typeof window === "undefined" ? globalThis : window, f = Math.fround;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
   const uses = item => Math.max(1, item.use_times || 0);
+  const cells = item => Array.isArray(item.size) && item.size.length === 2 &&
+    item.size.every(n => Number.isInteger(n) && n > 0) ? item.size[0] * item.size[1] : null;
   const counts = ids => { const r = {}; for (const id of ids) r[id] = (r[id] || 0) + 1; return r; };
   function options(input, rules) {
     return {...input, appraisal: f(clamp(input.appraisal, 0, 1000) / 100),
@@ -32,6 +34,42 @@
       Math.max(item.trade_value, Math.ceil(f(item.trade_value * rules.camp_medicine_rate))) : item.trade_value;
     return price * uses(item);
   }
+  const availableTarget = (target, point, o) => !target || point.contact ||
+    point.items.some(i => i.id === target.id && i.count > 0 && !o.absent[`${point.id}:${i.id}`]);
+  function cargo(model, basket, input) {
+    const o = options(input, model.rules), target = model.items.find(i => i.id === Number(input.target));
+    const points = destinations(model, input.destination, input.excluded).filter(p => availableTarget(target, p, o));
+    const rows = [];
+    for (const item of model.items) {
+      const b = basket[item.id], fromStock = input.cargoScope !== "all";
+      if (fromStock && !(b?.quantity > 0 && b.remaining > 0)) continue;
+      const remaining = fromStock ? b.remaining / 100 : 1, area = cells(item);
+      let best = null;
+      for (const point of points) {
+        const value = given(item, 1, remaining, point, o, model.rules);
+        if (!(value > 0)) continue;
+        const required = target ? Math.max(0, takeValue(target, point, o, model.rules) * clamp(input.targetCount, 1, 9999) - o.discount) : null;
+        let needed = null;
+        if (required !== null) {
+          // Check whole-item counts against the same float32 valuation used for the deal.
+          let lo = 0, hi = Math.max(1, Math.ceil(required / value) * 2 + 2);
+          while (lo < hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (given(item, mid, remaining, point, o, model.rules) + .001 >= required) hi = mid;
+            else lo = mid + 1;
+          }
+          needed = lo;
+        }
+        const row = {item, point, value, area, density: area === null ? null : value / area,
+          quantity: fromStock ? b.quantity : null, remaining: remaining * 100, needed,
+          neededCells: needed === null || area === null ? null : needed * area};
+        if (!best || (target && row.needed < best.needed) ||
+            ((!target || row.needed === best.needed) && row.value > best.value)) best = row;
+      }
+      if (best) rows.push(best);
+    }
+    return rows.sort((a, b) => (b.density ?? -Infinity) - (a.density ?? -Infinity) || b.value - a.value || a.item.id - b.item.id);
+  }
   function comparison(model, basket, input) {
     const o = options(input, model.rules), byId = new Map(model.items.map(i => [i.id, i]));
     const target = byId.get(Number(input.target));
@@ -42,7 +80,7 @@
           value: given(item, b.quantity, b.remaining / 100, point, o, model.rules)};
       });
       const value = lines.reduce((sum, row) => f(sum + row.value), 0);
-      const available = !target || point.contact || point.items.some(i => i.id === target.id && i.count > 0 && !o.absent[`${point.id}:${i.id}`]);
+      const available = availableTarget(target, point, o);
       const unit = target ? takeValue(target, point, o, model.rules) : null;
       const required = unit === null ? null : Math.max(0, unit * clamp(input.targetCount, 1, 9999) - o.discount);
       return {point, lines, value, available, required, unit,
@@ -61,7 +99,7 @@
       return [item.id, {fallback: !accepted.length, value: accepted.length ?
         Math.max(...accepted.map(point => given(item, 1, 1 / uses(item), point, o, model.rules))) : item.trade_value}];
     }));
-    const objective = row => input.sort === "ratio" ? row.ratio : input.sort === "total" && row.total !== null ? row.total : row.gain;
+    const objective = row => input.sort === "density" ? row.density : input.sort === "ratio" ? row.ratio : input.sort === "total" && row.total !== null ? row.total : row.gain;
     function candidate(kind, recipe, requirements, outputs, point, extra = {}) {
       if (Object.entries(requirements).some(([id, n]) => !byId.has(Number(id)) || stock[id] < n) ||
           outputs.some(id => !byId.has(id) || rates(byId.get(id), point, o, model.rules).rejected)) return null;
@@ -73,14 +111,17 @@
       }
       const outputCounts = counts(outputs);
       const value = Object.entries(outputCounts).reduce((sum, [id, n]) => sum + given(byId.get(Number(id)), n, 1, point, o, model.rules), 0);
+      const outputAreas = Object.entries(outputCounts).map(([id, n]) => cells(byId.get(Number(id))) === null ? null : cells(byId.get(Number(id))) * n);
+      const outputCells = outputAreas.every(v => v !== null) ? outputAreas.reduce((sum, v) => sum + v, 0) : null;
       if (!(cost > 0)) return null;
       const gain = value - cost, batches = input.scope === "all" ? null :
         Math.min(...Object.entries(requirements).map(([id, n]) => Math.floor(stock[id] / n)));
       return {key: `${kind}:${recipe.id}`, kind, id: recipe.id, name: recipe.name, point, requirements, outputCounts,
-        cost, value, gain, ratio: gain / cost, batches, total: batches === null ? null : gain * batches, fallback, ...extra};
+        cost, value, gain, ratio: gain / cost, density: outputCells > 0 ? value / outputCells : null, outputCells,
+        batches, total: batches === null ? null : gain * batches, fallback, ...extra};
     }
     function keep(row) {
-      if (!row) return;
+      if (!row || !Number.isFinite(objective(row))) return;
       const previous = results.get(row.key);
       if (!previous || objective(row) > objective(previous) + 1e-6 ||
           (Math.abs(objective(row) - objective(previous)) <= 1e-6 && (row.gain > previous.gain || row.cost < previous.cost))) results.set(row.key, row);
@@ -98,7 +139,7 @@
           const recipe = dishes.get(entry.id);
           if (!recipe || !recipe.level || recipe.level > input.cookLevel) return NaN;
           const row = candidate("cook", recipe, counts(ingredients.map(i => i.id)), [product.id], point);
-          return row ? objective(row) : NaN;
+          return row ? input.sort === "density" ? row.gain : objective(row) : NaN;
         }});
       for (const entry of model.cooking.entries) {
         const output = planned.get(entry.key), recipe = dishes.get(entry.id);
@@ -108,7 +149,7 @@
     }
     return [...results.values()];
   }
-  host.Trade = {uses, options, rates, given, takeValue, comparison, processing};
+  host.Trade = {uses, cells, options, rates, given, takeValue, cargo, comparison, processing};
   if (typeof document === "undefined") return;
 
   (async () => {
@@ -125,7 +166,7 @@
     const category = cat => model.categories[cat] ? tr(model.categories[cat]) : tr("其他物品 · 分类 {id}", {id: cat});
     const image = i => i.icon ? `<img src="../${escape(i.icon)}" width="36" height="36" loading="lazy" alt="">` : "";
     const storageKey = `survival-log-trade:${model.game_version}`;
-    let basket = {}, absent = {}, excluded = [], rows = [], limit = 20, job = 0, timer, worker;
+    let basket = {}, absent = {}, excluded = [], rows = [], limit = 20, cargoLimit = 20, job = 0, timer, worker;
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
       for (const [id, b] of Object.entries(saved.basket || {})) if (byId.has(Number(id)) && b && b.quantity > 0)
@@ -139,6 +180,7 @@
     }
     for (const cat of [...new Set(model.items.map(i => i.cat))].sort((a, b) => a - b)) {
       addOption($("stock-cat"), cat, category(cat));
+      addOption($("cargo-cat"), cat, category(cat));
       if (cat > 0) {
         const label = document.createElement("label"), check = document.createElement("input"); check.type = "checkbox"; check.value = cat;
         label.append(check, document.createTextNode(category(cat))); $("trade-demand").append(label);
@@ -167,21 +209,25 @@
         targetCount: Math.floor(clamp($("trade-target-count").value, 1, 9999)), appraisal: $("trade-appraisal").value,
         discount: $("trade-discount").value, camp: $("trade-camp").checked, boost: $("trade-urgency").value, absent, excluded,
         demand: [...$("trade-demand").querySelectorAll("input:checked")].map(i => Number(i.value)),
+        cargoScope: $("cargo-scope").value,
         scope: $("process-scope").value, kind: $("process-kind").value, cookLevel: Number($("process-cook-level").value),
         craftLevel: Number($("process-craft-level").value), quality: $("process-quality").value, sort: $("process-sort").value};
     }
+    const sizeText = item => cells(item) === null ? tr("占格未提供") :
+      tr("{width}×{height} · {cells} 格", {width: item.size[0], height: item.size[1], cells: cells(item)});
+    const baseDensityText = item => tr("每格基值 {value}", {value: fmt(cells(item) ? item.trade_value * uses(item) / cells(item) : null)});
     function catalog() {
       const phrase = $("stock-search").value.trim().toLocaleLowerCase(), cat = $("stock-cat").value;
       const items = model.items.filter(i => (!cat || String(i.cat) === cat) &&
         (!phrase || `${i.name} ${host.I18n?.english(i.name)} ${i.id}`.toLocaleLowerCase().includes(phrase)))
         .sort((a, b) => Number(shelfIds.has(b.id)) - Number(shelfIds.has(a.id)) || a.id - b.id);
-      $("stock-catalog").innerHTML = items.slice(0, 24).map(i => `<button type="button" data-add="${i.id}" title="${escape(tr("加入待交换清单"))}">${image(i)}<span>${escape(name(i))}<small>${escape(category(i.cat))} · ${fmt(i.trade_value * uses(i))}</small></span><b aria-hidden="true">+</b></button>`).join("") || `<p>${tr("没有匹配的物资，试试名称或 ID。")}</p>`;
+      $("stock-catalog").innerHTML = items.slice(0, 24).map(i => `<button type="button" data-add="${i.id}" title="${escape(tr("加入待交换清单"))}">${image(i)}<span>${escape(name(i))}<small>${escape(category(i.cat))} · ${fmt(i.trade_value * uses(i))}</small><small>${escape(sizeText(i))} · ${escape(baseDensityText(i))}</small></span><b aria-hidden="true">+</b></button>`).join("") || `<p>${tr("没有匹配的物资，试试名称或 ID。")}</p>`;
       $("stock-status").textContent = tr("找到 {count} 种，展示前 24 种；可搜索缩小范围。", {count: fmt(items.length)});
     }
     function basketHtml() {
       $("stock-basket").innerHTML = Object.entries(basket).map(([id, b]) => {
         const item = byId.get(Number(id));
-        return `<div class="trade-basket-row">${image(item)}<span>${escape(name(item))}<small>${escape(tr("完整一件基值"))} ${fmt(item.trade_value * uses(item))}</small></span>
+        return `<div class="trade-basket-row">${image(item)}<span>${escape(name(item))}<small>${escape(tr("完整一件基值"))} ${fmt(item.trade_value * uses(item))}</small><small>${escape(sizeText(item))} · ${escape(baseDensityText(item))}</small></span>
           <label>${tr("件 / 包")}<input type="number" min="0" max="9999" step="1" value="${b.quantity}" data-quantity="${id}" aria-label="${escape(name(item) + ' ' + tr('件 / 包'))}"></label>
           <label>${tr("剩余 / %")}<input type="number" min="0" max="100" step="1" value="${b.remaining}" data-remaining="${id}" aria-label="${escape(name(item) + ' ' + tr('剩余 / %'))}"></label>
           <button type="button" data-remove="${id}" aria-label="${escape(tr('移除') + ' ' + name(item))}">×</button></div>`;
@@ -191,6 +237,7 @@
       const o = input(), result = comparison(model, basket, o), best = result[0], any = Object.values(basket).some(b => b.quantity > 0 && b.remaining > 0);
       $("trade-contact").hidden = o.destination !== "contact"; $("trade-camp").disabled = o.destination === "contact";
       $("trade-point-settings").hidden = o.destination !== "all";
+      cargoHtml(o);
       if (!best || !any) {
         $("trade-summary").textContent = tr(!best ? "先选择至少一个已解锁的据点。" : "添加物资后，这里会比较收货价值与拒收原因。");
         $("trade-comparison").replaceChildren(); $("trade-breakdown").replaceChildren(); return;
@@ -206,6 +253,19 @@
       $("trade-breakdown").innerHTML = `<details><summary>${tr("查看首选对象的逐项计价")}</summary>${best.lines.map(row => `<div class="trade-line"><span>${escape(name(row.item))}</span><b>${fmt(row.value)}</b><small>${row.rejected ? tr("当前货架已有同物品，按拒收计算；售空后可在下方校正。") :
         `${tr("基值")} ${fmt(row.item.trade_value)} × ${fmt(uses(row.item))} × ${fmt(row.quantity)} × ${fmt(row.remaining)}% · ${tr("同类折价")} ${fmt(row.own)} · ${tr("物品折价")} ${fmt(row.sell)} · ${tr("需求加成")} ${fmt(row.boost * 100)}% · ${tr("鉴价加成")} ${fmt(Number(o.appraisal) || 0)}%`}</small></div>`).join("")}</details>`;
     }
+    function cargoHtml(o = input()) {
+      const phrase = $("cargo-search").value.trim().toLocaleLowerCase(), cat = $("cargo-cat").value;
+      const ranked = cargo(model, basket, o).filter(row => (!cat || String(row.item.cat) === cat) &&
+        (!phrase || `${row.item.name} ${host.I18n?.english(row.item.name)} ${row.item.id}`.toLocaleLowerCase().includes(phrase)));
+      if ($("cargo-sort").value === "value") ranked.sort((a, b) => b.value - a.value || (b.density ?? -Infinity) - (a.density ?? -Infinity) || a.item.id - b.item.id);
+      $("cargo-status").textContent = tr("找到 {count} 种可收货物资；每种列出比较范围内的优先交易对象。", {count: fmt(ranked.length)});
+      const hasTarget = Boolean(o.target);
+      $("cargo-results").innerHTML = ranked.length ? `<div class="table-scroll"><table class="trade-table"><thead><tr><th>${tr("物资")}</th><th>${tr("每格交出价值")}</th><th>${tr("占格")}</th><th>${tr("单件交出估值")}</th><th>${tr("交易对象")}</th>${hasTarget ? `<th>${tr("只用此物换目标")}</th>` : ""}</tr></thead><tbody>${ranked.slice(0, cargoLimit).map(row => `<tr>
+        <th><div class="cargo-name">${image(row.item)}<span>${escape(name(row.item))}<small>${row.quantity === null ? tr("完整一件") : tr("清单 {quantity} 件 · 剩余 {remaining}%", {quantity: fmt(row.quantity), remaining: fmt(row.remaining)})}</small></span></div></th>
+        <td class="num cargo-density">${fmt(row.density)}</td><td class="cargo-size">${escape(sizeText(row.item))}</td><td class="num">${fmt(row.value)}</td><td>${escape(name(row.point))}</td>
+        ${hasTarget ? `<td class="cargo-needed">${tr("需 {count} 件 · {cells} 格", {count: fmt(row.needed), cells: fmt(row.neededCells)})}<small>${row.quantity === null ? tr("备料参考") : tr(row.quantity >= row.needed ? "清单余量够换" : "清单余量不够")}</small></td>` : ""}</tr>`).join("")}</tbody></table></div>` : `<p class="trade-empty">${tr("没有可比较的物资。可添加清单、切换“全部物品”，或检查目标是否有货。")}</p>`;
+      $("cargo-more").hidden = ranked.length <= cargoLimit; host.I18n?.apply($("cargo-results"));
+    }
     const list = quantities => Object.entries(quantities).map(([id, n]) => `${name(byId.get(Number(id)))} × ${fmt(n)}`).join("、");
     const signed = value => (value >= 0 ? "+" : "") + fmt(value);
     function processHtml() {
@@ -219,12 +279,13 @@
         <p>${escape(list(row.requirements))} <small>${tr("次用量")}</small> → ${escape(list(row.outputCounts))} <small>${tr("完整件 / 锅")}</small></p>
         <p>${tr("交给")} ${escape(name(row.point))}${row.seconds ? ` · ${tr("基础烹饪 {minutes} 分钟", {minutes: fmt(row.seconds / 60)})}` : ""}</p>
         <p>${tr("原料直接交换估值")} ${fmt(row.cost)} → ${tr("成品交出估值")} ${fmt(row.value)}</p>
+        <p>${tr("成品共 {cells} 格 · 每格交出价值 {value}", {cells: fmt(row.outputCells), value: fmt(row.density)})}</p>
         ${row.fallback ? `<p class="process-caution">${tr("含拒收原料，成本已按原始基值保守计入。")}</p>` : ""}
         ${row.canFail ? `<p class="process-caution">${tr("此配方有失败产物；这里比较普通成功结果。")}</p>` : ""}
         <details><summary>${tr("查看余量与分份")}</summary>
         <p>${row.batches === null ? tr("备料参考，未按现有库存限制次数。") : tr("这组余量最多加工 {count} 次，总增值 {value}。", {count: fmt(row.batches), value: fmt(row.total)})}</p>
         ${row.servings ? `<p>${tr("食用分份")} ${fmt(row.servings)} · ${tr("整锅交易不额外乘分份次数。")}</p>` : ""}</details></div>
-        <div class="process-gain"><span>${tr(sort === "ratio" ? "原料增值" : sort === "total" ? "余量总增值" : "每次加工增值")}</span><strong>${sort === "ratio" ? fmt(row.ratio * 100) + "%" : signed(row[sort] ?? row.gain)}</strong><small>${tr(sort === "gain" ? "原料增值" : "每次加工增值")} ${sort === "gain" ? fmt(row.ratio * 100) + "%" : signed(row.gain)}</small>${row.batches !== null ? `<small>${tr("余量可加工 {count} 次", {count: fmt(row.batches)})}</small>` : ""}</div></article>`).join("") || `<p class="trade-empty">${tr("没有符合条件的方案。可补齐原料、切换等级，或关闭“只看有增值”查看亏损方案。")}</p>`;
+        <div class="process-gain"><span>${tr(sort === "density" ? "成品每格价值" : sort === "ratio" ? "原料增值" : sort === "total" ? "余量总增值" : "每次加工增值")}</span><strong>${sort === "density" ? fmt(row.density) : sort === "ratio" ? fmt(row.ratio * 100) + "%" : signed(row[sort] ?? row.gain)}</strong><small>${tr(sort === "gain" ? "原料增值" : "每次加工增值")} ${sort === "gain" ? fmt(row.ratio * 100) + "%" : signed(row.gain)}</small>${row.batches !== null ? `<small>${tr("余量可加工 {count} 次", {count: fmt(row.batches)})}</small>` : ""}</div></article>`).join("") || `<p class="trade-empty">${tr("没有符合条件的方案。可补齐原料、切换等级，或关闭“只看有增值”查看亏损方案。")}</p>`;
       $("process-more").hidden = filtered.length <= limit; host.I18n?.apply($("process-results"));
     }
     function receive(message) {
@@ -300,6 +361,8 @@
       recalculate();
     });
     for (const id of ["trade-target", "trade-target-count"]) $(id).addEventListener("input", direct);
+    for (const id of ["cargo-scope", "cargo-search", "cargo-cat", "cargo-sort"]) $(id).addEventListener("input", () => { cargoLimit = 20; cargoHtml(); });
+    $("cargo-more").addEventListener("click", () => { cargoLimit += 20; cargoHtml(); });
     $("process-sort").addEventListener("change", recalculate);
     for (const id of ["process-search", "process-positive"]) $(id).addEventListener("input", () => { limit = 20; processHtml(); });
     $("process-more").addEventListener("click", () => { limit += 20; processHtml(); });

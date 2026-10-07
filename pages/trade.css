@@ -3,10 +3,10 @@
 body > main { max-width: 1320px; }
 [hidden] { display: none !important; }
 .trade-workbench { display: grid; grid-template-columns: minmax(330px, .85fr) minmax(420px, 1.15fr); gap: 24px; margin-top: 26px; }
-body > main .trade-input, body > main .trade-output, body > main .trade-processing { padding: 22px; margin: 0; border: 1px solid #74613e; }
-body > main .trade-processing { margin-top: 24px; }
+body > main .trade-input, body > main .trade-output, body > main .trade-processing, body > main .trade-cargo { padding: 22px; margin: 0; border: 1px solid #74613e; }
+body > main .trade-processing, body > main .trade-cargo { margin-top: 24px; }
 .trade-step { display: inline-block; margin-right: 10px; color: #928665; font: 18px ui-monospace, monospace; }
-body > main .trade-workbench h2, body > main .trade-processing h2 { font-size: 22px; margin: 0 0 14px; }
+body > main .trade-workbench h2, body > main .trade-processing h2, body > main .trade-cargo h2 { font-size: 22px; margin: 0 0 14px; }
 .trade-help { font-size: 13px; line-height: 1.7; color: #c5baa0; }
 .trade-assumption { color: #dac58e; font-size: 13px; margin: 20px 0 0; border-left: 3px solid #be9939; padding-left: 12px; }
 #trade-planner button { cursor: pointer; font: inherit; color: #e8d5a6; background: #363329; border: 1px solid #78633d; border-radius: 2px; padding: 8px 12px; }
@@ -63,12 +63,18 @@ body > main .trade-settings { margin: 12px 0; padding: 12px; background: #24261e
 .trade-shelves { margin-top: 24px; padding: 20px; border: 1px solid #75613e; }
 .shelf-state { white-space: nowrap; font-size: 12px; }
 .trade-table thead { display: table-header-group; }
+.cargo-name { display: flex; align-items: center; gap: 10px; min-width: 145px; }
+.cargo-name img { flex: none; object-fit: contain; }
+.cargo-name small, .cargo-needed small { display: block; color: #b4a888; font-size: 11px; margin-top: 4px; }
+.cargo-density { color: #f2cc62; font: 20px ui-monospace, monospace; }
+.cargo-size { white-space: nowrap; }
+.cargo-needed { min-width: 160px; }
 
 @media (max-width: 1000px) {
   .trade-workbench { grid-template-columns: minmax(0, 1fr); gap: 18px; }
 }
 @media (max-width: 560px) {
-  body > main .trade-input, body > main .trade-output, body > main .trade-processing, .trade-shelves { padding: 16px; }
+  body > main .trade-input, body > main .trade-output, body > main .trade-processing, body > main .trade-cargo, .trade-shelves { padding: 16px; }
   .trade-basket-row img { display: none; }
   .trade-basket-row input { width: 54px; }
   .trade-basket-row { gap: 6px; }
