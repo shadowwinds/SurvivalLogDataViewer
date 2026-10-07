@@ -48,19 +48,20 @@ def trade_model_strings(source_dir: Path, game_version: str | None) -> set[str]:
         model = json.loads((source_dir / "trade-model.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return set()
-    if not isinstance(model, dict) or model.get("format_version") != 1 \
+    if not isinstance(model, dict) or model.get("format_version") != 2 \
             or (game_version is not None and model.get("game_version") != game_version):
         return set()
     from codex_pages_seo import clean_text
 
     strings: set[str] = set()
+    strings.update(value for value in model.get("categories", {}).values() if isinstance(value, str))
     for point in model.get("points", []):
         if isinstance(point.get("name"), str):
             strings.add(point["name"])
         for item in point.get("items", []):
             if isinstance(item.get("name"), str):
                 strings.add(item["name"])
-    for entry in model.get("shared", []):
+    for entry in model.get("shared", []) + model.get("items", []) + model.get("crafts", []):
         if isinstance(entry.get("name"), str):
             strings.add(entry["name"])
     return {clean_text(text) for text in strings}

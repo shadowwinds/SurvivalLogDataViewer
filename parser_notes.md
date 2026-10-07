@@ -24,13 +24,17 @@
 
 ## 交易行情页（联络地图据点）
 
-游戏交易系统在代码里叫 StrangerTrade（`GameCore.HotUpdate.StrangerTrade`）。联络地图上的据点定义在 `Config_MapPoint` 中 `PointCategory=3` 的行（当前版本 ID 1100-1109），每行引用一张货架 `Config_Shop`（ID 911-920，`ShopName_Local` 与据点名一致），货架物品再关联 `Config_Item`。辅助表：`Config_StrangerStock`（随机库存抽取池，24 行，联系人 ID 14/16/20/24/25/26/29/30、2100-2111 与 9901/9902/9903/9999）、`Config_StrangerProfile`（据点模拟参数：初始饱食 144、种植地块数、材料/燃料消耗与捡拾、生病和意外概率，20 行）。`Config_Shop` 的 81 行同时包含灾前商店、建筑商店与交易货架，ID 不连续。
+游戏交易系统在代码里叫 StrangerTrade（`GameCore.HotUpdate.StrangerTrade`）。联络地图上的据点定义在 `Config_MapPoint` 中 `PointCategory=3` 的行（当前版本 ID 1100-1109），每行引用一张货架 `Config_Shop`（ID 911-920，`ShopName_Local` 与据点名一致），货架物品再关联 `Config_Item`。`Config_StrangerStock` 为随机库存池，24 行；`Config_StrangerProfile` 为联系人模拟参数，20 行，初始饱食有 115/130/144/158/187 多种值，不能当作十个据点统一参数。`Config_Shop` 的 81 行同时包含灾前商店、建筑商店与交易货架，ID 不连续。
 
-两张表的 MemoryPack 线序与 IL2CPP 元数据 backing-field 顺序不一致（应为 `MemoryPackOrder` 特性所致），且存在以下线格式差异，专用解码已核对：`Config_Shop` 的 `DemoTwoMode` 按四字节写入，而 `Config_MapPoint` 的 `IsUnlock` 为单字节布尔；`Config_Shop` 中 `RandomID=1` 的随机货架行（当前版本 ID 8「临期产品优惠」、11「VIP限定柜台」）在两个物品列表之后携带未解码的随机池数据，按 12 字段布局会“成功”读出但字节偏短，必须从行首重同步跳过；`Config_MapPoint` 尾部多个字段在交易行中为空字符串，与整数 0 共用同一编码，导出器只发布语义已核实的字段（名称、章节、解锁键 `TradePointUnlock_110N` / `CrossTradePointUnlock`、解锁提示文本、ShelfShopId 911-920），行边界由“下一行成员数 48 + 合理行 ID + 字符串标记”锚定，全部行验证成员数量、行数与数据 EOF。
+重新核对 IL2CPP v31 字段类型与 `Config_MapPoint.Deserialize` RVA `0x2B06500` 的逐字段读写，线序与声明一致。此前的差异来自把 `CameraRange`、`ExitPos`、`EntryNodeName` 错认，以及把 `Config_Shop.RandomID/RandomAmount` 两个 `List<int>` 错读成整数。现在在集中 `CONFIG_SCHEMAS` 中分别严格读取 48 / 12 字段、对象数量、唯一 ID 与 EOF；所有随机货架也完整解码，不再扫描行首、猜测货架 ID 或跳过随机行。导出保留 `ShelfShopId` 与紧邻的 `TradeCategory`，后者是据点交出侧同类折价分类。
 
-成交估值已通过只读反汇编当前版本 `GameAssembly.dll` 核实（`TradeBalanceCalculator.GivenValueOf`，RVA `0x2CED1F0`）：交出物品估值 = 数量 × `TradeValue` × 剩余用量比例（`Uses` 为浮点）× 品质缩放（`ValueScale` ≤ 0 时回退 1.0）×（行被标记需求时用需求加成，否则 1.0，另恒常叠加鉴价加成）；常量 1.0 位于 `0x450CD6C`，`DealEpsilon=0.001`，成交条默认刻度 120。`Config_Item.TradeSellRate` 仅 18 个机器人模块为 0.6，是回收折价特例。据点估值是运行时动态系统：`WebUI_Trade_HeaderMsg` 下发 `apprPct`（估价 +N%）、`dealCut`（谈判让步）、`peerBond`、`campRelationTier/Next`、`wantExceptJson`（“想要：除 X 以外”）、`demandLine` 与 `offerCatsJson`（货架分类标签）；本地化词条确认据点不收自己货架已有的物品（`SR_Web_TradeUI_PopOnShelf`）、收礼有每种上限（`PopSupplyFull`）、非需求物品折价收购（`BubbleSellRate_Active`）、受损据点“货架变薄 N 天”、关系升级“货架上会有新东西”。两个周目的多个 `Save_*.bytes` 快照中 `CommissionPersonDay`、`TradePointSeen/Unlock_110N` 等运行时状态逐存档变化，静态配置中没有也不应有固定“每据点汇率表”。
+普通据点与联系人双向交换都调用 `Reducer_Web_TradeUI.EvaluateState` RVA `0x2AB4840` → `TradeBalanceCalculator.Evaluate` RVA `0x2CECB80`。交出估值 = 数量 × TradeValue × 有效用量 × 折价缩放 ×（1 + 需求加成 + 鉴价加成），需求只作用于标记类别；有效用量由 `EffectiveUses` RVA `0x2AB4660` 计算：剩余次数 / 实例最大次数 × max(1, 配置 UseTimes)，有效实例次数缺失时按原生回退。`ValueScale` 是折价缩放，不能称为独立品质倍率。`OpenUICore` RVA `0x2AB8B10` 对据点清空需求，设置 `HalfValueCategory`；同类系数由 `StrangerTradeSelfStockValueRate` 决定，当前键不存在，原生回退 0.5。据点再乘正且小于 1 的 `TradeSellRate`；联系人没有此分支，需求等级加成当前为 0.3/0.6/0.9，boostMax=-1 不封顶。
 
-`codex_pages_trade.py` 只读导出 `pages/trade-model.json`（格式版本 1 + 游戏版本）：十个据点的货架物品（名称、分类、库存、交易价值、灾前价格、每份次数）、由货架分类推导的“提供”标签、解锁提示与多据点在售比价列表；模型不含任何运行时状态。刷新命令为 `python codex_pages_trade.py --game-root "游戏目录" --output pages/trade-model.json`。`codex_pages.py` 构建时按版本校验后把模型内嵌进独立页 `/trade/`（`codex_pages_seo.trade_document` 生成无脚本可读的静态表格，`pages/trade.js` 只做搜索、类别筛选与排序的 DOM 过滤，不重建内容）；版本不一致时页面显示回退说明。页面与文档都明确标注：交易价值是静态基准，实际兑换比率随据点需求、好感、鉴价与成交折扣浮动。
+`BuildVisibleShelfSet` RVA `0x2AAEB70` 与 `RejectWithPop` RVA `0x2AC0760` 对当前可见且数量正的同物品拒收，售空后不再据此拒收；配置货架只能作为明确的初始假设。`ResolveDealLineDiscount` RVA `0x2AC1050` 将基础减免与本次加成相加，限制在 0..60 价值点，成交时再限制不超过换入总值，不是百分比。换入药品在无尽营地特殊 `CampState != 0` 下按 `Endless_TradeTakeMedicineRate=2` 提高单用量价格并向上取整。`CasualOrderManager.BuildCampInfos` RVA `0x2FB23F0` 的 `NextNeed` 是 20/50/90 关系档下一门槛；关系影响货架解锁，不能表述为轮换需求或通用估值倍率。赠礼/补给模式的 `PopSupplyFull` 不套用为普通交易的每物品上限。
+
+`codex_pages_trade.py` 只读导出 `pages/trade-model.json`（格式版本 2 + 游戏版本），仅发布据点、货架、相关物品和制造普通结果所需字段，以及白名单交易参数；不发布完整原始表或存档。刷新命令仍为 `python codex_pages_trade.py --game-root "游戏目录" --output pages/trade-model.json`。`codex_pages.py` 按版本校验后合并已有公开烹饪模型，内嵌 `/trade/`；不匹配时回退。无脚本仍可查配置货架，交互流程为登记可投入物资、比较直接交换、比较加工增值。支持按名称/ID 搜索、批量登记、部分用量、已解锁据点筛选、目标物品、联系人多类别需求、鉴价、价值点减免与无尽营地药品情景；当前无货勾选只校正拒收。玩家手填清单与货架校正仅保存在浏览器，不读取游戏库存或存档。
+
+加工枚举在 `trade-worker.js` 中复用 `Cooking.plan` 的真实组合与指定配方优先级；每次增值、增值比例、现有余量总增值分别重新选择组合和交易对象。比较全部据点时原料按各自可接受对象中最高直接交换估值计机会成本，指定对象时按该对象；都拒收时回退原始基值，避免把材料算作免费。制造仅比较 `InCodex && IsUseable` 的普通成功产物，重复原料/产物 ID 计数量；技能门槛使用 `craft_level`，已核对 `ToolTableManager.GetProductionCraftLockReason` RVA `0x26A83E0` 与 `Reducer_Web_ToolTable.EvalCraftUnlocked` RVA `0x2A93F80`，`Level` 不作为制造技能筛选条件。事件与配方解锁仍由游戏确认；多次使用图纸配方排除，不猜成功率或完美返料。每行独立使用同一输入清单，不提供混合加工的全局最优分配；品质为情景，未计燃料、精力、设施和路线成本，估值换入上限也不承诺实时有货、装箱或成交。
 
 ## 通用构建说明
 
@@ -110,7 +114,7 @@
 
 每日方案按整数食用次数满足饱食，锅数长期均摊；首次制作按整锅准备。种植容器向上取整，共享同种作物的多种收获使用最大容器需求，不重复占地；每日照料、种子成本覆盖整容器，不把额外收获当免费收益。显示心态缺口、饱食超量、容器容量、时间和预算，并可仅保留预算内菜肴。`SurvivalResultsManager.SettleDailySurvivalPoints` RVA `0x2699EC0` 确认先截断心态再以 `floor((心态 − MoraleBase) / MoraleToPoint)` 结算，兑换后扣除相应心态。当前基线五十、步长五，天赋可改变步长；页面按“不吃这组菜的结算前心态”和上限计算差额，不把当日其他事件算进餐饮收益。
 
-`StrangerCommonShelfPool.TotalTradeValue` RVA `0x2CE7F30` 确认 `TradeValue` 按剩余用量计，整件成品估值需乘实际分份；`TradeBalanceCalculator.GivenValueOf` RVA `0x2CED1F0` 还应用交易缩放、需求和鉴价。每锅净基值为成品交出估值减原料换入基值；可选择原始值或使用正且小于一的 `TradeSellRate` 模拟商人折价，后者并非所有交易渠道均应用。页面不模拟实际货架、实时折扣、好感或成交，不将交换基值当现金利润。研究副本、反汇编输出与工具不进入仓库或公开站点。
+普通交易的有效用量不能照搬 `StrangerCommonShelfPool.TotalTradeValue` 的库存池计价。只读追踪 `Furniture.SettleCookingResult` RVA `0x2E534F0` → `ItemManager.AddItem` RVA `0x2576EA0`，烹饪同时把“分份数 × max(1, 配置 UseTimes)”写为成品实例的剩余与最大次数；`EffectiveUses` 对完整成品的结果仍为 max(1, 配置 UseTimes)。因此交易取舍页已改为每锅交出基值 = 成品 TradeValue × max(1, 配置 UseTimes)，实际分份仅用于食用预测，不再把多分份当作额外交易收益。该页原料仍按每用量换入基值比较，并链接交易行情页处理具体对象、折价和拒收；不将基值当现金利润。研究副本、反汇编输出与工具不进入仓库或公开站点。
 
 ## 成就模块（当前实现）
 

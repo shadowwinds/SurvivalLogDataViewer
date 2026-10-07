@@ -124,6 +124,24 @@ assert.ok(satiety.total[0] > health.total[0]); assert.ok(health.total[3] > satie
 assert.deepEqual(stock, {1: 1, 2: 1, 3: 1}); // Independent recommendations never reserve shared inventory.
 """)
 
+    def test_trade_cost_bound_preserves_priority_tier_and_stock_feasibility(self) -> None:
+        self.run_browser(r"""
+const foods=[item(1,11,3),item(2,11,1),item(3,11,1),item(4,11,3)];
+const entries=[recipe(10,1,[11,11]),recipe(20,0,[],[2,2],true)];
+const stock={1:2,2:1,3:2,4:2}, costs={1:7,2:1,3:5,4:9};
+const score=(total,ingredients)=>100-ingredients.reduce((sum,i)=>sum+costs[i.id],0);
+const slow=plan(entries,foods,stock,'普通',0,0,model,{score});
+const fast=plan(entries,foods,stock,'普通',0,0,model,{score,ingredientCost:i=>costs[i.id]});
+assert.deepEqual(Array.from(fast.keys()),Array.from(slow.keys()));
+for (const [key, row] of fast) assert.equal(score(row.total,row.ingredients),score(slow.get(key).total,slow.get(key).ingredients));
+assert.deepEqual(Array.from(fast.get('r10').ingredients,i=>i.id),[2,3]);
+// Cheapest repeated pair is reserved for the specific recipe and cannot be reused by the generic.
+stock[2]=2;
+const matched=plan(entries,foods,stock,'普通',0,0,model,{score,ingredientCost:i=>costs[i.id]});
+assert.deepEqual(Array.from(matched.get('r10').ingredients,i=>i.id),[2,3]);
+assert.ok(matched.has('r20'));
+""")
+
     def test_parameter_export_validates_values_and_does_not_publish_unrelated_settings(self) -> None:
         from unittest.mock import patch
         from codex_pages_cooking import extract_cooking_model

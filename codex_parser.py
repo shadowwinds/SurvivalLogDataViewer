@@ -241,6 +241,30 @@ class ExtractionContext:
 # These are the serialized backing-field schemas from the current HotUpdate.dll
 # interop metadata. Computed MainKey properties are intentionally not serialized.
 CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
+    "Config_MapPoint": (
+        ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("PointCategory", "i32"),
+        ("ChapterID", "i32"), ("Type", "i32"), ("IsUnlock", "bool"), ("Dec", "str"),
+        ("Dec_Local", "str"), ("Icon", "str"), ("WebIcon", "str"), ("Time", "i32"),
+        ("PositionName", "str"), ("CameraRange", "str"), ("ExitPos", "str"),
+        ("RefreshTime", "i32"), ("CostItems", "list_i32"), ("ConditionSetId", "i32"),
+        ("ExploreExp", "i32"), ("DiscoveryExp", "i32"), ("LightLevel", "i32"),
+        ("UnlockTag", "str"), ("EntryNodeName", "str"), ("HomeGroup", "i32"),
+        ("FirstEnterStory", "i32"), ("GroundBoxName", "str"), ("Subtitle", "str"),
+        ("Subtitle_Local", "str"), ("Function", "str"), ("Function_Local", "str"),
+        ("RecommendPriority", "i32"), ("CrowdExtraTime", "i32"), ("CrowdTime", "f32"),
+        ("RiotTime", "f32"), ("CloseTime", "f32"), ("RiotChaosLootGroupId", "i32"),
+        ("ShelfShopId", "i32"), ("TradeCategory", "i32"), ("GroundLootAnchors", "list_i32"),
+        ("GroundLootSelectMin", "i32"), ("GroundLootSelectMax", "i32"),
+        ("GroundLootRefreshInterval", "i32"), ("FurnitureLootRefreshInterval", "i32"),
+        ("UnlockHint", "str"), ("UnlockHint_Local", "str"), ("LoadingDim", "f32"),
+        ("TimeByPlayer", "list_i32"), ("EndlessConditionSetId", "i32"),
+    ),
+    "Config_Shop": (
+        ("ID", "i32"), ("ShopName", "str"), ("ShopName_Local", "str"), ("DemoTwoMode", "i32"),
+        ("RandomID", "list_i32"), ("RandomAmount", "list_i32"), ("ItemIdList", "list_i32"),
+        ("ItemCountList", "list_i32"), ("DiscountRate", "f32"), ("LifeMin", "f32"),
+        ("LifeMax", "f32"), ("ItemWeightList", "list_i32"),
+    ),
     "Config_Weather": (("ID", "i32"), ("Name", "str"), ("Name_Local", "str"),
                        ("LightValue", "i32"), ("ColdValue", "i32"), ("Weight", "i32"),
                        ("BroadcastId", "i32"), ("Web_Icon", "str"), ("Anim", "list_str"),

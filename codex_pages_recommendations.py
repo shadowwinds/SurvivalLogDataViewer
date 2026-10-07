@@ -151,6 +151,7 @@ def build_recommendations(categories: list[dict[str, Any]], raw_entries: dict[st
             result = {"icon": product["icon"], "servings": product["serving_count"], "total": total,
                       "per_use": [s["value"] for s in product["per_use_stats"]] if product["per_use_stats"] else None,
                       "trade_value": item_info(product.get("id", 0))["trade_value"],
+                      "trade_uses": max(1, item_info(product.get("id", 0))["uses"] or 1),
                       "sell_rate": item_info(product.get("id", 0))["sell_rate"]}
             row["qualities"][product["quality"]] = result
         if not requirements:
@@ -345,7 +346,7 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <label>不吃这组菜的结算前心态<input id="rec-moraleNow" type="number" min="0" max="1000" value="50"></label>
 <label>当前角色心态上限（按游戏填写）<input id="rec-moraleMax" type="number" min="1" max="1000" value="100"></label>
 <label>兑换 1 点所需心态<input id="rec-pointStep" type="number" min="1" max="100" value="5"></label>
-<label>交出估值情景<select id="rec-sellChannel"><option value="normal">原始基值</option><option value="discount">应用商人配置折价</option></select></label>
+<label>交出估值情景<select id="rec-sellChannel"><option value="normal">原始基值</option><option value="discount">应用据点物品折价</option></select></label>
 <label class="rec-stage-only"><input id="rec-powered" type="checkbox" checked>种植设施通电</label>
 </div><p>照料为及时处理异常的平均估计，未计走动、缺水、异常停长和跨楼层。先在种植手册核对光照、耐寒；这里比较满足环境后的产出。参数保留在网址中，可复制分享。</p></details>
 <section class="rec-brief" id="rec-brief" hidden aria-live="polite"></section>
@@ -370,7 +371,7 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <li>基础播种 15 分钟、收获 5 分钟；除虫、除草、浇水各 5 分钟。生长期每个容器每日检查一次，概率 = max(0, 植物基础值 + 设施修正) × max(0, 1 − 等级减免)，三项合计大于 1 时一起归一化。这里只估计及时处理的次数，随机波动、处理延迟和雨水自动浇灌会改变实际耗时。</li>
 <li>短周期增加每日播种和收获次数；不只按产量排名。每日方案按整数食用次数满足饱食需求，显示心态缺口、饱食超出、均摊锅数和预算。种植容器按整数向上取整，共享同种作物的收获不重复占地；每天照料和种子成本按这些整容器计，多余收获不抵扣成本。容量是容器内部的种植空间，设备实际地面占格仍需在游戏中安排。</li>
 <li>基础心态结算 = max(0, floor((结算前心态 − 50) ÷ 5))，兑换后会扣去对应心态。输入“不吃这组菜”的结算前心态与角色上限，比较食用前后差值；已计上限，未计其他当天事件。天赋改变兑换步长时可手填。</li>
-<li>每锅交出估值 = 品质成品 TradeValue × 实际分份次数。商人折价情景只使用正且小于 1 的 TradeSellRate；原始基值不折价。净基值 = 成品交出估值 − 原料换入基值，不等于现金利润或保证成交；需求、鉴价、好感、折扣、货架和交易渠道限制另行影响实际成交。</li>
+<li>完整一锅的交出基值 = 品质成品 TradeValue × max(1, 配置 UseTimes)。实际分份次数用于食用；交易按实例剩余次数 ÷ 实例最大次数归一，完整一锅不能再乘实际分份。配置折价情景仅应用据点的 TradeSellRate；完整据点折价、货架拒收与联系人需求请到交易行情页试算。净基值 = 成品交出估值 − 原料换入基值，不等于现金利润。未计燃料、设备与路程。</li>
 </ul></details><p><a href="../?lang=zh-CN#dish/">按冰箱里的实际食材配餐 →</a> · <a href="../?lang=zh-CN#plant/">核对当前种植环境 →</a></p>
 </section>'''
     document = shell("生存日志补给推荐｜囤货、前中后期菜肴与作物排行 · Survival Log",

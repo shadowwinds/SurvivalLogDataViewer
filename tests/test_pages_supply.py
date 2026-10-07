@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 import shutil
+import struct
 import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from codex_pages import export_data
+from codex_pages_seo import trade_document
 from codex_pages_supply import extract_supply_model
-from codex_parser import ConfigRow, parse_config_table
+from codex_pages_trade import extract_trade_model
+from codex_parser import CONFIG_SCHEMAS, ConfigRow, parse_config_table
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,13 +26,71 @@ class SupplyModelTests(unittest.TestCase):
         source = r"""
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const sandbox = {window: {}};
-for (const file of ['cooking.js', 'supply.js']) vm.runInNewContext(fs.readFileSync(process.argv[1] + '/pages/' + file, 'utf8'), sandbox);
+for (const file of ['cooking.js', 'supply.js', 'trade.js']) vm.runInNewContext(fs.readFileSync(process.argv[1] + '/pages/' + file, 'utf8'), sandbox);
 const S = sandbox.window.Supply, data = JSON.parse(fs.readFileSync(0, 'utf8'));
 const close = (a,b) => assert.ok(Math.abs(a-b) < 1e-6, `${a} != ${b}`);
 """ + assertions
         result = subprocess.run([node, "-e", source, str(ROOT)], input=json.dumps(data or {}),
                                 capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_trade_tables_read_all_fields_and_reject_unknown_layout_or_trailing_bytes(self) -> None:
+        for table in ("Config_MapPoint", "Config_Shop"):
+            fields = CONFIG_SCHEMAS[table]
+            encoded = struct.pack("<iB", 1, len(fields))
+            for name, kind in fields:
+                if kind == "str":
+                    encoded += struct.pack("<i", 0)
+                elif kind == "bool":
+                    encoded += b"\x01"
+                elif kind == "list_i32":
+                    encoded += struct.pack("<3i", 2, 911, 9)
+                elif kind == "f32":
+                    encoded += struct.pack("<f", .5)
+                else:
+                    encoded += struct.pack("<i", 1100 if name == "ID" else 9)
+            rows = parse_config_table(encoded, table)
+            self.assertEqual(len(rows), 1)
+            if table == "Config_Shop":
+                self.assertEqual(rows[0].values["RandomID"], [911, 9])
+            else:
+                self.assertEqual(rows[0].values["TradeCategory"], 9)
+            for invalid in (encoded + b"x", encoded[:4] + b"\x00" + encoded[5:], encoded[:-1]):
+                with self.assertRaises((ValueError, struct.error)):
+                    parse_config_table(invalid, table)
+
+    def test_trade_export_skill_gate_public_fields_and_html_embedding(self) -> None:
+        def row(table: str, **values: object) -> ConfigRow:
+            defaults = {name: [] if kind == "list_i32" else "" if kind == "str" else 0
+                        for name, kind in CONFIG_SCHEMAS[table]}
+            return ConfigRow(table, {**defaults, **values, "PRIVATE": "private-marker"})
+
+        tables = {
+            "Config_Item": [row("Config_Item", ID=i, ItemName_Local=f"item-{i}", Category=9,
+                                TradeValue=i * 10, UseTimes=2 if i == 3 else 0) for i in (1, 2, 3)],
+            "Config_ConstantText": [],
+            "Config_MapPoint": [row("Config_MapPoint", ID=1100, PointCategory=3, ShelfShopId=911,
+                                    TradeCategory=9, Name_Local="outpost</script>")],
+            "Config_Shop": [row("Config_Shop", ID=911, ItemIdList=[2], ItemCountList=[4])],
+            "Config_ProductionList": [row("Config_ProductionList", ID=i, InCodex=True, IsUseable=True,
+                                          Level=5, craft_level=1, MaterialList=[i], ProductID=[2]) for i in (1, 3)],
+            "Config_CookingRecipe": [],
+        }
+        settings = {"StrangerTradeBoostLv1": (0, .3, None), "StrangerTradeBoostLv2": (0, .6, None),
+                    "StrangerTradeBoostLv3": (0, .9, None), "StrangerTradeDemandBoostMax": (0, -1, None),
+                    "StrangerTradeDealLineDiscount": (0, 0, None), "StrangerTradeDealLineMaxDiscount": (0, 60, None),
+                    "Endless_TradeTakeMedicineRate": (0, 2, None)}
+        with patch("codex_pages_trade.load_config_table", side_effect=lambda _, table: (tables[table], None, "test", None)), \
+                patch("codex_pages_trade.read_global_settings", return_value=settings):
+            model = extract_trade_model(Path("unused"))
+        self.assertEqual(model["rules"]["self_stock_rate"], .5)
+        self.assertEqual([(r["id"], r["level"]) for r in model["crafts"]], [(1, 1)])
+        self.assertNotIn("private-marker", json.dumps(model))
+        html = trade_document(model, "../", "test")
+        self.assertIn('id="trade-planner"', html)
+        embedded = html.split('<script id="trade-data" type="application/json">', 1)[1].split('</script>', 1)[0]
+        self.assertNotIn("</script>", embedded)
+        self.assertEqual(json.loads(embedded)["points"][0]["name"], "outpost</script>")
 
     def test_container_cycles_power_controls_and_short_cycle_work(self) -> None:
         self.run_model(r"""
@@ -82,7 +143,7 @@ const before = late.dishes.find(d=>d.id===6023), after = perfect.dishes.find(d=>
 assert.ok(after.output.total[1]>before.output.total[1]);
 for (const row of rated(trade)) {
  const product = data.dishes.find(d=>d.id===row.id).qualities['普通'];
- close(row.outputTrade,product.trade_value*row.output.servings);
+ close(row.outputTrade,product.trade_value*product.trade_uses);
  close(row.inputTrade,row.output.ingredients.reduce((s,i)=>s+data.resources.find(r=>r.id===i.id).trade_value,0));
  close(row.tradeMargin,row.outputTrade-row.inputTrade);
 }
@@ -92,6 +153,56 @@ for (const row of rated(late)) {
  assert.deepEqual(Array.from(row.output.total),Array.from(forecast.total));
 }
 """, data)
+
+    def test_trade_channels_partial_packages_rejection_discount_and_medicine(self) -> None:
+        self.run_model(r"""
+const T=sandbox.window.Trade, rules={self_stock_rate:.5,demand_boost_max:-1,deal_discount:0,deal_discount_max:60,camp_medicine_rate:2};
+const iron={id:1,cat:9,trade_value:10,use_times:0,sell_rate:1};
+const rice={id:2,cat:1,trade_value:12,use_times:7,sell_rate:.6};
+const medicine={id:3,cat:2,trade_value:11,use_times:2,sell_rate:1};
+const point={id:10,half_value_cat:9,items:[{...iron,count:3},{...medicine,count:5}]};
+const other={id:11,half_value_cat:10,items:[{...medicine,count:5}]};
+const contact={id:'contact',contact:true,items:[]};
+let o=T.options({appraisal:20,boost:.9,demand:[1,9]},rules);
+close(T.given(iron,1,1,point,o,rules),0); // Reject only current visible stock.
+o.absent['10:1']=true; close(T.given(iron,1,1,point,o,rules),6);
+close(T.given(iron,1,1,other,o,rules),12); // No point demand bonus.
+close(T.given(rice,2,.5,contact,o,rules),Math.fround(176.4)); // 7 uses/package; demand + appraisal, no TradeSellRate.
+close(T.given(rice,1,1,other,T.options({},rules),rules),Math.fround(50.4));
+const model={rules,items:[iron,rice,medicine],points:[point,other]};
+const basket={1:{quantity:10,remaining:100}};
+let r=T.comparison(model,basket,{destination:'all',target:3,targetCount:5,discount:999});
+assert.equal(r[0].point.id,11); assert.equal(r[0].maximum,7); assert.equal(r[0].required,50);
+r=T.comparison(model,basket,{destination:'all',excluded:[11],target:3,targetCount:1,camp:true});
+assert.equal(r.length,1); assert.equal(r[0].unit,44);
+assert.equal(T.takeValue(medicine,contact,T.options({camp:true},rules),rules),22);
+assert.equal(T.comparison(model,basket,{destination:'all',excluded:[10,11]}).length,0);
+assert.equal(T.options({boost:.9},{...rules,demand_boost_max:.5}).boost,.5);
+""")
+
+    def test_trade_processing_opportunity_cost_duplicate_materials_and_whole_pot(self) -> None:
+        self.run_model(r"""
+const T=sandbox.window.Trade, rules={self_stock_rate:.5,demand_boost_max:-1,deal_discount:0,deal_discount_max:60,camp_medicine_rate:2};
+const a={id:1,cat:9,trade_value:10,use_times:0,sell_rate:1}, b={id:2,cat:1,trade_value:12,use_times:7,sell_rate:1};
+const wire={id:3,cat:9,trade_value:36,use_times:0,sell_rate:1}, dish={id:4,cat:1,trade_value:40,use_times:1,sell_rate:1};
+const ingredients=[{id:2,tier:3,sub_category_id:1,stats:[100,0,0,0,0],price:7,use_times:7}];
+const entry={id:20,key:'r20',recipe:{specific_items:[2,2],tier:3},portion_model:{mode:'fixed',threshold:30},
+products:[{id:4,quality:'普通',stats:[1,2,3,4,5].map((i,n)=>({field:'ValueDisplay'+i,value:n===0?120:0}))}]};
+const model={rules,items:[a,b,wire,dish],points:[{id:10,name:'recycling',half_value_cat:9,items:[]},{id:11,name:'nursery',half_value_cat:10,items:[]}],
+crafts:[{id:1,name:'wire',level:1,inputs:[1,1,1],outputs:[3],can_fail:true}],
+cooking:{ingredients,entries:[entry],model:{split_threshold:30}},dishes:[{id:20,name:'dish',level:1,seconds:600}]};
+const input={destination:'all',scope:'stock',kind:'',cookLevel:1,craftLevel:1,quality:'普通',sort:'gain'};
+const basket={1:{quantity:10,remaining:100},2:{quantity:1,remaining:50}};
+let rows=T.processing(model,basket,input), w=rows.find(r=>r.kind==='craft'), d=rows.find(r=>r.kind==='cook');
+assert.equal(w.cost,30); assert.equal(w.value,36); assert.equal(w.gain,6); assert.equal(w.batches,3); assert.equal(w.total,18);
+assert.equal(d.servings,4); assert.equal(d.value,40); assert.equal(d.cost,24); assert.equal(d.batches,1); // Servings cannot multiply full-pot trade value.
+model.points[1].items=[{...dish,count:1}];
+rows=T.processing(model,basket,{...input,destination:'11'}); assert.equal(rows.some(r=>r.kind==='cook'),false);
+model.points[1].items=[{...b,count:1}];
+d=T.processing(model,basket,{...input,destination:'11'}).find(r=>r.kind==='cook'); assert.equal(d.fallback,true); assert.equal(d.cost,24);
+assert.equal(T.processing(model,{1:{quantity:2,remaining:100}},input).length,0);
+assert.equal(T.processing(model,{}, {...input,scope:'all'}).find(r=>r.kind==='craft').batches,null);
+""")
 
     def test_growing_budget_rounds_containers_and_costs(self) -> None:
         data = export_data(ROOT / "survival_log_codex.sqlite3")["recommendations"]

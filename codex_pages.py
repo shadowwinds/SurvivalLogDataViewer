@@ -27,7 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "trade-worker.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -48,14 +48,14 @@ TRADE_MODEL_FILE = "trade-model.json"
 BOOK_CATEGORY = {"id": "books", "label": "书籍"}
 
 
-def load_versioned_model(name: str, game_version: str | None) -> dict[str, Any] | None:
+def load_versioned_model(name: str, game_version: str | None, format_version: int = 1) -> dict[str, Any] | None:
     """Load a pages model JSON and keep it only when the game version matches."""
 
     try:
         model = json.loads((SOURCE_DIR / name).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if not isinstance(model, dict) or model.get("format_version") != 1:
+    if not isinstance(model, dict) or model.get("format_version") != format_version:
         return None
     if game_version is not None and model.get("game_version") != game_version:
         return None
@@ -63,7 +63,7 @@ def load_versioned_model(name: str, game_version: str | None) -> dict[str, Any] 
 
 
 def map_trade_model_icons(model: dict[str, Any]) -> dict[str, Any]:
-    for section in ("points", "shared"):
+    for section in ("points", "shared", "items"):
         for entry in model.get(section, []):
             for item in entry.get("items", []) if section == "points" else [entry]:
                 if item.get("icon"):
@@ -630,9 +630,12 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     prey_model = load_versioned_model(PREY_MODEL_FILE, payload["metadata"].get("game_version"))
     if prey_model:
         prey_model = map_model_icons(prey_model)
-    trade_model = load_versioned_model(TRADE_MODEL_FILE, payload["metadata"].get("game_version"))
+    trade_model = load_versioned_model(TRADE_MODEL_FILE, payload["metadata"].get("game_version"), 2)
     if trade_model:
         trade_model = map_trade_model_icons(trade_model)
+        trade_model["cooking"] = payload["recommendations"]["cooking"]
+        trade_model["dishes"] = [{key: row[key] for key in ("id", "name", "level", "seconds")}
+                                 for row in payload["recommendations"]["dishes"]]
     documents = seo_documents(payload, site_url, {
         "recommendations/index.html": recommendation_document(payload, site_url),
         "trade/index.html": trade_document(trade_model, site_url, payload["metadata"].get("game_version", "未提供"))})

@@ -89,9 +89,17 @@
       const candidates = slots.map(group => available.filter(item => item.sub_category_id === group &&
         (effectiveTier(item.tier, floor) === null || effectiveTier(item.tier, floor) >= recipe.tier)).sort((a, b) => a.id - b.id));
       if (candidates.some(items => !items.length)) continue;
-      let best = null, bestScore = -Infinity;
+      const costs = options.ingredientCost ? new Map(available.map(item => [item.id, options.ingredientCost(item)])) : null;
+      if (costs) for (const items of candidates) items.sort((a, b) => costs.get(a.id) - costs.get(b.id) || a.id - b.id);
+      const lower = [0];
+      if (costs) for (let index = slots.length - 1; index >= 0; index -= 1) {
+        lower[index] = Math.min(...candidates[index].map(item => costs.get(item.id))) + (lower[index + 1] || 0);
+      }
+      let best = null, bestScore = -Infinity, bestCost = Infinity;
       const chosen = [], used = new Map();
-      const visit = (index, resolvedTier) => {
+      const visit = (index, resolvedTier, chosenCost = 0) => {
+        // Trade value of a full pot is constant for a product. Ingredient cost gives a safe lower bound.
+        if (costs && chosenCost + (lower[index] || 0) >= bestCost - 1e-8) return;
         if (index === slots.length) {
           if (resolvedTier !== recipe.tier) return;
           const total = calculateTotal(entry, chosen, product, model, base);
@@ -102,7 +110,7 @@
           if (!Number.isFinite(candidateScore) || candidateScore < bestScore) return;
           const result = makeForecast(entry, chosen.slice(), product, total, model);
           if (result && (!best || candidateScore > bestScore || compare(result, best, goal) < 0)) {
-            best = result; bestScore = candidateScore;
+            best = result; bestScore = candidateScore; bestCost = chosenCost;
           }
           return;
         }
@@ -111,7 +119,7 @@
           if (count >= stock[item.id] || (index > 0 && slots[index] === slots[index - 1] && item.id < chosen[index - 1].id)) continue;
           const itemTier = effectiveTier(item.tier, floor);
           used.set(item.id, count + 1); chosen.push(item);
-          visit(index + 1, itemTier === null ? resolvedTier : Math.min(resolvedTier ?? itemTier, itemTier));
+          visit(index + 1, itemTier === null ? resolvedTier : Math.min(resolvedTier ?? itemTier, itemTier), chosenCost + (costs?.get(item.id) || 0));
           chosen.pop(); used.set(item.id, count);
         }
       };

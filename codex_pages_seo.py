@@ -175,8 +175,8 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     <link rel="icon" href="{root}favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="{root}guide.css">
     <link rel="stylesheet" href="{root}game-theme.css">
-    {extra_head}
     <script src="{root}i18n.js" defer></script>
+    {extra_head}
   </head>
   <body>
     <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易行情</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
@@ -414,9 +414,8 @@ def validate_output_targets(output_dir: Path, names: list[str]) -> None:
                 raise ValueError(f"静态页面输出路径类型不正确：{name}")
 
 
-TRADE_TITLE = "生存日志交易行情｜联络地图据点货架与交易价值 · Survival Log"
-TRADE_DESCRIPTION = ("Survival Log 联络地图十个交易据点的货架清单：每种物品的库存、交易价值、灾前价格与"
-                     "每份使用次数，多据点在售物品比价。成交比率随据点需求、好感与鉴价在游戏内浮动。")
+TRADE_TITLE = "生存日志交易行情｜物资换什么、在哪换、加工值不值 · Survival Log"
+TRADE_DESCRIPTION = "登记手头物资，比较据点收货折价、联系人需求加价与加工增值，查找目标物品和货架。按玩家输入试算交易价值。"
 
 
 def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
@@ -432,8 +431,8 @@ def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
     cat_label = categories.get(str(cat), f"分类 {cat}") if cat is not None else "—"
     count = entry.get("count")
     tv = entry.get("trade_value")
-    price = entry.get("price")
     uses = entry.get("use_times")
+    full_value = tv * max(1, uses or 1) if isinstance(tv, (int, float)) else None
     badge = '<span class="shared-badge">多据点</span>' if entry["id"] in shared_ids else ""
     return (f'<tr data-cat="{h(str(cat))}" data-tv="{tv if isinstance(tv, (int, float)) else ""}"'
             f' data-uses="{uses if isinstance(uses, (int, float)) else ""}"'
@@ -443,13 +442,13 @@ def trade_item_row(entry: dict[str, Any], base: str, categories: dict[str, str],
             f'<td><span class="trade-cat" data-cat="{h(str(cat))}">{h(cat_label)}</span></td>'
             f'<td class="num">{h("—" if count is None else count)}</td>'
             f'<td class="num">{h("—" if not isinstance(tv, (int, float)) else tv)}</td>'
-            f'<td class="num">{h("—" if not isinstance(price, (int, float)) else price)}</td>'
+            f'<td class="num">{h("—" if full_value is None else full_value)}</td>'
             f'<td class="num">{h("—" if not uses else uses)}</td></tr>')
 
 
 def trade_table(rows: list[str], shared_header: bool = False) -> str:
     head = ("<tr><th scope=\"col\">图标</th><th scope=\"col\">物品</th><th scope=\"col\">类别</th>"
-            "<th scope=\"col\">库存</th><th scope=\"col\">交易价值</th><th scope=\"col\">灾前价格</th>"
+            "<th scope=\"col\">配置数量</th><th scope=\"col\">每用量基值</th><th scope=\"col\">完整一件基值</th>"
             + ("<th scope=\"col\">在售据点数</th>" if shared_header else "<th scope=\"col\">每份次数</th>")
             + "</tr>")
     return f'<div class="table-scroll"><table class="trade-table">{head}{"".join(rows)}</table></div>'
@@ -466,28 +465,63 @@ def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str
 
     shared_ids = {entry["id"] for entry in model.get("shared", [])}
     categories = {str(key): value for key, value in (model.get("categories") or {}).items()}
-    body = ('<div class="trade-hero"><div><p class="eyebrow">SURVIVAL LOG / TRADE</p><h1>交易行情</h1>'
-            '<p class="trade-subtitle">联络地图十个交易据点的货架与交易价值基准。</p></div></div>')
-    body += ('<section class="trade-mechanics"><h2>比率是怎么算的</h2>'
-             '<p>游戏成交估值的基准是物品的<strong>交易价值</strong>（TradeValue），不是灾前价格。只读核对当前版本的'
-             '原生估值函数后，交出物品的估值为：数量 × 交易价值 × 剩余用量比例 × 品质缩放（默认 1）×（需求加成或 1 ＋ 鉴价加成）。'
-             '换走的物品按交易价值计价，成交时交出估值须达到换走估值（含成交线折扣）。</p>'
-             '<p>“该据点当前想要什么”的需求轮换、来往好感与关系等级、鉴价加成、谈判折扣、货架受损和库存余量都是'
-             '游戏内存档里的运行时状态，会随日期变化；同一物品在不同据点的实际兑换比率因此不同。'
-             '本页只发布静态配置基准，不推断实时比率。</p>'
-             '<p>两条静态规则：据点不收自己货架上已有的物品（“他们货架上就有 X，不收”），'
-             '每种物资的收礼数量有上限（“他那儿的 X 已经够多了”）。</p></section>')
-    body += ('<form id="trade-controls" hidden class="trade-controls">'
-             '<label>找物品<input id="trade-search" type="search" autocomplete="off" placeholder="例如：种子、绷带"></label>'
-             '<label>类别<select id="trade-cat"><option value="">全部类别</option></select></label>'
-             '<label>排序<select id="trade-sort"><option value="default">默认顺序</option>'
-             '<option value="tv">交易价值降序</option><option value="uses">每份次数降序</option></select></label>'
-             '<label class="trade-shared-only"><input id="trade-shared-only" type="checkbox">只看多据点在售</label>'
-             '</form><p id="trade-status" role="status"></p>')
+    body = '''<div class="trade-hero"><p class="eyebrow">SURVIVAL LOG / TRADE DESK</p><h1>让手头物资换得更多</h1>
+<p class="trade-subtitle">先留下生存必需品，把愿意拿去换的余量填进来。比较直接交换，再看加工有没有增值。</p>
+<p class="trade-assumption">按配置与填写条件试算 · 当前货架、需求与加成由你确认</p></div>
+<div id="trade-planner" hidden>
+<div class="trade-workbench">
+<section class="trade-input"><h2><span class="trade-step">01</span> 我有什么可以换</h2>
+<p class="trade-help">数量按件 / 包填写；已用过的物品调整剩余比例。只填愿意投入的数量。</p>
+<div class="trade-controls"><label>找物资<input id="stock-search" type="search" placeholder="名称或 ID，例如：铁皮、香米"></label>
+<label>类别<select id="stock-cat"><option value="">全部类别</option></select></label></div>
+<div id="stock-catalog" class="trade-catalog"></div><p id="stock-status" class="trade-help"></p>
+<details class="trade-settings"><summary>物资很多？按行批量登记</summary>
+<p class="trade-help">每行填写“名称或 ID，件数，剩余百分比”，百分比可省略。同物品会更新数量与剩余比例。</p>
+<label for="stock-bulk">批量物资</label><textarea id="stock-bulk" rows="4" placeholder="铁皮，20&#10;生态香米，2，50"></textarea>
+<button id="stock-import" type="button">登记这些物资</button><p id="stock-import-status" class="trade-help" role="status"></p></details>
+<div class="trade-basket-heading"><h3>待交换清单</h3><button id="stock-example" type="button">试填铁皮与香米</button><button id="stock-clear" type="button">清空</button></div>
+<div id="stock-basket"></div><p class="trade-help">清单保存在此浏览器，刷新后可继续使用。</p></section>
+<section class="trade-output"><h2><span class="trade-step">02</span> 去哪里，能换多少</h2>
+<div class="trade-controls"><label>交易对象<select id="trade-destination"><option value="all">比较所有据点</option><option value="contact">陌生人 / 联系人</option></select></label>
+<label>找目标物品<input id="trade-target-search" type="search" placeholder="名称或 ID"></label>
+<label>我想换回<select id="trade-target"><option value="">只比较交出价值</option></select></label>
+<label>目标数量<input id="trade-target-count" type="number" value="1" min="1" max="9999" step="1"></label></div>
+<details class="trade-settings" id="trade-point-settings"><summary>选择已经解锁的据点</summary><div id="trade-enabled-points" class="trade-demand"></div></details>
+<div id="trade-contact" hidden><p class="trade-help">照着游戏当前需求勾选类别；加价只作用于勾选的物资。</p><div id="trade-demand" class="trade-demand"></div>
+<label>需求程度<select id="trade-urgency"><option value="0">无需求加价</option></select></label></div>
+<details class="trade-settings"><summary>鉴价、谈判与特殊状态</summary><div class="trade-controls">
+<label>鉴价加成 / %<input id="trade-appraisal" type="number" min="0" max="1000" value="0" step="1"></label>
+<label>谈判减免 / 价值点<input id="trade-discount" type="number" min="0" value="0" step="1"></label>
+<label class="trade-check"><input id="trade-camp" type="checkbox">无尽模式：营地特殊状态药品加价</label></div>
+<p class="trade-help">按本次交易的游戏显示填写。谈判减的是成交门槛的价值点；营地勾选项仅影响换入药品。</p></details>
+<div id="trade-summary" class="trade-summary" role="status"></div>
+<div id="trade-comparison"></div><div id="trade-breakdown"></div>
+<p class="trade-help">换入数量是估值上限，成交还需当前有货、双方物品能装进无人机。本页不推测装箱和实时库存。</p></section>
+</div>
+<section class="trade-processing"><h2><span class="trade-step">03</span> 要不要先加工</h2>
+<p class="trade-help">看加工比直接交换多赚多少价值。比较所有据点时，原料按各自最优据点的直接交换价计成本。每行是独立方案，材料不能在多行里重复投入。</p>
+<div class="trade-controls"><label>备料范围<select id="process-scope"><option value="stock">只看清单里能做的</option><option value="all">全部配方，找备料方向</option></select></label>
+<label>加工方式<select id="process-kind"><option value="">烹饪与制造</option><option value="cook">烹饪</option><option value="craft">制造</option></select></label>
+<label>烹饪等级<select id="process-cook-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option></select></label>
+<label>制造等级<select id="process-craft-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option><option value="4">4级</option><option value="5">5级</option></select></label>
+<label>菜肴品质<select id="process-quality"><option>普通</option><option>良好</option><option>完美</option></select></label>
+<label>排序<select id="process-sort"><option value="gain">每次加工增值最多</option><option value="ratio">原料增值比例最高</option><option value="total">现有余量总增值最多</option></select></label>
+<label>找配方<input id="process-search" type="search" placeholder="配方、成品或原料名称"></label>
+<label class="trade-check"><input id="process-positive" type="checkbox" checked>只看有增值</label></div>
+<p id="process-status" class="trade-help" role="status"></p><div id="process-results"></div>
+<button id="process-more" type="button" hidden>再看 20 个方案</button>
+<p class="trade-help">菜肴品质是所选结果的情景；制造按普通成功产物。未计成功概率、完美返料、燃料、精力、设备和路程。配方还需在游戏内解锁；含多次使用图纸的制造暂不排名。</p>
+</section></div>
+<noscript><p>启用 JavaScript 可登记物资、比较交换与加工收益。下方可直接查阅配置货架。</p></noscript>
+<details class="trade-shelves" id="trade-shelves"><summary>查货架 / 校正当前无货</summary>
+<p class="trade-help">默认按配置货架仍有货计算拒收。游戏里某物已不在当前可见货架上时，勾选“当前无货”，该物就可重新估值。配置数量不是实时库存。</p>
+<div class="trade-controls"><label>找货架物品<input id="shelf-search" type="search" placeholder="物品名称或 ID"></label></div>'''
     body += '<nav class="trade-points-nav" aria-label="据点跳转">' + "".join(
         f'<a href="#p{h(str(point["id"]))}">{h(clean_text(point["name"]))}</a>' for point in model["points"]) + '</nav>'
     for point in model["points"]:
-        rows = [trade_item_row(entry, base, categories, shared_ids) for entry in point["items"]]
+        rows = [trade_item_row(entry, base, categories, shared_ids).replace('</tr>',
+                f'<td class="shelf-state"><label><input type="checkbox" data-absent-point="{point["id"]}" '
+                f'data-absent-item="{entry["id"]}">当前无货</label></td></tr>') for entry in point["items"]]
         offer = "、".join(categories.get(str(cat), f"分类 {cat}") for cat in point.get("offer_cats") or [])
         body += f'<section class="trade-point" id="p{h(str(point["id"]))}">'
         body += (f'<h2>{h(clean_text(point["name"]))}<span class="trade-shop-id">货架 {h(str(point["shop_id"]))}</span></h2>')
@@ -495,22 +529,19 @@ def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str
             body += f'<p class="trade-hint">解锁提示：{h(clean_text(point["hint"]))}</p>'
         if offer:
             body += f'<p class="trade-offer">货架分类：{h(offer)}</p>'
-        body += trade_table(rows)
+        half_cat = categories.get(str(point.get("half_value_cat")), f"分类 {point.get('half_value_cat')}")
+        body += f'<p class="trade-offer">{h(half_cat)}交出时按同类折价；当前货架已有的同物品拒收。</p>'
+        body += trade_table(rows).replace('</tr>', '<th scope="col">货架校正</th></tr>', 1)
         body += '</section>'
-    shared_rows = []
-    for entry in model.get("shared", []):
-        row = trade_item_row(entry, base, categories, shared_ids)
-        owners = "、".join(clean_text(next(p["name"] for p in model["points"] if p["id"] == owner))
-                           for owner in entry.get("points") or [])
-        shared_rows.append(row.replace('</tr>', f'<td>{h(owners)}</td></tr>'))
-    body += '<section class="trade-point" id="trade-shared"><h2>多据点在售</h2>'
-    body += '<p>这些物品同时在多个据点的货架上，静态交易价值相同；实际兑换比率仍随各据点的需求状态浮动。</p>'
-    body += trade_table(shared_rows, shared_header=True)
-    body += ('</section><p class="trade-note">交易价值与价格均为静态配置；游戏内成交还要经过需求加成、'
-             '鉴价、谈判折扣与无人机容量限制。数据由 <code>codex_pages_trade.py</code> 从本地游戏配置只读导出。</p>')
+    body += '''</details><details class="trade-mechanics"><summary>怎么看这些价值与增值</summary>
+<p>交换用的是交易价值，不是灾前价格。完整一件基值 = TradeValue × max(1, 配置 UseTimes)。已用物品再乘“剩余次数 / 实例最大次数”；菜肴分份不额外增加完整一锅的交易基值。</p>
+<p>据点：同类物资应用该据点折价系数，再应用有效 TradeSellRate；当前可见货架仍有的同物品拒收。联系人：需求物资应用需求加价，不应用据点专用 TradeSellRate。鉴价与需求加成相加。</p>
+<p>加工增值 = 成品交出估值 − 原料直接交换估值。比较所有据点时，原料按各自最优据点计成本；指定对象时按该对象计成本。原料若在比较范围内都被拒收，保守按原始基值计成本，不能当免费材料。谈判减免只用于本次交换，不计入每锅增值。</p>
+<p>关系进度 NextNeed 是下一关系档的门槛，不是轮换需求，也不作为普遍估值倍率。没有把赠礼或补给上限套到普通交换。当前无货只校正拒收，不代表可换入库存。</p>
+<p>试算覆盖普通双向交易。援助、捐赠、派遣、损坏或特殊货架的限制请按游戏界面确认。不同配方不会联合分配库存；排序帮助选加工方向，不承诺整仓物资的全局最优路线。</p></details>'''
     # 与补给推荐页一致：JSON 合法的 unicode 转义防止 </script> 截断，不做 HTML 转义。
     data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \
         .replace("<", "\\u003c").replace("&", "\\u0026")
     body += f'<script id="trade-data" type="application/json">{data_json}</script>'
     return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version,
-                 extra_head='<link rel="stylesheet" href="../trade.css"><script src="../trade.js" defer></script>')
+                 extra_head='<link rel="stylesheet" href="../trade.css"><script src="../cooking.js" defer></script><script src="../trade.js" defer></script>')

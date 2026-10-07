@@ -180,13 +180,10 @@
       if (!positive(seconds)) return NaN;
       if (trade) {
         const output = dishById.get(entry.id)?.qualities[product.quality];
-        const threshold = entry.portion_model.threshold > 0 ? entry.portion_model.threshold : data.cooking?.model?.split_threshold;
-        if (!positive(threshold)) return NaN;
-        const servings = Math.max(1, Math.ceil(Math.fround(total[0] / Math.fround(threshold))));
         const outputValue = givenValue(output?.trade_value, output?.sell_rate, options.sellChannel);
         const inputValues = ingredients.map(item => resources.get(item.id)?.item.trade_value);
         if (outputValue === null || !inputValues.every(positive)) return NaN;
-        return (outputValue * servings - inputValues.reduce((a, b) => a + b, 0)) / (1 + seconds / 3600);
+        return (outputValue * (output?.trade_uses || 1) - inputValues.reduce((a, b) => a + b, 0)) / (1 + seconds / 3600);
       }
       const active = seconds / 60 * options.cookActive / 100;
       const burden = 1 + w.economy * route.cash / options.cash + w.labor * (route.minutes + active) / options.care +
@@ -220,7 +217,7 @@
         row.inputTrade = output.ingredients.reduce((sum, ingredient) => sum + (resources.get(ingredient.id).item.trade_value ?? NaN), 0);
         const product = original.qualities[options.quality];
         const outValue = givenValue(product?.trade_value, product?.sell_rate, options.sellChannel);
-        row.outputTrade = outValue === null ? null : outValue * output.servings;
+        row.outputTrade = outValue === null ? null : outValue * (product?.trade_uses || 1);
         row.tradeMargin = Number.isFinite(row.inputTrade) && row.outputTrade !== null ? row.outputTrade - row.inputTrade : null;
         row.tradeRatio = positive(row.inputTrade) && row.outputTrade !== null ? row.outputTrade / row.inputTrade : null;
         row.cost100 = positive(output.total[0]) ? routes.cash * 100 / output.total[0] : null;

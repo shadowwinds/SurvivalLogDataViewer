@@ -41,7 +41,8 @@ def model_icon_requests(game_version: str | None) -> list[dict]:
             model = json.loads((SOURCE_DIR / name).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(model, dict) or model.get("format_version") != 1 \
+        expected_format = 2 if name == "trade-model.json" else 1
+        if not isinstance(model, dict) or model.get("format_version") != expected_format \
                 or model.get("game_version") != game_version:
             continue
         for icon in model.get("bait_icons", []):
