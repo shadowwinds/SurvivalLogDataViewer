@@ -1,10 +1,10 @@
 # Survival Log 图鉴辅助配置（离线解析）
 
-- 生成时间：2026-10-06T01:34:12+08:00
-- 游戏资源版本：1.1.18293 / catalog 2.3.1
+- 生成时间：2026-10-15T00:23:21+08:00
+- 游戏资源版本：1.1.18599 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/36e63204cc1526b87676160b32cf9815.bundle`
-- 条目数量：676
+- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/6dd3f58c50251767834b861902f6e0ef.bundle`
+- 条目数量：678
 - 配置表：`Config_ItemSubCategory`、`Config_FoodType`、`FoodTag1`、`FoodTag2`、`Config_PlantLv`、`Config_ProductionLv`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`、`Config_Bag`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：保存主图鉴条目引用的分类、等级和家具辅助配置；这些行不参与六类图鉴完成进度。
@@ -326,6 +326,7 @@
 - 前置条件：`[]`；解析：无
 - 体力消耗降低：0.1
 - 完美制作率：0
+- craft_time_reduction：0
 
 ### 熟练工匠\n新增：完美制造概率 +10%（ID 2）
 
@@ -336,16 +337,18 @@
 - 前置条件：`[]`；解析：无
 - 体力消耗降低：0.1
 - 完美制作率：0.1
+- craft_time_reduction：0
 
-### 资深工匠\n强化：制造精力消耗 -10% → -20%（ID 3）
+### 资深工匠\n强化：制造精力消耗 -10% → -20%\n新增：制造速度 +25%（ID 3）
 
 - 等级：3
 - 经验：4500
 - 说明键：ProductionLv_Info_3
-- 说明：资深工匠\n强化：制造精力消耗 -10% → -20%
+- 说明：资深工匠\n强化：制造精力消耗 -10% → -20%\n新增：制造速度 +25%
 - 前置条件：`[]`；解析：无
 - 体力消耗降低：0.2
 - 完美制作率：0.1
+- craft_time_reduction：0.2
 
 ### 工艺师\n强化：完美制造概率 +10% → +15%（ID 4）
 
@@ -356,6 +359,7 @@
 - 前置条件：`[]`；解析：无
 - 体力消耗降低：0.2
 - 完美制作率：0.15
+- craft_time_reduction：0.2
 
 ### 工匠大师\n强化：制造精力消耗 -20% → -30%\n强化：完美制造概率 +15% → +20%（ID 5）
 
@@ -366,6 +370,7 @@
 - 前置条件：`[]`；解析：无
 - 体力消耗降低：0.3
 - 完美制作率：0.2
+- craft_time_reduction：0.2
 
 ## 家具功能配置
 
@@ -12592,18 +12597,18 @@
 - 标签说明键：FurnitureTag_TagDesc_1013
 - 标签说明：能烧的燃料。
 
-### 防卫（ID 1014）
+### 战斗用品（ID 1014）
 
 - ID：1014
 - 标签键：FurnitureTag_TagName_1014
-- 标签名称：防卫
+- 标签名称：战斗用品
 - 图标键：defense
 - 颜色：#6D8FB0
 - 排序优先级：4
 - 维度：0
 - 排序：480
 - 标签说明键：FurnitureTag_TagDesc_1014
-- 标签说明：拿来防守用的东西。
+- 标签说明：燃烧瓶、藤蔓这类要带在身上、打起来才用的东西。
 
 ### 书刊（ID 1015）
 
@@ -12838,6 +12843,19 @@
 - 排序：437
 - 标签说明键：FurnitureTag_TagDesc_1032
 - 标签说明：任务要用到的钥匙、套件、文书和信物。
+
+### 防御耗材（ID 1033）
+
+- ID：1033
+- 标签键：FurnitureTag_TagName_1033
+- 标签名称：防御耗材
+- 图标键：repair
+- 颜色：#B07A55
+- 排序优先级：4
+- 维度：0
+- 排序：485
+- 标签说明键：FurnitureTag_TagDesc_1033
+- 标签说明：修补、加固门窗和修理防御设施用的耗材。
 
 ## 家具伙伴配置
 
@@ -13632,5 +13650,14 @@
 - 名称键：Bag_Name_115004
 - 名称：酿酒桶
 - 尺寸：[6, 6]
+- Burden：0
+- UseOwnerName：1
+
+### 大容量冰柜（ID 115005）
+
+- ID：115005
+- 名称键：Bag_Name_115005
+- 名称：大容量冰柜
+- 尺寸：[12, 10]
 - Burden：0
 - UseOwnerName：1

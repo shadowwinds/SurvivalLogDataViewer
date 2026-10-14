@@ -1,10 +1,10 @@
 # Survival Log 家具（离线解析）
 
-- 生成时间：2026-10-06T01:34:11+08:00
-- 游戏资源版本：1.1.18293 / catalog 2.3.1
+- 生成时间：2026-10-15T00:23:21+08:00
+- 游戏资源版本：1.1.18599 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/36e63204cc1526b87676160b32cf9815.bundle`
-- 条目数量：110
+- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/6dd3f58c50251767834b861902f6e0ef.bundle`
+- 条目数量：111
 - 配置表：`Config_Furniture`、`Config_FurnitureFunc`、`Config_FurnitureCook`、`Config_FurniturePlant`、`Config_FurnitureElectrical`、`Config_FurnitureState`、`Config_FurnitureTag`、`Config_FurniturePartner`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：记录 Config_Furniture 全部配置，并按语义解析家具功能、种植、烹饪和电力关联；解锁状态不读取存档。
@@ -2164,6 +2164,68 @@
 - 电力类型：1
 - 制冷系数：0.2
 - 耗电：6
+- 供电模式：0
+- 热量输出：0
+- 电力配置 ID：无
+- 恢复系数：0
+- 防御减伤系数：0
+- 进入图鉴：是
+- 随机掉落组：无
+- 掉落组 P1：无
+- 掉落组 P2：无
+- 掉落组 P3：无
+- 掉落组 P4：无
+- 掉落数量：0
+- 腐烂产物覆盖：`[]`；解析：无
+- 腐烂来源子类：`[]`；解析：无
+- 容器接受物品大类：0
+- 机器人角色 ID：0
+
+### 大容量冰柜（ID 15002）
+
+- ID：15002
+- 名称键：Furniture_Name_15002
+- 名称：大容量冰柜
+- 状态机名称：
+- 故事 ID：无
+- 资源名称：P_Freezer_006_S1_M01_Big
+- 包裹资源名称：P_WoodBox_03
+- 图标：../../Res/Furniture/UI_Item_Icon_bingui_chaoda.png
+- 家具价格：250
+- 典当价格：0
+- 购买奖励组：无
+- 安装时间：200
+- 描述键：Furniture_Des_15002
+- 描述：双开玻璃门的商用大冰柜，容量比普通冰柜大一半，能把一整批食物低温囤起来。
+- 家具类型：0
+- 商店页：1
+- Demo 模式：1
+- 家具槽位类型：3
+- 自动静音：否
+- 显示名称：是
+- 显示储物：400
+- 显示耐久：否
+- 家具耐久：1000
+- 家具最大耐久：1000
+- 低耐久提示键：
+- 低耐久提示：
+- 可损坏：否
+- 损坏提示键：
+- 损坏提示：
+- 家具功能：`[1, 5, 215, 213, 1722, 1723, 2006]`；解析：取用（ID 1）、整理物资（ID 5）、清点物资（ID 215）、做冰块（ID 213）、开启电器（ID 1722）、关闭电器（ID 1723）、消毒（ID 2006）
+- 移除功能：`[299]`；解析：拆除（ID 299）
+- 移动功能：`[1608]`；解析：移动（ID 1608）
+- 移除获得：`[20360, 20360, 20378, 20371]`；解析：精致铁皮（ID 20360）、精致铁皮（ID 20360）、碳纤维板（ID 20378）、集成电路（ID 20371）
+- 动作 ID：ID:2
+- 动作位置：
+- 种植配置 ID：无
+- 烹饪配置 ID：无
+- 花瓶容量：0
+- 包裹 ID：大容量冰柜（ID 115005）
+- 通电家具：是
+- 电力类型：1
+- 制冷系数：0.2
+- 耗电：9
 - 供电模式：0
 - 热量输出：0
 - 电力配置 ID：无

@@ -38,6 +38,16 @@
 
 交易模型额外白名单导出 `Config_Item.Size` 的 `[宽, 高]`，占格 = 宽 × 高；空、非正或非二维尺寸明确显示未提供，不默认 1 格。当前本地游戏所有物品尺寸均为两个正整数，当前公开交易模型物品的 `StackLimit` 均为 1；游戏另有可堆叠装修材料，不在该模型范围内，不把堆叠机制套到这些单件物资。物资目录、清单和配置货架展示完整单件占格与每格基值；携带排行按所选对象的实际交出估值 / 单件占格排序，清单使用剩余比例，全部物品使用完整一件。指定目标时只比较有目标的可用对象，按原生 float32 交出估值二分求只用一种物资的最少整数件数，显示所需面积及清单是否够用。制造与烹饪还可按成品每格交出价值排序，重复产物分别计件并累加占格；不是按每格净利润排序。格数是矩形面积合计，不推断二维摆放、旋转可行性、负重或无人机容量；每行仍独立估算。
 
+## 增值规划页（食材增值与种植推荐）
+
+`/value/` 页面由 `codex_pages_seo.py` 的 `value_document` 生成：交易模型存在时合成为 `value_model`（format_version 1），在 trade_model 基础上补充 `recommendations` 的 `crops`、`planters`、`plant_levels` 与 `pages/planting-environment.json` 的环境数据，内嵌为 `<script id="value-data">`（`<` 转义防注入）；交易模型缺失或版本不匹配时输出无脚本的静态说明。样式为 `pages/value.css`，前端逻辑为 `pages/value.js`，计算在 `pages/value-worker.js`（`importScripts("cooking.js")` 复用 `Cooking.plan` 的真实档位组合枚举）。导航入口在首页与各独立页的页眉。
+
+口径与交易行情一致：物品基值 = `TradeValue`，完整一件 = `TradeValue × max(1, UseTimes)`；烹饪材料成本按基值计，成品收益 = 完整一件基值（多分份不叠加交易收益，沿用每锅交出基值的结论）。登记库存保存在浏览器 localStorage（`survival-log-value:<游戏版本>`），不读取游戏库存或存档；剩余用量百分比按 `UseTimes × 剩余%` 折算可用次数。
+
+计算分三类：固定食材菜与制造配方进入同一候选池，按增值比例贪心分配并做局部交换改进（少做一锅 A 换多锅 B，总增值提升才交换）；通用档位菜由 `Cooking.plan` 枚举可行组合，每个配方记录净增值最高的组合后与候选池统一排序；已勾选执行的方案在下次计算时按登记投入重放，库存不足按比例缩减并标记。补给品（陷阱猎物、交易可补充的主食等）勾选后视为按需补充：不占库存、不参与扣减，每锅方案上限 99 份。烹饪/制造等级按用户选择过滤配方等级；品质是所选情景，不推断成功率。结果不含燃料、时间、精力与设施成本，不承诺实际成交价或库存核对。
+
+种植规划复用 `pages/planting.js` 的条件判定：用户选择天气、寒潮、位置、供暖设备、用电与容器后显示当前可种作物及不满足原因；作物表按“单次收获净增值”（收获完整基值 − 种子期望成本，种子成本按 `Seed_Rate` 返种率折算）与“每小时净增值”两种排序，不预测实际售价、天气变化或库存。种子与食材是两类登记对象：肉从陷阱获得、主食从交易获得，按补给品语义处理，不需要登记冰箱存量。
+
 ## 通用构建说明
 
 `codex_pages.py` 以 SQLite `mode=ro` 读取仓库已公开的静态配置库，使用现有字段标签和详情格式器生成 `pages/` 的独立浏览网页。构建不访问游戏安装目录，不附加 runtime 库，不读取存档；导出保留当前条目、六类映射、成就（含隐藏成就）、原始关联 ID 和配置字段。元数据仅允许导出游戏版本和数据库 schema 版本，不发布游戏目录、存档路径、完成状态或缓存。`prey-model.json` 在构建时同样按版本校验：一致则映射图标后随站点发布，不一致则不发布该文件，前端回退为纯食用属性视图。
@@ -88,7 +98,9 @@
 
 本次将正式解析器、七份导出和静态库统一更新至当前本地版本。新版元数据确认 `Config_Item` 在 `UseAction` 前增加 `TradeSellRate: Single`（61 字段）；`Config_PlantLv` 末尾增加 `unlock_recipes: List<int>`（11 字段）；`Config_Furniture` 末尾增加 `BagAcceptCategory`、`RobotPlayerID`（59 字段）；`Config_FurnitureTag` 增加排序、维度及说明字段（10 字段）。`Config_ConstantText` 按三个字符串字段严格读取，验证非空唯一键和 EOF，仅提取食用标签进入导出，不公开完整常量表。所有配置保留对象成员数量与 EOF 校验，不静默兼容未知 schema。
 
-`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标，另把 `entry_relations` 中全部“制造材料”关联指向的物品（家具与制造列表卡片的配方材料）加入提取范围。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18293 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建复制条目、成品、烹饪食材及制造配方材料引用的全部图标，工作流不读取游戏。
+`1.1.18599` 更新（catalog 仍为 2.3.1）按 IL2CPP 元数据与实际序列化成员数双重核对：`Config_ProductionLv` 末尾新增 `craft_time_reduction`，schema 改为 8 字段；`Config_TrapRoomBias` 类声明新增 `empty_weight_reduction`、`rare_prey_bonus`、`capture_cost_reduction`、`interval_reduction` 四个字段，但对象序列化成员仍为 7（新成员不参与 MemoryPack 布局），schema 保持 7 字段并加注释说明，prey 导出按 7 字段完整读取验证。全部配置表按严格 schema 读到 EOF；七份 Markdown、静态库、各公开模型与图标已用当前游戏目录重建，制造图鉴 163→164、家具 110→111。
+
+`codex_pages_icons.py` 是独立的只读图标提取工具，复用现有 catalog EOF 验证与 bundle 名称/hash 定位、解密流程，只处理当前公开图鉴条目、成就及其菜肴成品、植物收获物、普通制造产物所引用的图标，另把 `entry_relations` 中全部“制造材料”关联指向的物品（家具与制造列表卡片的配方材料）加入提取范围。生成带透明背景的 PNG 缩略图及只含游戏版本和图标文件名的清单；没有有效纹理的资源记录为缺失，网页使用分类符号占位。本次图标与静态库均来自本机游戏 `1.1.18599 / catalog 2.3.1`，图片不用于替换数值来源。Pages 构建复制条目、成品、烹饪食材及制造配方材料引用的全部图标，工作流不读取游戏。
 
 本地 catalog 中部分动物图标存在路径，但 bundle 的容器指针为零，无法解引用。提取器对缺失引用按同一配置的 `WebIcon`、`ICON` 或 `WebSmallIcon` 回退到游戏自带 `WebUI/Res` PNG，不按名称猜测、不访问网络。仅允许当前公开引用涉及的 Achievement、Consumable、Electrical、Food、Furniture、Literature、Material、RobotModule、Structure、icon 目录中的单层 PNG 文件，拒绝越界与文件符号链接；Achievement 目录为本次新内容更新中的成就图标补入。回退图片同样缩放至最长边 192、保留透明通道，沿用配置图标路径的哈希文件名；清单的 `web_ui_icons` 仅记录回退图标文件名，不泄露本机路径。
 
@@ -132,7 +144,7 @@
 
 本项目直接读取当前本地游戏安装目录中的 YooAsset catalog、加密 UnityFS bundle 和 MemoryPack 配置，并只读读取用户本机 `HistorySave.bytes` 中的图鉴完成状态。不启动游戏，不修改存档、mod DLL、游戏资源或 Steam Cloud。
 
-当前本地游戏资源版本为 `1.1.18293`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
+当前本地游戏资源版本为 `1.1.18599`，catalog 版本为 `2.3.1`。完整解析生成六份主图鉴和一份辅助配置；成就配置另外写入 SQLite 的 `achievements` 表：
 
 - [survival_log_food.md](./snapshots/survival_log_food.md)
 - [survival_log_dish.md](./snapshots/survival_log_dish.md)
@@ -142,7 +154,7 @@
 - [survival_log_furniture.md](./snapshots/survival_log_furniture.md)
 - [survival_log_auxiliary.md](./snapshots/survival_log_auxiliary.md)
 
-当前原始主配置表数量为：`Config_Item` 3857、`Config_CookingRecipe` 524、`Config_Plant` 42、`Config_ProductionList` 820、`Config_Furniture` 1556。严格按展示规则导出的数量为：食品 191、菜肴 524、植物 38、猎物 23、制造 163、家具 110，六类分类映射合计 `1049`，去重条目 `1026`；辅助配置 `676` 行（含新增 `Config_Bag` 85 行）。当前 `Config_Achievement` 读取 115 行、21 个字段；游戏在版本号不变的情况下静默新增 22 个成就并把 1104「堡垒」更名为「城市守护者」，人工说明已同步补齐。原始配置总量与 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数不能混用。
+当前原始主配置表数量为：`Config_Item` 3870、`Config_CookingRecipe` 524、`Config_Plant` 42、`Config_ProductionList` 829、`Config_Furniture` 1557。严格按展示规则导出的数量为：食品 191、菜肴 524、植物 38、猎物 23、制造 164、家具 111，六类分类映射合计 `1051`，去重条目 `1028`；辅助配置 `678` 行（含 `Config_Bag` 85 行）。当前 `Config_Achievement` 读取 115 行、21 个字段；游戏在版本号不变的情况下静默新增 22 个成就并把 1104「堡垒」更名为「城市守护者」，人工说明已同步补齐。原始配置总量与 `InCodex == true` 筛选（菜肴表无该字段）后的图鉴展示基数不能混用。
 
 ## 2. 游戏图鉴和存档
 

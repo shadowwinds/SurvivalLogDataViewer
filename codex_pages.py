@@ -19,7 +19,7 @@ from codex_database import CATEGORY_LABELS, CATEGORY_ORDER, DATABASE_SCHEMA_VERS
 from codex_parser import FIELD_LABELS, format_scalar
 from codex_pages_planting import add_planting_data
 from codex_pages_recommendations import build_recommendations, recommendation_document
-from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, trade_document, validate_output_targets
+from codex_pages_seo import DEFAULT_SITE_URL, home_seo, normalize_site_url, seo_documents, trade_document, validate_output_targets, value_document
 from codex_server import _achievement_payload, _build_detail_fields
 
 
@@ -27,7 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "trade-worker.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "trade-worker.js", "value.css", "value.js", "value-worker.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -631,14 +631,22 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
     if prey_model:
         prey_model = map_model_icons(prey_model)
     trade_model = load_versioned_model(TRADE_MODEL_FILE, payload["metadata"].get("game_version"), 2)
+    value_model = None
     if trade_model:
         trade_model = map_trade_model_icons(trade_model)
         trade_model["cooking"] = payload["recommendations"]["cooking"]
         trade_model["dishes"] = [{key: row[key] for key in ("id", "name", "level", "seconds")}
                                  for row in payload["recommendations"]["dishes"]]
+        # 增值页复用 trade 模型的物品/烹饪/制造数据，另附种植条目与环境模型。
+        value_model = {**trade_model, "format_version": 1,
+                       "crops": payload["recommendations"]["crops"],
+                       "planters": payload["recommendations"]["planters"],
+                       "plant_levels": payload["recommendations"]["plant_levels"],
+                       "planting_environment": payload["planting_environment"]}
     documents = seo_documents(payload, site_url, {
         "recommendations/index.html": recommendation_document(payload, site_url),
-        "trade/index.html": trade_document(trade_model, site_url, payload["metadata"].get("game_version", "未提供"))})
+        "trade/index.html": trade_document(trade_model, site_url, payload["metadata"].get("game_version", "未提供")),
+        "value/index.html": value_document(value_model, site_url, payload["metadata"].get("game_version", "未提供"))})
     validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll",
                                          *documents, *( [PREY_MODEL_FILE] if prey_model else [])])
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -1,10 +1,10 @@
 # Survival Log 制造（离线解析）
 
-- 生成时间：2026-10-06T01:34:09+08:00
-- 游戏资源版本：1.1.18293 / catalog 2.3.1
+- 生成时间：2026-10-15T00:23:19+08:00
+- 游戏资源版本：1.1.18599 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/36e63204cc1526b87676160b32cf9815.bundle`
-- 条目数量：163
+- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/6dd3f58c50251767834b861902f6e0ef.bundle`
+- 条目数量：164
 - 配置表：`Config_ProductionList`、`Config_ProductionLv`、`Config_Item`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
 - 说明：记录 Config_ProductionList 全部配置，包含制造材料、产物、失败产物、完美产物、等级、概率和经验等字段；解锁状态不读取存档。
@@ -3529,6 +3529,28 @@
 - 发现经验：0
 - 进入图鉴：是
 - 笔记分类：1
+- 防御经验：0
+
+### 大容量冰柜包裹（ID 474）
+
+- ID：474
+- 制造名称键：ProductionList_ShopName_474
+- 制造名称：大容量冰柜包裹
+- Demo 模式：1
+- 可使用：是
+- 材料：`[20360, 20360, 20378, 20378, 20378, 20371]`；解析：精致铁皮（ID 20360）、精致铁皮（ID 20360）、碳纤维板（ID 20378）、碳纤维板（ID 20378）、碳纤维板（ID 20378）、集成电路（ID 20371）
+- 产物：`[14099]`；解析：大容量冰柜包裹（ID 14099）
+- 失败产物：`[]`；解析：无
+- 要求等级：4
+- 折扣率：1
+- 最短时间：240
+- 显示等级：4
+- 制作等级：4
+- 完美产物：`[]`；解析：无
+- 完美率：0
+- 发现经验：0
+- 进入图鉴：是
+- 笔记分类：7
 - 防御经验：0
 
 ### 中级堆肥箱包裹（ID 1513）

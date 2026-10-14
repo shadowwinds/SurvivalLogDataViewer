@@ -352,7 +352,7 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
     "Config_ProductionLv": (
         ("Lv", "i32"), ("EXP", "i32"), ("Info", "str"), ("Info_Local", "str"),
         ("required_condition", "list_i32"), ("stamina_reduction", "f32"),
-        ("perfect_craft_rate", "f32"),
+        ("perfect_craft_rate", "f32"), ("craft_time_reduction", "f32"),
     ),
     "Config_Furniture": (
         ("ID", "i32"), ("Name", "str"), ("Name_Local", "str"), ("FsmName", "str"),
@@ -454,6 +454,8 @@ CONFIG_SCHEMAS: dict[str, tuple[SchemaField, ...]] = {
         ("rare_prey_bonus", "f32"), ("capture_cost_reduction", "i32"),
         ("interval_reduction", "f32"), ("unlock_recipes", "list_i32"),
     ),
+    # 1.1.18599 类声明新增 empty_weight_reduction/rare_prey_bonus/capture_cost_reduction/
+    # interval_reduction，但序列化成员仍为 7（新成员不参与 MemoryPack 布局），保持原 schema。
     "Config_TrapRoomBias": (
         ("ID", "i32"), ("Des1", "str"), ("Des_name_Local", "str"),
         ("Prey_Id", "list_i32"), ("Room_coefficient", "list_f32"),

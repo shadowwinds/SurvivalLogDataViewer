@@ -1,9 +1,9 @@
 # Survival Log 食品（离线解析）
 
-- 生成时间：2026-10-06T01:34:00+08:00
-- 游戏资源版本：1.1.18293 / catalog 2.3.1
+- 生成时间：2026-10-15T00:23:12+08:00
+- 游戏资源版本：1.1.18599 / catalog 2.3.1
 - 数据包：`mainpackage_assets_runtimeassets_config_memorypack.bundle`
-- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/36e63204cc1526b87676160b32cf9815.bundle`
+- 实际读取文件（相对游戏目录）：`SurvivalLog_Data/StreamingAssets/PackageManifest/MainPackage/6dd3f58c50251767834b861902f6e0ef.bundle`
 - 条目数量：191
 - 配置表：`Config_Item`、`Config_ItemSubCategory`、`Config_FoodType`
 - 解析方式：直接读取本地 YooAsset 加密资源包和 MemoryPack 配置，不启动游戏。
@@ -3104,7 +3104,7 @@
 - 食品标签1：1；即食
 - 食品标签2：无
 - 食品标签3：1；ID:1
-- 尺寸：[2, 2]
+- 尺寸：[1, 2]
 - 价格：10
 - 重量：1000
 - 保质时间：360
@@ -7097,8 +7097,8 @@
 - 发现经验：0
 - 捕获经验：0
 - FMOD 路径：event:/UI/naqu
-- 图标：Assets/RuntimeAssets/Texture/Food/UI_Item_Icon_Food_S_1300500301
-- 网页图标：../../Res/Food/UI_Item_Icon_Food_S_1300500301.png
+- 图标：Assets/RuntimeAssets/Texture/Food/UI_wanzhengniuliji
+- 网页图标：../../Res/Food/UI_wanzhengniuliji.png
 - 模型：Assets/RuntimeAssets/Prefabs/Furniture/P_Food_001_S1_M01
 - 条件组：无
 - 高需求：否
