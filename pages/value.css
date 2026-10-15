@@ -69,6 +69,7 @@ body > main .value-block h2 { font-size: 22px; margin: 0 0 14px; }
 .value-crop-table td { font-variant-numeric: tabular-nums; }
 .value-crop-table tr.value-unfit td { color: #8f876f; }
 .value-crop-table tr.value-unfit .value-cell-name small { color: #a3705a; }
+.value-crop-table td .value-bonus { display: block; color: #d0dca0; font-size: 12px; }
 .value-crop-summary { color: #c3b89f; font-size: 13px; margin: 6px 0; }
 .value-heaters { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; }
 .value-heaters label { display: flex; align-items: center; gap: 6px; }

@@ -633,17 +633,17 @@ def value_document(model: dict[str, Any] | None, base: str, version: str) -> str
 <label class="value-check"><input id="value-plantable" type="checkbox"><span>只看能种的</span></label></div>
 </section>
 <section class="value-block" id="value-crops-block"><h2><span class="value-step">04</span> 种什么最赚</h2>
-<p class="value-help">净增值 = 收获基准价值 − 种子成本（按返还率折算期望）。生长时间取基础值，未计生长加速、照料和枯萎损失。</p>
+<p class="value-help">净增值 = 收获基准价值 + 最佳加工增值 − 种子成本（按返还率折算期望）。加工增值按所选品质与烹饪/制造等级下、每个收获物可做的最优烹饪或制造估算，填充料按最省可行组合计。生长时间取基础值，未计生长加速、照料和枯萎损失。</p>
 <div class="value-sort"><button type="button" data-crop-sort="net">单次收获净增值</button>
 <button type="button" data-crop-sort="hour">每小时净增值</button></div>
 <p id="value-crop-summary" class="value-crop-summary"></p>
-<div class="table-scroll"><table id="value-crops" class="value-crop-table"><thead><tr><th>作物</th><th>收获</th><th>种子</th><th>返种率</th><th>种子成本</th><th>期望净增值</th><th>每小时</th><th>生长 / 时</th><th>占位</th></tr></thead><tbody></tbody></table></div>
+<div class="table-scroll"><table id="value-crops" class="value-crop-table"><thead><tr><th>作物</th><th>收获</th><th>最佳加工</th><th>种子</th><th>返种率</th><th>种子成本</th><th>期望净增值</th><th>每小时</th><th>生长 / 时</th><th>占位</th></tr></thead><tbody></tbody></table></div>
 </section>
 </div>
 <details class="value-notes"><summary>口径与边界</summary>
 <p>本页用<strong>交易基准价值</strong>：每用量基值 = <code>TradeValue</code>，完整一件 = <code>TradeValue × max(1, UseTimes)</code>。菜肴一锅按整锅交易基值计，分份不重复相乘。这是和陌生人交易的账面价值；据点折价、需求加价、鉴价请到交易行情页试算。</p>
 <p>烹饪按游戏配置：固定食材配方优先，剩余食材按通用档位组合枚举（高 1.7 / 中 1.4 / 低 1.1 系数与游戏 <code>CalcProductVD</code> 对齐），以原料机会成本（直接卖的价值）计算净增值，贪心分配后做局部交换改进。制造按普通成功产物。</p>
-<p>种植：收获数量按配置 <code>Gain</code> 列表（重复项即数量），种子成本按 <code>Seed_Rate</code> 返还率折算期望；完美收获、枯萎、生长加速与照料时间未计入。环境与可种判定和种植页一致。</p>
+<p>种植：收获数量按配置 <code>Gain</code> 列表（重复项即数量），种子成本按 <code>Seed_Rate</code> 返还率折算期望。加工增值把收获物的最优加工收益计入作物价值：制造配方与固定食材配方按配置精确计算，通用档位配方的其他槽位按最省可行食材填充并校验档位组合，取每单位收获物净增值最高的一项；填充料是规划估计，实际收益取决于你现有的其他食材，且与库存方案可能重复计算同一批收获。完美收获、枯萎、生长加速与照料时间未计入。环境与可种判定和种植页一致。</p>
 <p>模型来自静态配置，不含库存读取。登记数据只保存在本浏览器。</p></details></div>
 <noscript><p>启用 JavaScript 可登记物资并计算增值方案。</p></noscript>'''
     data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \

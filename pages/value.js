@@ -181,9 +181,9 @@
     $("value-cook-level").value = String(cookLevel);
     $("value-craft-level").value = String(craftLevel);
     $("value-positive").checked = positiveOnly;
-    $("value-quality").addEventListener("change", () => { quality = $("value-quality").value; save(); schedule(); });
-    $("value-cook-level").addEventListener("change", () => { cookLevel = clamp($("value-cook-level").value, 1, 3); save(); schedule(); });
-    $("value-craft-level").addEventListener("change", () => { craftLevel = clamp($("value-craft-level").value, 1, 5); save(); schedule(); });
+    $("value-quality").addEventListener("change", () => { quality = $("value-quality").value; save(); if (current) renderCrops(current()); schedule(); });
+    $("value-cook-level").addEventListener("change", () => { cookLevel = clamp($("value-cook-level").value, 1, 3); save(); if (current) renderCrops(current()); schedule(); });
+    $("value-craft-level").addEventListener("change", () => { craftLevel = clamp($("value-craft-level").value, 1, 5); save(); if (current) renderCrops(current()); schedule(); });
     $("value-positive").addEventListener("change", () => { positiveOnly = $("value-positive").checked; save(); schedule(); });
 
     // ---------- Worker ----------
@@ -341,13 +341,122 @@
         if (current) renderCrops(current());
       });
 
-    function cropNet(crop) {
+    // ---------- 加工增值：收获物最佳烹饪/制造的每单位额外净增值 ----------
+    const dishById = new Map(model.dishes.map(item => [item.id, item]));
+    const subCategoryById = new Map(model.cooking.ingredients.map(item => [item.id, item.sub_category_id]));
+    const ingredientTier = new Map(model.cooking.ingredients.map(item => [item.id, item.tier]));
+    const fixedByItem = new Map(), craftByItem = new Map(), genericByGroup = new Map();
+    for (const entry of model.cooking.entries) {
+      for (const id of entry.recipe?.specific_items || []) {
+        if (!fixedByItem.has(id)) fixedByItem.set(id, []);
+        fixedByItem.get(id).push(entry);
+      }
+      const combo = entry.recipe?.tag_combo;
+      if (combo?.length) for (const group of new Set(combo)) {
+        if (!genericByGroup.has(group)) genericByGroup.set(group, []);
+        genericByGroup.get(group).push(entry);
+      }
+    }
+    for (const craft of model.crafts) for (const id of new Set(craft.inputs)) {
+      if (!craftByItem.has(id)) craftByItem.set(id, []);
+      craftByItem.get(id).push(craft);
+    }
+    const perUse = id => byId.get(id)?.trade_value;
+    const whole = id => {
+      const item = byId.get(id);
+      return item ? item.trade_value * Math.max(1, item.use_times || 1) : null;
+    };
+    const cheapestOf = list => list.reduce((a, b) =>
+      a == null || perUse(b.id) < perUse(a.id) ? b : a, null);
+    const groupPools = new Map();
+    const groupPool = (group, tierFloor) => {
+      const cacheKey = `${group}:${tierFloor}`;
+      if (!groupPools.has(cacheKey)) groupPools.set(cacheKey, model.cooking.ingredients
+        .filter(item => item.sub_category_id === group && Number.isFinite(perUse(item.id)) &&
+          (item.tier == null || item.tier >= tierFloor)));
+      return groupPools.get(cacheKey);
+    };
+
+    let cropBonus = null, cropBonusKey = "";
+    function cropBonusMap() {
+      const cacheKey = `${quality}|${cookLevel}|${craftLevel}`;
+      if (cropBonus && cropBonusKey === cacheKey) return cropBonus;
+      const map = new Map();
+      const keep = (id, recipeName, perUnit) => {
+        if (!Number.isFinite(perUnit) || perUnit <= (map.get(id)?.gain ?? 0)) return;
+        map.set(id, {name: recipeName, gain: perUnit});
+      };
+      for (const crop of model.crops) for (const harvest of crop.harvest) {
+        const harvestId = harvest.id;
+        if (map.has(harvestId)) continue;
+        for (const craft of craftByItem.get(harvestId) || []) {
+          if (craft.level > craftLevel) continue;
+          const units = craft.inputs.filter(id => id === harvestId).length;
+          const cost = craft.inputs.reduce((sum, id) => sum + perUse(id), 0);
+          const value = craft.outputs.reduce((sum, id) => sum + whole(id), 0);
+          keep(harvestId, craft.name, (value - cost) / units);
+        }
+        for (const entry of fixedByItem.get(harvestId) || []) {
+          const dish = dishById.get(entry.id);
+          const product = entry.products?.find(item => item.quality === quality);
+          if (!dish || (dish.level != null && dish.level > cookLevel) || !product) continue;
+          const items = entry.recipe.specific_items;
+          const units = items.filter(id => id === harvestId).length;
+          const cost = items.reduce((sum, id) => sum + perUse(id), 0);
+          keep(harvestId, dish.name, units ? (whole(product.id) - cost) / units : NaN);
+        }
+        const group = subCategoryById.get(harvestId);
+        if (group != null) for (const entry of genericByGroup.get(group) || []) {
+          const dish = dishById.get(entry.id);
+          const product = entry.products?.find(item => item.quality === quality);
+          if (!dish || (dish.level != null && dish.level > cookLevel) || !product) continue;
+          const tierFloor = entry.recipe.tier;
+          const harvestTier = ingredientTier.get(harvestId);
+          if (harvestTier != null && harvestTier < tierFloor) continue;
+          const slots = [...entry.recipe.tag_combo];
+          slots.splice(slots.indexOf(group), 1);
+          const picks = [];
+          let feasible = true;
+          for (const slot of slots) {
+            const pool = groupPool(slot, tierFloor);
+            const cheapest = cheapestOf(pool);
+            if (!cheapest) { feasible = false; break; }
+            const exact = cheapestOf(pool.filter(item => item.tier === tierFloor));
+            picks.push({cheapest, exact});
+          }
+          if (!feasible) continue;
+          // 档位约束与 cooking.js 一致：所选食材的有效档位最小值必须恰好等于配方档位。
+          const resolved = chosen => {
+            let min = harvestTier;
+            for (const item of chosen) if (item.tier != null) min = min == null ? item.tier : Math.min(min, item.tier);
+            return min;
+          };
+          let chosen = picks.map(pick => pick.cheapest);
+          if (resolved(chosen) !== tierFloor) {
+            const swappable = picks.filter(pick => pick.exact && !chosen.includes(pick.exact))
+              .sort((a, b) => perUse(b.cheapest.id) - perUse(a.cheapest.id));
+            chosen = picks.map(pick => pick === swappable[0] ? pick.exact : pick.cheapest);
+            if (resolved(chosen) !== tierFloor) continue;
+          }
+          const cost = chosen.reduce((sum, item) => sum + perUse(item.id), perUse(harvestId));
+          keep(harvestId, dish.name, whole(product.id) - cost);
+        }
+      }
+      cropBonus = map; cropBonusKey = cacheKey;
+      return map;
+    }
+
+    function cropNet(crop, bonus) {
       const gain = crop.harvest.reduce((sum, item) => sum + (Number.isFinite(item.trade_value) ?
         item.trade_value * Math.max(1, item.uses || 1) * item.amount : 0), 0);
+      const extra = crop.harvest.reduce((sum, item) => sum + (bonus.get(item.id)?.gain || 0) * item.amount, 0);
+      const best = crop.harvest.map(item => bonus.get(item.id)).filter(Boolean)
+        .reduce((a, b) => (!a || b.gain > a.gain ? b : a), null);
       const seed = crop.seeds.find(row => Number.isFinite(row.trade_value) && row.trade_value > 0);
       const seedCost = seed ? seed.trade_value * Math.max(1, seed.uses || 1) : 0;
       const rate = Number.isFinite(crop.seed_rate) ? clamp(crop.seed_rate, 0, 1) : 0;
-      return {gain, seedCost, net: gain - seedCost, netExpected: gain - seedCost * (1 - rate)};
+      return {gain, extra, best, seedCost, net: gain + extra - seedCost,
+        netExpected: gain + extra - seedCost * (1 - rate)};
     }
     function renderCrops(state) {
       const body = $("value-crops").querySelector("tbody");
@@ -356,7 +465,7 @@
       const planter = model.planters.find(row => String(row.id) === choice.planter) || null;
       const view = model.crops.map(crop => {
         const problems = window.Planting.problems(crop, state);
-        const money = cropNet(crop);
+        const money = cropNet(crop, cropBonusMap());
         const perHour = crop.seconds > 0 ? money.netExpected * 3600 / crop.seconds : null;
         return {crop, problems, money, perHour};
       }).filter(row => !plantableOnly || !row.problems.length);
@@ -370,9 +479,12 @@
         if (row.problems.length) node.classList.add("value-unfit");
         const harvest = row.crop.harvest.map(item => `${image(item, 24)}×${item.amount}`).join(" ");
         const seed = row.crop.seeds[0];
+        const bonus = row.money.best;
         node.innerHTML = `<td><div class="value-cell-name">${image(row.crop)}<div><strong>${escape(row.crop.name)}</strong>` +
           `<small>${escape(row.problems.join("、") || tr("可种"))}</small></div></div></td>` +
-          `<td>${harvest}</td><td>${seed ? escape(name(seed)) : "—"}</td>` +
+          `<td>${harvest}</td>` +
+          `<td>${bonus ? `${escape(tr(bonus.name))}<small class="value-bonus">+${fmt(bonus.gain)}</small>` : "—"}</td>` +
+          `<td>${seed ? escape(name(seed)) : "—"}</td>` +
           `<td>${Number.isFinite(row.crop.seed_rate) ? `${Math.round(row.crop.seed_rate * 100)}%` : "—"}</td>` +
           `<td>${fmt(row.money.seedCost)}</td><td><strong>${fmt(row.money.netExpected)}</strong></td>` +
           `<td>${fmt(row.perHour)}</td><td>${row.crop.seconds ? fmt(row.crop.seconds / 3600) : "—"}</td>` +
