@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import struct
 import unittest
 from pathlib import Path
@@ -158,12 +159,18 @@ class PreyModelTests(unittest.TestCase):
 class VersionedModelTests(unittest.TestCase):
     def test_prey_and_books_models_match_repository_version(self) -> None:
         from codex_pages import load_versioned_model
-        model = load_versioned_model("books-model.json", "1.1.18293 / catalog 2.3.1")
+
+        with sqlite3.connect(ROOT / "survival_log_codex.sqlite3") as connection:
+            game_version = connection.execute(
+                "SELECT value FROM metadata WHERE key = 'game_version'"
+            ).fetchone()[0]
+
+        model = load_versioned_model("books-model.json", game_version)
         self.assertIsNotNone(model)
         self.assertEqual(len(model["books"]), 49)
         self.assertEqual(model["books"][0]["id"], 4)
         self.assertIsNone(load_versioned_model("books-model.json", "other / catalog other"))
-        prey = load_versioned_model("prey-model.json", "1.1.18293 / catalog 2.3.1")
+        prey = load_versioned_model("prey-model.json", game_version)
         self.assertIsNotNone(prey)
         self.assertEqual(len(prey["traps"]), 5)
         self.assertEqual(len(prey["baits"]), 2215)
