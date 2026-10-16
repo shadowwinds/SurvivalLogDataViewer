@@ -32,17 +32,17 @@
 
 `BuildVisibleShelfSet` RVA `0x2AAEB70` 与 `RejectWithPop` RVA `0x2AC0760` 对当前可见且数量正的同物品拒收，售空后不再据此拒收；配置货架只能作为明确的初始假设。`ResolveDealLineDiscount` RVA `0x2AC1050` 将基础减免与本次加成相加，限制在 0..60 价值点，成交时再限制不超过换入总值，不是百分比。换入药品在无尽营地特殊 `CampState != 0` 下按 `Endless_TradeTakeMedicineRate=2` 提高单用量价格并向上取整。`CasualOrderManager.BuildCampInfos` RVA `0x2FB23F0` 的 `NextNeed` 是 20/50/90 关系档下一门槛；关系影响货架解锁，不能表述为轮换需求或通用估值倍率。赠礼/补给模式的 `PopSupplyFull` 不套用为普通交易的每物品上限。
 
-`codex_pages_trade.py` 只读导出 `pages/trade-model.json`（格式版本 2 + 游戏版本），仅发布据点、货架、相关物品和制造普通结果所需字段，以及白名单交易参数；不发布完整原始表或存档。刷新命令仍为 `python codex_pages_trade.py --game-root "游戏目录" --output pages/trade-model.json`。`codex_pages.py` 按版本校验后合并已有公开烹饪模型，内嵌 `/trade/`；不匹配时回退。无脚本仍可查配置货架，交互流程为登记可投入物资、比较直接交换、比较加工增值。支持按名称/ID 搜索、批量登记、部分用量、已解锁据点筛选、目标物品、联系人多类别需求、鉴价、价值点减免与无尽营地药品情景；当前无货勾选只校正拒收。玩家手填清单与货架校正仅保存在浏览器，不读取游戏库存或存档。
+`codex_pages_trade.py` 只读导出 `pages/trade-model.json`（格式版本 2 + 游戏版本），仅发布据点、货架、相关物品和制造普通结果所需字段，以及白名单交易参数；不发布完整原始表或存档。刷新命令仍为 `python codex_pages_trade.py --game-root "游戏目录" --output pages/trade-model.json`。`codex_pages.py` 按版本校验后合并公开烹饪、种植与环境模型，生成单一 `/trade/` 交易规划页并只内嵌一份超集模型；不匹配时回退。页面先提供无需登记库存的据点货架查询，下方共用一份物资清单进行直接交换、加工增值与种植收益规划。支持按名称/ID 搜索、批量登记、总量与保留量、部分用量、已解锁据点筛选、目标物品、联系人多类别需求、鉴价、价值点减免与无尽营地药品情景；当前无货勾选只校正拒收。玩家手填清单与货架校正仅保存在浏览器，不读取游戏库存或存档。
 
 加工枚举在 `trade-worker.js` 中复用 `Cooking.plan` 的真实组合与指定配方优先级；每次增值、增值比例、现有余量总增值分别重新选择组合和交易对象。比较全部据点时原料按各自可接受对象中最高直接交换估值计机会成本，指定对象时按该对象；都拒收时回退原始基值，避免把材料算作免费。制造仅比较 `InCodex && IsUseable` 的普通成功产物，重复原料/产物 ID 计数量；技能门槛使用 `craft_level`，已核对 `ToolTableManager.GetProductionCraftLockReason` RVA `0x26A83E0` 与 `Reducer_Web_ToolTable.EvalCraftUnlocked` RVA `0x2A93F80`，`Level` 不作为制造技能筛选条件。事件与配方解锁仍由游戏确认；多次使用图纸配方排除，不猜成功率或完美返料。每行独立使用同一输入清单，不提供混合加工的全局最优分配；品质为情景，未计燃料、精力、设施和路线成本，估值换入上限也不承诺实时有货、装箱或成交。
 
 交易模型额外白名单导出 `Config_Item.Size` 的 `[宽, 高]`，占格 = 宽 × 高；空、非正或非二维尺寸明确显示未提供，不默认 1 格。当前本地游戏所有物品尺寸均为两个正整数，当前公开交易模型物品的 `StackLimit` 均为 1；游戏另有可堆叠装修材料，不在该模型范围内，不把堆叠机制套到这些单件物资。物资目录、清单和配置货架展示完整单件占格与每格基值；携带排行按所选对象的实际交出估值 / 单件占格排序，清单使用剩余比例，全部物品使用完整一件。指定目标时只比较有目标的可用对象，按原生 float32 交出估值二分求只用一种物资的最少整数件数，显示所需面积及清单是否够用。制造与烹饪还可按成品每格交出价值排序，重复产物分别计件并累加占格；不是按每格净利润排序。格数是矩形面积合计，不推断二维摆放、旋转可行性、负重或无人机容量；每行仍独立估算。
 
-## 增值规划页（食材增值与种植推荐）
+## 交易规划中的食材增值与种植推荐
 
-`/value/` 页面由 `codex_pages_seo.py` 的 `value_document` 生成：交易模型存在时合成为 `value_model`（format_version 1），在 trade_model 基础上补充 `recommendations` 的 `crops`、`planters`、`plant_levels` 与 `pages/planting-environment.json` 的环境数据，内嵌为 `<script id="value-data">`（`<` 转义防注入）；交易模型缺失或版本不匹配时输出无脚本的静态说明。样式为 `pages/value.css`，前端逻辑为 `pages/value.js`，计算在 `pages/value-worker.js`（`importScripts("cooking.js")` 复用 `Cooking.plan` 的真实档位组合枚举）。导航入口在首页与各独立页的页眉。
+`/trade/` 由 `codex_pages_seo.py` 的 `trade_document` 生成：交易模型存在时合成为 `value_model`（format_version 1），在 trade_model 基础上补充 `recommendations` 的 `crops`、`planters`、`plant_levels` 与 `pages/planting-environment.json` 的环境数据，内嵌为唯一的 `<script id="trade-data">`（`<` 转义防注入）。`pages/market.js` 负责据点查询、页签和直接交换，`pages/value.js` 负责共享库存、加工与种植，计算仍在 `pages/value-worker.js`（`importScripts("cooking.js")` 复用 `Cooking.plan` 的真实档位组合枚举）。旧 `/value/` 保留为兼容入口并跳到 `/trade/#plan=plant`。
 
-口径与交易行情一致：物品基值 = `TradeValue`，完整一件 = `TradeValue × max(1, UseTimes)`；烹饪材料成本按基值计，成品收益 = 完整一件基值（多分份不叠加交易收益，沿用每锅交出基值的结论）。登记库存保存在浏览器 localStorage（`survival-log-value:<游戏版本>`），不读取游戏库存或存档；剩余用量百分比按 `UseTimes × 剩余%` 折算可用次数。
+口径与交易行情一致：基准环境下物品每用量价值 = `TradeValue`，完整一件 = `TradeValue × max(1, UseTimes)`；指定据点或联系人后，加工与种植沿用同一估值环境。比较全部据点时每种物品取可接受据点中的最高估值；指定对象拒收的成品收益为 0，拒收原料仍按原始基值保守计入机会成本。菜肴多分份不叠加整锅交易收益。登记库存保存在浏览器 localStorage（`survival-log-market-inventory:<游戏版本>`），总数量减保留数量后才参与交换与加工；旧交易清单与增值库存同时存在时由用户选择沿用来源，不自动相加。不读取游戏库存或存档；剩余用量百分比按 `UseTimes × 剩余%` 折算可用次数。
 
 计算分三类：固定食材菜与制造配方进入同一候选池，按增值比例贪心分配并做局部交换改进（少做一锅 A 换多锅 B，总增值提升才交换）；通用档位菜由 `Cooking.plan` 枚举可行组合，每个配方记录净增值最高的组合后与候选池统一排序；已勾选执行的方案在下次计算时按登记投入重放，库存不足按比例缩减并标记。补给品（陷阱猎物、交易可补充的主食等）勾选后视为按需补充：不占库存、不参与扣减，每锅方案上限 99 份。烹饪/制造等级按用户选择过滤配方等级；品质是所选情景，不推断成功率。结果不含燃料、时间、精力与设施成本，不承诺实际成交价或库存核对。
 

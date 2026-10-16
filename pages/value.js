@@ -2,10 +2,16 @@
   "use strict";
   const host = typeof window === "undefined" ? globalThis : window;
   const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, Number(value) || 0));
+  const available = stock => Object.fromEntries(Object.entries(stock || {}).map(([id, entry]) => [id, {
+    quantity: Math.max(0, Math.floor(entry.quantity || 0) - Math.floor(entry.reserve || 0)),
+    remaining: clamp(entry.remaining ?? 100, 0, 100),
+  }]).filter(([, entry]) => entry.quantity > 0));
+  host.ValueInventory = {available};
+  if (typeof document === "undefined") return;
 
   (async () => {
     await host.I18n?.ready;
-    const element = document.getElementById("value-data");
+    const element = document.getElementById("value-data") || document.getElementById("trade-data");
     if (!element) return;
     const model = JSON.parse(element.textContent);
     if (model.format_version !== 1) return;
@@ -21,26 +27,58 @@
     const wholeUses = item => Math.max(1, item.uses || item.use_times || 1);
     const wholeBase = item => item.trade_value * wholeUses(item);
     const category = cat => model.categories[cat] ? tr(model.categories[cat]) : tr("其他物品 · 分类 {id}", {id: cat});
-    const storageKey = `survival-log-value:${model.game_version}`;
+    const storageKey = `survival-log-market-inventory:${model.game_version}`;
     const supply = new Set(), appliedRows = [];
     let stock = {}, quality = "普通", cookLevel = 3, craftLevel = 5, positiveOnly = true;
+    let valuation = host.MarketPlanner?.valuation || null;
     let job = 0, timer, worker;
 
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    function applySaved(saved) {
       for (const [id, entry] of Object.entries(saved.stock || {})) if (byId.has(Number(id)) && entry?.quantity > 0)
-        stock[id] = {quantity: Math.floor(clamp(entry.quantity, 0, 9999)), remaining: clamp(entry.remaining, 0, 100)};
+        stock[id] = {quantity: Math.floor(clamp(entry.quantity, 0, 9999)), reserve: Math.floor(clamp(entry.reserve, 0, entry.quantity)),
+          remaining: clamp(entry.remaining, 0, 100)};
       for (const id of saved.supply || []) if (byId.has(Number(id))) supply.add(Number(id));
       for (const row of saved.appliedRows || []) if (row && row.key) appliedRows.push(row);
       quality = saved.quality || quality;
       cookLevel = clamp(saved.cookLevel ?? cookLevel, 1, 3);
       craftLevel = clamp(saved.craftLevel ?? craftLevel, 1, 5);
       positiveOnly = saved.positiveOnly !== false;
+    }
+    let pendingMigration = null, migratedAutomatically = false;
+    try {
+      const current = JSON.parse(localStorage.getItem(storageKey) || "null");
+      if (current) applySaved(current);
+      else {
+        const value = JSON.parse(localStorage.getItem(`survival-log-value:${model.game_version}`) || "null");
+        const trade = JSON.parse(localStorage.getItem(`survival-log-trade:${model.game_version}`) || "null");
+        const hasValue = value && Object.keys(value.stock || {}).length;
+        const hasTrade = trade && Object.keys(trade.basket || {}).length;
+        if (hasValue && hasTrade) pendingMigration = {value, trade};
+        else if (hasValue) { applySaved(value); migratedAutomatically = true; }
+        else if (hasTrade) {
+          applySaved({stock: Object.fromEntries(Object.entries(trade.basket).map(([id, entry]) =>
+            [id, {...entry, reserve: 0}]))});
+          migratedAutomatically = true;
+        }
+      }
     } catch { /* Optional persistence. */ }
+    const availableStock = () => available(stock);
+    function publish() {
+      const detail = {stock: JSON.parse(JSON.stringify(stock)), basket: availableStock(), supply: [...supply]};
+      host.dispatchEvent(new CustomEvent("valueinventorychange", {detail}));
+      const summary = $("market-available-summary");
+      if (summary) {
+        const kinds = Object.keys(detail.basket).length;
+        const quantity = Object.values(detail.basket).reduce((sum, entry) => sum + entry.quantity, 0);
+        summary.textContent = tr("可投入 {kinds} 种 · 共 {quantity} 件 / 包", {kinds, quantity});
+      }
+    }
     function save() {
       try { localStorage.setItem(storageKey, JSON.stringify({stock, supply: [...supply], appliedRows,
         quality, cookLevel, craftLevel, positiveOnly})); } catch { /* Optional persistence. */ }
+      publish();
     }
+    if (migratedAutomatically) save();
 
     // ---------- 登记 ----------
     const catalog = $("value-catalog"), search = $("value-search"), catSelect = $("value-stock-cat");
@@ -66,7 +104,7 @@
         button.title = `${name(item)} · ${tr("基值")} ${fmt(item.trade_value)}`;
         button.innerHTML = `${image(item)}<span>${escape(name(item))}</span><small>${fmt(item.trade_value)}</small>`;
         button.addEventListener("click", () => {
-          stock[item.id] = stock[item.id] || {quantity: 0, remaining: 100};
+          stock[item.id] = stock[item.id] || {quantity: 0, reserve: 0, remaining: 100};
           stock[item.id].quantity = Math.min(9999, (stock[item.id].quantity || 0) + 1);
           save(); renderBasket(); schedule();
         });
@@ -90,23 +128,35 @@
         const item = byId.get(id);
         const line = document.createElement("div");
         line.className = "value-basket-row";
-        line.innerHTML = `${image(item)}<span class="value-basket-name" title="${escape(name(item))}">${escape(name(item))}</span>`;
+        line.innerHTML = `${image(item)}<span class="value-basket-name" title="${escape(name(item))}">${escape(name(item))}<small>${escape(tr("可投入 {count}", {count: Math.max(0, entry.quantity - (entry.reserve || 0))}))}</small></span>`;
         const quantity = document.createElement("input");
         quantity.type = "number"; quantity.min = "1"; quantity.max = "9999"; quantity.value = entry.quantity;
+        quantity.setAttribute("aria-label", name(item) + " " + tr("总数量"));
         quantity.title = tr("数量（件）");
         quantity.addEventListener("change", () => {
-          entry.quantity = Math.floor(clamp(quantity.value, 1, 9999)); save(); schedule();
+          entry.quantity = Math.floor(clamp(quantity.value, 1, 9999));
+          entry.reserve = Math.min(entry.reserve || 0, entry.quantity);
+          save(); renderBasket(); schedule();
         });
         line.append(quantity);
+        const reserve = document.createElement("input");
+        reserve.type = "number"; reserve.min = "0"; reserve.max = String(entry.quantity); reserve.value = entry.reserve || 0;
+        reserve.setAttribute("aria-label", name(item) + " " + tr("保留数量"));
+        reserve.title = tr("保留数量，不参与交换或加工");
+        reserve.addEventListener("change", () => {
+          entry.reserve = Math.floor(clamp(reserve.value, 0, entry.quantity)); save(); renderBasket(); schedule();
+        });
+        line.append(reserve);
         if (wholeUses(item) > 1) {
           const remaining = document.createElement("input");
           remaining.type = "number"; remaining.min = "0"; remaining.max = "100"; remaining.value = entry.remaining;
+          remaining.setAttribute("aria-label", name(item) + " " + tr("剩余百分比"));
           remaining.title = tr("剩余可用次数（%）");
           remaining.addEventListener("change", () => {
             entry.remaining = clamp(remaining.value, 0, 100); save(); schedule();
           });
           line.append(remaining);
-        }
+        } else line.insertAdjacentHTML("beforeend", '<span class="value-not-applicable" aria-label="不适用">—</span>');
         const supplyCheck = document.createElement("label");
         supplyCheck.className = "value-supply";
         const check = document.createElement("input");
@@ -141,7 +191,7 @@
         const item = model.items.find(row => row.name === label ||
           host.I18n?.english(row.name) === label || String(row.id) === label);
         if (item) {
-          stock[item.id] = stock[item.id] || {quantity: 0, remaining: 100};
+          stock[item.id] = stock[item.id] || {quantity: 0, reserve: 0, remaining: 100};
           stock[item.id].quantity = Math.min(9999, (stock[item.id].quantity || 0) + quantity);
           count += 1;
         }
@@ -201,8 +251,8 @@
         $("value-plan-error").textContent = "";
         renderResult(event.data);
       };
-      worker.postMessage({job, model, input: {stock, supply: [...supply], quality, cookLevel, craftLevel,
-        positiveOnly, applied: appliedRows.map(row => row.key), appliedRows}});
+      worker.postMessage({job, model, input: {stock: availableStock(), supply: [...supply], quality, cookLevel, craftLevel,
+        positiveOnly, applied: appliedRows.map(row => row.key), appliedRows, valuation}});
     }
     function schedule() {
       clearTimeout(timer);
@@ -317,7 +367,8 @@
         $(id).addEventListener("change", onChange);
       for (const check of heaters.querySelectorAll("input")) check.addEventListener("change", onChange);
       try {
-        const savedChoice = JSON.parse(localStorage.getItem(`${storageKey}:env`) || "null");
+        const savedChoice = JSON.parse(localStorage.getItem(`${storageKey}:env`) ||
+          localStorage.getItem(`survival-log-value:${model.game_version}:env`) || "null");
         if (savedChoice) {
           if ([...weather.options].some(option => option.value === String(savedChoice.weather))) weather.value = String(savedChoice.weather);
           $("value-cold-wave").checked = Number(savedChoice.cold_wave) === 1;
@@ -361,10 +412,10 @@
       if (!craftByItem.has(id)) craftByItem.set(id, []);
       craftByItem.get(id).push(craft);
     }
-    const perUse = id => byId.get(id)?.trade_value;
+    const perUse = id => valuation?.cost_per_use?.[id] ?? byId.get(id)?.trade_value;
     const whole = id => {
       const item = byId.get(id);
-      return item ? item.trade_value * Math.max(1, item.use_times || 1) : null;
+      return item ? valuation?.sale_whole?.[id] ?? item.trade_value * Math.max(1, item.use_times || 1) : null;
     };
     const cheapestOf = list => list.reduce((a, b) =>
       a == null || perUse(b.id) < perUse(a.id) ? b : a, null);
@@ -379,7 +430,7 @@
 
     let cropBonus = null, cropBonusKey = "";
     function cropBonusMap() {
-      const cacheKey = `${quality}|${cookLevel}|${craftLevel}`;
+      const cacheKey = `${quality}|${cookLevel}|${craftLevel}|${valuation?.key || "base"}`;
       if (cropBonus && cropBonusKey === cacheKey) return cropBonus;
       const map = new Map();
       const keep = (id, recipeName, perUnit) => {
@@ -447,13 +498,12 @@
     }
 
     function cropNet(crop, bonus) {
-      const gain = crop.harvest.reduce((sum, item) => sum + (Number.isFinite(item.trade_value) ?
-        item.trade_value * Math.max(1, item.uses || 1) * item.amount : 0), 0);
+      const gain = crop.harvest.reduce((sum, item) => sum + (Number.isFinite(whole(item.id)) ? whole(item.id) * item.amount : 0), 0);
       const extra = crop.harvest.reduce((sum, item) => sum + (bonus.get(item.id)?.gain || 0) * item.amount, 0);
       const best = crop.harvest.map(item => bonus.get(item.id)).filter(Boolean)
         .reduce((a, b) => (!a || b.gain > a.gain ? b : a), null);
       const seed = crop.seeds.find(row => Number.isFinite(row.trade_value) && row.trade_value > 0);
-      const seedCost = seed ? seed.trade_value * Math.max(1, seed.uses || 1) : 0;
+      const seedCost = seed ? perUse(seed.id) * Math.max(1, seed.uses || 1) : 0;
       const rate = Number.isFinite(crop.seed_rate) ? clamp(crop.seed_rate, 0, 1) : 0;
       return {gain, extra, best, seedCost, net: gain + extra - seedCost,
         netExpected: gain + extra - seedCost * (1 - rate)};
@@ -474,6 +524,10 @@
         : (b.money.netExpected ?? -Infinity) - (a.money.netExpected ?? -Infinity) || (a.crop.seconds || 0) - (b.crop.seconds || 0));
       $("value-crop-summary").textContent = tr("共 {count} 种作物{note}", {count: view.length,
         note: planter ? " · " + tr("容器 {name}，容量 {capacity}", {name: planter.name, capacity: planter.capacity}) : ""});
+      const winner = $("value-crop-winner");
+      if (winner) winner.innerHTML = view.length ? `<span>${escape(tr(cropSort === "hour" ? "当前每小时收益最高" : "当前单次收益最高"))}</span>` +
+        `<strong>${image(view[0].crop)}${escape(view[0].crop.name)}</strong><p>${escape(tr("期望净增值 {net} · 每小时 {hour}", {net: fmt(view[0].money.netExpected), hour: fmt(view[0].perHour)}))}</p>` :
+        `<p>${escape(tr("当前条件没有可种作物"))}</p>`;
       for (const row of view) {
         const node = document.createElement("tr");
         if (row.problems.length) node.classList.add("value-unfit");
@@ -493,9 +547,35 @@
       }
     }
 
+    host.addEventListener("marketvaluationchange", event => {
+      valuation = event.detail || null;
+      cropBonus = null; cropBonusKey = "";
+      if (current) renderCrops(current());
+      schedule();
+    });
+    host.ValuePlanner = {snapshot: () => ({stock: JSON.parse(JSON.stringify(stock)), basket: availableStock(), supply: [...supply]})};
     renderCatalog();
     renderBasket();
+    publish();
     if (current) renderCrops(current());
     schedule();
+    const migration = $("market-migration");
+    if (pendingMigration && migration) {
+      migration.addEventListener("cancel", event => event.preventDefault());
+      const choose = source => {
+        stock = {}; supply.clear(); appliedRows.length = 0;
+        if (source === "value") applySaved(pendingMigration.value);
+        else applySaved({stock: Object.fromEntries(Object.entries(pendingMigration.trade.basket || {}).map(([id, entry]) =>
+          [id, {...entry, reserve: 0}]))});
+        pendingMigration = null;
+        $("value-quality").value = quality;
+        $("value-cook-level").value = String(cookLevel);
+        $("value-craft-level").value = String(craftLevel);
+        $("value-positive").checked = positiveOnly;
+        save(); renderBasket(); renderCatalog(); schedule();
+      };
+      migration.querySelectorAll("[data-migrate]").forEach(button => button.addEventListener("click", () => choose(button.dataset.migrate)));
+      if (typeof migration.showModal === "function") migration.showModal(); else migration.setAttribute("open", "");
+    }
   })();
 })();

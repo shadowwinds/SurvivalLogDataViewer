@@ -133,7 +133,7 @@ def page_schema(title: str, description: str, url: str, base: str,
 
 def directory_links(payload: dict[str, Any], prefix: str = "./") -> str:
     routes = entry_routes(payload)
-    return f'<p><a href="{h(prefix)}recommendations/">生存补给计划</a> · <a href="{h(prefix)}trade/">交易行情</a></p>' + "".join(
+    return f'<p><a href="{h(prefix)}recommendations/">生存补给计划</a> · <a href="{h(prefix)}trade/">交易规划</a></p>' + "".join(
         f'<details><summary>{h(CATEGORY_INTROS[category["id"]][0])}</summary><nav class="directory-links">' + "".join(
             f'<a href="{h(prefix + routes[entry["key"]])}">{h(entry["name"])}</a>'
             for entry in category["entries"]) + '</nav></details>'
@@ -179,9 +179,9 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     {extra_head}
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易行情</a> · <a href="{root}value/">增值规划</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易规划</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
     <main>{breadcrumb}{body}</main>
-    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易行情</a> · <a href="{root}value/">增值规划</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
+    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易规划</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
 </html>
 '''
@@ -414,8 +414,8 @@ def validate_output_targets(output_dir: Path, names: list[str]) -> None:
                 raise ValueError(f"静态页面输出路径类型不正确：{name}")
 
 
-TRADE_TITLE = "生存日志交易行情｜物资换什么、在哪换、加工值不值 · Survival Log"
-TRADE_DESCRIPTION = "登记手头物资，比较据点收货折价、联系人需求加价与加工增值，查找目标物品和货架。按玩家输入试算交易价值。"
+TRADE_TITLE = "生存日志交易规划｜查据点、算交换、规划加工与种植 · Survival Log"
+TRADE_DESCRIPTION = "查询据点货架和折价规则，登记一次物资后比较直接交换、烹饪制造增值与种植收益。按玩家输入和游戏静态配置试算。"
 VALUE_TITLE = "生存日志增值规划｜冰箱食材怎么用、种子种什么最划算 · Survival Log"
 VALUE_DESCRIPTION = "登记冰箱食材、种子和材料，比较烹饪、制造与直接出售的增值，按家具和天气规划种植收益。按交易基准价值试算。"
 
@@ -464,191 +464,60 @@ def trade_table(rows: list[str], shared_header: bool = False) -> str:
 
 
 def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str:
-    crumbs = [("生存日志 · 幸存者图鉴", base), ("交易行情", base + "trade/")]
+    crumbs = [("生存日志 · 幸存者图鉴", base), ("交易规划", base + "trade/")]
     if not model:
         body = ('<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / TRADE</p>'
-                '<h1>交易行情</h1></div></div>'
-                '<p>当前公开数据版本没有匹配的交易据点模型文件。请用与本站静态库一致的游戏版本运行'
-                ' <code>python codex_pages_trade.py</code> 重新生成后重建网页。</p>')
+                '<h1>交易规划</h1></div></div>'
+                '<p>当前公开数据版本没有匹配的交易与增值模型。请用与本站静态库一致的游戏版本重新构建网页。</p>')
         return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version)
 
     shared_ids = {entry["id"] for entry in model.get("shared", [])}
     categories = {str(key): value for key, value in (model.get("categories") or {}).items()}
-    body = '''<div class="trade-hero"><p class="eyebrow">SURVIVAL LOG / TRADE DESK</p><h1>让手头物资换得更多</h1>
-<p class="trade-subtitle">先留下生存必需品，把愿意拿去换的余量填进来。比较直接交换，再看加工有没有增值。</p>
+    body = '''<div class="trade-hero"><p class="eyebrow">SURVIVAL LOG / TRADE PLANNER</p><h1>查据点，算交换，规划下一步</h1>
+<p class="trade-subtitle">先快速确认据点货架；需要规划时只登记一次物资，再比较直接交换、加工增值与种植收益。</p>
 <p class="trade-assumption">按配置与填写条件试算 · 当前货架、需求与加成由你确认</p></div>
-<div id="trade-planner" hidden>
-<div class="trade-workbench">
-<section class="trade-input"><h2><span class="trade-step">01</span> 我有什么可以换</h2>
-<p class="trade-help">数量按件 / 包填写；已用过的物品调整剩余比例。只填愿意投入的数量。</p>
-<div class="trade-controls"><label>找物资<input id="stock-search" type="search" placeholder="名称或 ID，例如：铁皮、香米"></label>
-<label>类别<select id="stock-cat"><option value="">全部类别</option></select></label></div>
-<div id="stock-catalog" class="trade-catalog"></div><p id="stock-status" class="trade-help"></p>
-<details class="trade-settings"><summary>物资很多？按行批量登记</summary>
-<p class="trade-help">每行填写“名称或 ID，件数，剩余百分比”，百分比可省略。同物品会更新数量与剩余比例。</p>
-<label for="stock-bulk">批量物资</label><textarea id="stock-bulk" rows="4" placeholder="铁皮，20&#10;生态香米，2，50"></textarea>
-<button id="stock-import" type="button">登记这些物资</button><p id="stock-import-status" class="trade-help" role="status"></p></details>
-<div class="trade-basket-heading"><h3>待交换清单</h3><button id="stock-example" type="button">试填铁皮与香米</button><button id="stock-clear" type="button">清空</button></div>
-<div id="stock-basket"></div><p class="trade-help">清单保存在此浏览器，刷新后可继续使用。</p></section>
-<section class="trade-output"><h2><span class="trade-step">02</span> 去哪里，能换多少</h2>
-<div class="trade-controls"><label>交易对象<select id="trade-destination"><option value="all">比较所有据点</option><option value="contact">陌生人 / 联系人</option></select></label>
-<label>找目标物品<input id="trade-target-search" type="search" placeholder="名称或 ID"></label>
-<label>我想换回<select id="trade-target"><option value="">只比较交出价值</option></select></label>
-<label>目标数量<input id="trade-target-count" type="number" value="1" min="1" max="9999" step="1"></label></div>
-<details class="trade-settings" id="trade-point-settings"><summary>选择已经解锁的据点</summary><div id="trade-enabled-points" class="trade-demand"></div></details>
-<div id="trade-contact" hidden><p class="trade-help">照着游戏当前需求勾选类别；加价只作用于勾选的物资。</p><div id="trade-demand" class="trade-demand"></div>
-<label>需求程度<select id="trade-urgency"><option value="0">无需求加价</option></select></label></div>
-<details class="trade-settings"><summary>鉴价、谈判与特殊状态</summary><div class="trade-controls">
-<label>鉴价加成 / %<input id="trade-appraisal" type="number" min="0" max="1000" value="0" step="1"></label>
-<label>谈判减免 / 价值点<input id="trade-discount" type="number" min="0" value="0" step="1"></label>
-<label class="trade-check"><input id="trade-camp" type="checkbox">无尽模式：营地特殊状态药品加价</label></div>
-<p class="trade-help">按本次交易的游戏显示填写。谈判减的是成交门槛的价值点；营地勾选项仅影响换入药品。</p></details>
-<div id="trade-summary" class="trade-summary" role="status"></div>
-<div id="trade-comparison"></div><div id="trade-breakdown"></div>
-<p class="trade-help">换入数量是估值上限，成交还需当前有货、双方物品能装进无人机。本页不推测装箱和实时库存。</p></section>
-</div>
-<section class="trade-cargo"><h2><span class="trade-step">03</span> 格子有限，先带哪些</h2>
-<p class="trade-help">每格交出价值 = 一件物资的交出估值 ÷ 占格数。会应用当前对象的折价、需求、鉴价和清单剩余比例；指定目标时，只比较能换到目标的对象。</p>
-<div class="trade-controls"><label>携带范围<select id="cargo-scope"><option value="stock">只看清单余量</option><option value="all">全部物品，找携带方向</option></select></label>
-<label>找高价值物资<input id="cargo-search" type="search" placeholder="物品名称或 ID"></label>
-<label>类别<select id="cargo-cat"><option value="">全部类别</option></select></label>
-<label>排序<select id="cargo-sort"><option value="density">每格交出价值最高</option><option value="value">单件交出价值最高</option></select></label></div>
-<p id="cargo-status" class="trade-help" role="status"></p><div id="cargo-results"></div>
-<button id="cargo-more" type="button" hidden>再看 20 种物资</button>
-<p class="trade-help">全部物品按完整一件计算；清单余量按填写的剩余比例计算。所需件数是假设只交出该物资，不会自动扣减清单。格数为面积合计，仍需核对无人机的宽高、摆放和负重。</p></section>
-<section class="trade-processing"><h2><span class="trade-step">04</span> 要不要先加工</h2>
-<p class="trade-help">看加工比直接交换多赚多少价值。比较所有据点时，原料按各自最优据点的直接交换价计成本。每行是独立方案，材料不能在多行里重复投入。</p>
-<div class="trade-controls"><label>备料范围<select id="process-scope"><option value="stock">只看清单里能做的</option><option value="all">全部配方，找备料方向</option></select></label>
-<label>加工方式<select id="process-kind"><option value="">烹饪与制造</option><option value="cook">烹饪</option><option value="craft">制造</option></select></label>
-<label>烹饪等级<select id="process-cook-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option></select></label>
-<label>制造等级<select id="process-craft-level"><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option><option value="4">4级</option><option value="5">5级</option></select></label>
-<label>菜肴品质<select id="process-quality"><option>普通</option><option>良好</option><option>完美</option></select></label>
-<label>排序<select id="process-sort"><option value="gain">每次加工增值最多</option><option value="ratio">原料增值比例最高</option><option value="total">现有余量总增值最多</option><option value="density">成品每格价值最高</option></select></label>
-<label>找配方<input id="process-search" type="search" placeholder="配方、成品或原料名称"></label>
-<label class="trade-check"><input id="process-positive" type="checkbox" checked>只看有增值</label></div>
-<p id="process-status" class="trade-help" role="status"></p><div id="process-results"></div>
-<button id="process-more" type="button" hidden>再看 20 个方案</button>
-<p class="trade-help">菜肴品质是所选结果的情景；制造按普通成功产物。未计成功概率、完美返料、燃料、精力、设备和路程。配方还需在游戏内解锁；含多次使用图纸的制造暂不排名。</p>
-</section></div>
-<noscript><p>启用 JavaScript 可登记物资、比较交换与加工收益。下方可直接查阅配置货架。</p></noscript>
-<details class="trade-shelves" id="trade-shelves"><summary>查货架 / 校正当前无货</summary>
-<p class="trade-help">默认按配置货架仍有货计算拒收。游戏里某物已不在当前可见货架上时，勾选“当前无货”，该物就可重新估值。配置数量不是实时库存。</p>
-<div class="trade-controls"><label>找货架物品<input id="shelf-search" type="search" placeholder="物品名称或 ID"></label></div>'''
-    body += '<nav class="trade-points-nav" aria-label="据点跳转">' + "".join(
-        f'<a href="#p{h(str(point["id"]))}">{h(clean_text(point["name"]))}</a>' for point in model["points"]) + '</nav>'
-    for point in model["points"]:
-        rows = [trade_item_row(entry, base, categories, shared_ids).replace('</tr>',
-                f'<td class="shelf-state"><label><input type="checkbox" data-absent-point="{point["id"]}" '
-                f'data-absent-item="{entry["id"]}">当前无货</label></td></tr>') for entry in point["items"]]
-        offer = "、".join(categories.get(str(cat), f"分类 {cat}") for cat in point.get("offer_cats") or [])
-        body += f'<section class="trade-point" id="p{h(str(point["id"]))}">'
-        body += (f'<h2>{h(clean_text(point["name"]))}<span class="trade-shop-id">货架 {h(str(point["shop_id"]))}</span></h2>')
-        if point.get("hint"):
-            body += f'<p class="trade-hint">解锁提示：{h(clean_text(point["hint"]))}</p>'
-        if offer:
-            body += f'<p class="trade-offer">货架分类：{h(offer)}</p>'
-        half_cat = categories.get(str(point.get("half_value_cat")), f"分类 {point.get('half_value_cat')}")
-        body += f'<p class="trade-offer">{h(half_cat)}交出时按同类折价；当前货架已有的同物品拒收。</p>'
-        body += trade_table(rows).replace('</tr>', '<th scope="col">货架校正</th></tr>', 1)
-        body += '</section>'
-    body += '''</details><details class="trade-mechanics"><summary>怎么看这些价值与增值</summary>
-<p>交换用的是交易价值，不是灾前价格。完整一件基值 = TradeValue × max(1, 配置 UseTimes)。已用物品再乘“剩余次数 / 实例最大次数”；菜肴分份不额外增加完整一锅的交易基值。</p>
-<p>据点：同类物资应用该据点折价系数，再应用有效 TradeSellRate；当前可见货架仍有的同物品拒收。联系人：需求物资应用需求加价，不应用据点专用 TradeSellRate。鉴价与需求加成相加。</p>
-<p>加工增值 = 成品交出估值 − 原料直接交换估值。比较所有据点时，原料按各自最优据点计成本；指定对象时按该对象计成本。原料若在比较范围内都被拒收，保守按原始基值计成本，不能当免费材料。谈判减免只用于本次交换，不计入每锅增值。</p>
-<p>关系进度 NextNeed 是下一关系档的门槛，不是轮换需求，也不作为普遍估值倍率。没有把赠礼或补给上限套到普通交换。当前无货只校正拒收，不代表可换入库存。</p>
-<p>试算覆盖普通双向交易。援助、捐赠、派遣、损坏或特殊货架的限制请按游戏界面确认。不同配方不会联合分配库存；排序帮助选加工方向，不承诺整仓物资的全局最优路线。</p></details>'''
+<nav class="market-jump" aria-label="页面区域"><a href="#outposts">据点情报</a><a href="#inventory">我的物资</a><a href="#planning">收益规划</a></nav>
+<div id="trade-planner">
+<section class="market-section market-outposts" id="outposts"><div class="market-heading"><div><p class="market-kicker">OUTPOST INTEL</p><h2>据点情报</h2><p>不登记库存也可以直接查货架、折价类别和解锁提示。</p></div>
+<label class="market-point-select">选择据点<select id="market-point"></select></label></div>
+<div id="market-point-summary" class="market-point-summary" role="status"></div>
+<div class="market-shelf-toolbar trade-controls"><label>找货架物品<input id="market-shelf-search" type="search" placeholder="物品名称或 ID"></label><label>类别<select id="market-shelf-cat"><option value="">全部类别</option></select></label></div>
+<p id="market-shelf-status" class="trade-help"></p><div class="table-scroll"><table class="trade-table market-shelf"><thead><tr><th>物品</th><th>类别</th><th>配置数量</th><th>完整一件基值</th><th>货架校正</th></tr></thead><tbody id="market-shelf-body"></tbody></table></div></section>
+<div id="value-planner" hidden>
+<section class="market-section" id="inventory"><div class="market-heading"><div><p class="market-kicker">MY STOCK</p><h2>我的物资</h2><p>总数量减去保留数量，才会进入下面的交换与加工规划。</p></div><output id="market-available-summary" class="market-context"></output></div>
+<div class="value-column"><div><div class="trade-controls"><label>找物品<input id="value-search" type="search" placeholder="名称或 ID"></label><label>类别<select id="value-stock-cat"><option value="">全部类别</option></select></label></div><div id="value-catalog" class="value-catalog"></div>
+<details class="trade-settings"><summary>物品很多？批量登记</summary><p class="value-help">填写“名称×件数”，可用换行、逗号或顿号分隔。</p><textarea id="value-bulk" rows="4" placeholder="小家鼠×3&#10;生态香米×2"></textarea><button id="value-bulk-apply" type="button">登记这些物资</button><button id="value-bulk-example" type="button">填个示例</button><p id="value-bulk-result" role="status"></p></details></div>
+<div><div class="value-basket-heading"><h3><span id="value-count"></span></h3><button id="value-clear" type="button">清空</button></div><div class="value-basket-labels" aria-hidden="true"><span>物品</span><span>总数</span><span>保留</span><span>余量</span><span>补给</span></div><div id="value-basket" class="value-basket"></div><p class="value-help">“补给”表示可以持续取得；它仍按基准价值计入成本，不会被当成免费材料。</p></div></div></section>
+<section class="market-section" id="planning"><div class="market-heading"><div><p class="market-kicker">MAKE A DECISION</p><h2>收益规划</h2><p>先选现在要解决的问题，其余条件不会干扰当前结果。</p></div><div class="market-context-wrap"><label>估值环境<select id="trade-destination"><option value="all">自动比较所有据点</option><option value="base">交易基准价值</option><option value="contact">陌生人 / 联系人</option></select></label><output id="market-plan-context" class="market-context">自动比较所有据点</output></div></div>
+<div class="market-tabs" role="tablist" aria-label="规划方式"><button id="tab-direct" type="button" role="tab" data-plan="direct" aria-controls="plan-direct">直接交换</button><button id="tab-process" type="button" role="tab" data-plan="process" aria-controls="plan-process">加工增值</button><button id="tab-plant" type="button" role="tab" data-plan="plant" aria-controls="plan-plant">种植收益</button></div>
+<section id="plan-direct" class="market-plan-panel" role="tabpanel" aria-labelledby="tab-direct"><div class="trade-controls"><label>找目标物品<input id="trade-target-search" type="search" placeholder="名称或 ID"></label><label>我想换回<select id="trade-target"><option value="">只比较交出价值</option></select></label><label>目标数量<input id="trade-target-count" type="number" value="1" min="1" max="9999"></label></div>
+<details class="trade-settings" id="trade-point-settings"><summary>选择已经解锁的据点</summary><div id="trade-enabled-points" class="trade-demand"></div></details><div id="trade-contact" hidden><p class="trade-help">照着游戏当前需求勾选类别；加价只作用于勾选的物资。</p><div id="trade-demand" class="trade-demand"></div><label>需求程度<select id="trade-urgency"><option value="0">无需求加价</option></select></label></div>
+<details class="trade-settings"><summary>本次交易条件</summary><div class="trade-controls"><label>鉴价加成 / %<input id="trade-appraisal" type="number" min="0" max="1000" value="0"></label><label>谈判减免 / 价值点<input id="trade-discount" type="number" min="0" value="0"></label><label class="trade-check"><input id="trade-camp" type="checkbox">无尽模式营地药品加价</label></div></details>
+<div id="trade-summary" class="trade-summary" role="status"></div><div id="trade-comparison"></div><div id="trade-breakdown"></div>
+<details class="market-subtool"><summary>格子有限，先带哪些</summary><div class="trade-controls"><label>携带范围<select id="cargo-scope"><option value="stock">只看可投入物资</option><option value="all">全部物品，找备料方向</option></select></label><label>找物资<input id="cargo-search" type="search" placeholder="物品名称或 ID"></label><label>类别<select id="cargo-cat"><option value="">全部类别</option></select></label><label>排序<select id="cargo-sort"><option value="density">每格交出价值最高</option><option value="value">单件交出价值最高</option></select></label></div><p id="cargo-status" class="trade-help"></p><div id="cargo-results"></div><button id="cargo-more" type="button" hidden>再看 20 种物资</button></details></section>
+<section id="plan-process" class="market-plan-panel" role="tabpanel" aria-labelledby="tab-process" hidden><p class="value-help">同一批原料不会重复投入；勾选“已执行”后，剩余原料继续滚动推荐。加工与种植沿用“直接交换”里选择的估值环境。</p><div class="value-controls"><label>菜肴品质<select id="value-quality"></select></label><label>烹饪等级<select id="value-cook-level"></select></label><label>制造等级<select id="value-craft-level"></select></label><label class="value-check"><input id="value-positive" type="checkbox" checked><span>只看有增值</span></label></div><div class="value-overview" role="status"><div><span>可投入物资直卖总值</span><strong id="value-direct">—</strong></div><div><span>按推荐方案后总值</span><strong id="value-plan-total">—</strong></div><div class="value-gain-cell"><span>总增值</span><strong id="value-gain">—</strong></div></div><p id="value-plan-error" role="alert"></p><div class="value-plan"><div id="value-cook-plan" hidden><h3>烹饪增值</h3><div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入</th><th>成品</th><th>每次增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div><div id="value-craft-plan" hidden><h3>制造增值</h3><div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入</th><th>产物</th><th>每次增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div><div id="value-applied-plan" hidden><h3>已执行方案</h3><div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入</th><th>成品</th><th>每次增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div><div id="value-leftovers" hidden><h3>剩余原料直卖</h3><div class="table-scroll"><table class="value-plan-table"><thead><tr><th>物品</th><th>剩余次数</th><th>直卖价值</th></tr></thead><tbody></tbody></table></div></div></div></section>
+<section id="plan-plant" class="market-plan-panel" role="tabpanel" aria-labelledby="tab-plant" hidden><div id="value-env-block"><p class="value-help">选当前能提供的家具和天气，只看符合条件的作物。</p><div class="value-controls"><label>天气<select id="value-weather"></select></label><label class="value-check"><input id="value-cold-wave" type="checkbox"><span>寒潮</span></label><label>位置<select id="value-location"></select></label><div id="value-heaters" class="value-heaters"></div><label>用电<select id="value-power"><option value="off">无电力加成</option><option value="on">接通电力</option></select></label><label>容器<select id="value-planter"></select></label><label class="value-check"><input id="value-plantable" type="checkbox" checked><span>只看能种的</span></label></div></div><div id="value-crops-block"><div id="value-crop-winner" class="market-winner" role="status"></div><div class="value-sort"><button type="button" data-crop-sort="net">单次收获净增值</button><button type="button" data-crop-sort="hour">每小时净增值</button></div><p id="value-crop-summary" class="value-crop-summary"></p><div class="table-scroll"><table id="value-crops" class="value-crop-table"><thead><tr><th>作物</th><th>收获</th><th>最佳加工</th><th>种子</th><th>返种率</th><th>种子成本</th><th>期望净增值</th><th>每小时</th><th>生长 / 时</th><th>占位</th></tr></thead><tbody></tbody></table></div></div></section></section></div></div>
+<dialog id="market-migration" class="market-migration"><form method="dialog"><h2>沿用哪份旧清单？</h2><p>检测到交易清单和增值库存都有数据。它们含义不同，不会自动相加。</p><div><button value="value" data-migrate="value">沿用增值库存</button><button value="trade" data-migrate="trade">沿用交易清单</button></div></form></dialog>
+<details class="trade-mechanics"><summary>口径与边界</summary><p>直接交换会应用据点折价、货架拒收、联系人需求与填写的鉴价条件；配置货架不是实时库存。</p><p>加工与种植沿用当前估值环境。比较所有据点时，每种物品取可接受据点中的最高估值；指定据点拒收的成品不计收益，拒收原料仍按原始基值保守计入成本。完整一件基值 = <code>TradeValue × max(1, UseTimes)</code>。</p><p>制造按普通成功产物，未计燃料、精力、设备和路程。种植净增值计入收获物最佳加工增值和种子返还率，未计完美收获、枯萎、生长加速与照料时间。</p></details>
+<noscript><p>启用 JavaScript 可查询据点并进行规划。下方仍可直接查阅配置货架。</p>'''
+    for point in model.get("points", []):
+        rows = [trade_item_row(entry, base, categories, shared_ids) for entry in point.get("items", [])]
+        body += f'<h2>{h(clean_text(point["name"]))}</h2>{trade_table(rows)}'
+    body += '</noscript>'
     # 与补给推荐页一致：JSON 合法的 unicode 转义防止 </script> 截断，不做 HTML 转义。
     data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \
         .replace("<", "\\u003c").replace("&", "\\u0026")
     body += f'<script id="trade-data" type="application/json">{data_json}</script>'
     return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version,
-                 extra_head='<link rel="stylesheet" href="../trade.css"><script src="../cooking.js" defer></script><script src="../trade.js" defer></script>')
+                 extra_head='<link rel="stylesheet" href="../trade.css"><link rel="stylesheet" href="../value.css">'
+                            '<script src="../planting.js" defer></script><script src="../cooking.js" defer></script>'
+                            '<script src="../trade.js" defer></script><script src="../value.js" defer></script><script src="../market.js" defer></script>')
 
 
 def value_document(model: dict[str, Any] | None, base: str, version: str) -> str:
     crumbs = [("生存日志 · 幸存者图鉴", base), ("增值规划", base + "value/")]
-    if not model:
-        body = ('<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / VALUE</p>'
-                '<h1>增值规划</h1></div></div>'
-                '<p>当前公开数据版本缺少增值规划需要的静态模型。请用与本站静态库一致的游戏版本运行'
-                ' <code>python codex_pages.py</code> 重新构建网页。</p>')
-        return shell(VALUE_TITLE, VALUE_DESCRIPTION, "value/", base, body, crumbs, version)
-
-    body = '''<div class="trade-hero"><p class="eyebrow">SURVIVAL LOG / VALUE PLANNER</p><h1>一冰箱食材，怎么用最值</h1>
-<p class="trade-subtitle">登记冰箱里的食材、种子和材料，这里按交易基准价值比较：直接卖、做菜、加工，哪种最划算；种子按家具和天气告诉你种什么。</p>
-<p class="trade-assumption">按配置与填写条件试算 · 只比较增值，不预测据点行情（去交易行情页看折价与需求）</p></div>
-<div id="value-planner" hidden>
-<div class="value-workbench">
-<section class="value-block"><h2><span class="value-step">01</span> 我有什么</h2>
-<div class="value-column">
-<div>
-<p class="value-help">搜索或按类别找到物品点击登记；数量按件 / 包填写，已用过的物品可调剩余比例。</p>
-<div class="trade-controls"><label>找物品<input id="value-search" type="search" placeholder="名称或 ID"></label>
-<label>类别<select id="value-stock-cat"><option value="">全部类别</option></select></label></div>
-<div id="value-catalog" class="value-catalog"></div>
-<details class="trade-settings"><summary>物品很多？按行批量登记</summary>
-<p class="value-help">每行填写“名称或 ID，件数”，也可用“名称×件数”。同物品会累加数量。</p>
-<label for="value-bulk">批量物资</label><textarea id="value-bulk" rows="4" placeholder="小家鼠×3&#10;生态香米，2"></textarea>
-<button id="value-bulk-apply" type="button">登记这些物资</button>
-<button id="value-bulk-example" type="button">填个示例</button><p id="value-bulk-result" class="value-help" role="status"></p></details>
-</div>
-<div>
-<div class="value-basket-heading"><h3>已登记 <span id="value-count"></span></h3><button id="value-clear" type="button">清空</button></div>
-<div id="value-basket" class="value-basket"></div>
-<p class="value-help">清单保存在此浏览器。打勾“补给”的物资视为可持续获得（陷阱猎物、交易补给），按需补充，不占库存上限，缺料时会提示补充数量。</p>
-</div>
-</div></section>
-<section class="value-block"><h2><span class="value-step">02</span> 怎么处理最划算</h2>
-<p class="value-help">同一批原料不会重复投入：勾选“已执行”后，方案消耗的原料从库存扣除，剩余原料继续滚动推荐。</p>
-<div class="value-controls"><label>菜肴品质<select id="value-quality"><option>普通</option><option>良好</option><option>完美</option></select></label>
-<label>烹饪等级<select id="value-cook-level"></select></label>
-<label>制造等级<select id="value-craft-level"></select></label>
-<label class="value-check"><input id="value-positive" type="checkbox" checked><span>只看有增值</span></label></div>
-<div class="value-overview" role="status">
-<div><span>原样直卖总值</span><strong id="value-direct">—</strong></div>
-<div><span>按推荐方案后总值</span><strong id="value-plan-total">—</strong></div>
-<div class="value-gain-cell"><span>总增值</span><strong id="value-gain">—</strong></div>
-</div>
-<p id="value-plan-error" role="alert"></p>
-<div class="value-plan">
-<div id="value-cook-plan" hidden><h3>烹饪增值</h3>
-<div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入（每锅）</th><th>成品</th><th>每锅增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div>
-<div id="value-craft-plan" hidden><h3>制造增值</h3>
-<div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入（每次）</th><th>产物</th><th>每次增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div>
-<div id="value-applied-plan" hidden><h3>已执行方案</h3>
-<div class="table-scroll"><table class="value-plan-table"><thead><tr><th></th><th>方案</th><th>投入</th><th>成品</th><th>每次增值</th><th>总增值</th></tr></thead><tbody></tbody></table></div></div>
-<div id="value-leftovers" hidden><h3>剩余原料直卖</h3>
-<div class="table-scroll"><table class="value-plan-table"><thead><tr><th>物品</th><th>剩余次数</th><th>直卖价值</th></tr></thead><tbody></tbody></table></div></div>
-</div>
-<p class="value-plan-note">增值 = 成品基准价值 − 原料按次基准价值合计；补给品也按基准价值计入成本，净赚才推荐。含补给的方案最多按 99 份显示。</p>
-</section>
-<section class="value-block" id="value-env-block"><h2><span class="value-step">03</span> 种植条件</h2>
-<p class="value-help">选当前能提供的家具和天气，下面只算你能种的作物。</p>
-<div class="value-controls"><label>天气<select id="value-weather"></select></label>
-<label class="value-check"><input id="value-cold-wave" type="checkbox"><span>寒潮</span></label>
-<label>位置<select id="value-location"></select></label>
-<div id="value-heaters" class="value-heaters"></div>
-<label>用电<select id="value-power"><option value="off">无电力加成</option><option value="on">接通电力</option></select></label>
-<label>容器<select id="value-planter"></select></label>
-<label class="value-check"><input id="value-plantable" type="checkbox"><span>只看能种的</span></label></div>
-</section>
-<section class="value-block" id="value-crops-block"><h2><span class="value-step">04</span> 种什么最赚</h2>
-<p class="value-help">净增值 = 收获基准价值 + 最佳加工增值 − 种子成本（按返还率折算期望）。加工增值按所选品质与烹饪/制造等级下、每个收获物可做的最优烹饪或制造估算，填充料按最省可行组合计。生长时间取基础值，未计生长加速、照料和枯萎损失。</p>
-<div class="value-sort"><button type="button" data-crop-sort="net">单次收获净增值</button>
-<button type="button" data-crop-sort="hour">每小时净增值</button></div>
-<p id="value-crop-summary" class="value-crop-summary"></p>
-<div class="table-scroll"><table id="value-crops" class="value-crop-table"><thead><tr><th>作物</th><th>收获</th><th>最佳加工</th><th>种子</th><th>返种率</th><th>种子成本</th><th>期望净增值</th><th>每小时</th><th>生长 / 时</th><th>占位</th></tr></thead><tbody></tbody></table></div>
-</section>
-</div>
-<details class="value-notes"><summary>口径与边界</summary>
-<p>本页用<strong>交易基准价值</strong>：每用量基值 = <code>TradeValue</code>，完整一件 = <code>TradeValue × max(1, UseTimes)</code>。菜肴一锅按整锅交易基值计，分份不重复相乘。这是和陌生人交易的账面价值；据点折价、需求加价、鉴价请到交易行情页试算。</p>
-<p>烹饪按游戏配置：固定食材配方优先，剩余食材按通用档位组合枚举（高 1.7 / 中 1.4 / 低 1.1 系数与游戏 <code>CalcProductVD</code> 对齐），以原料机会成本（直接卖的价值）计算净增值，贪心分配后做局部交换改进。制造按普通成功产物。</p>
-<p>种植：收获数量按配置 <code>Gain</code> 列表（重复项即数量），种子成本按 <code>Seed_Rate</code> 返还率折算期望。加工增值把收获物的最优加工收益计入作物价值：制造配方与固定食材配方按配置精确计算，通用档位配方的其他槽位按最省可行食材填充并校验档位组合，取每单位收获物净增值最高的一项；填充料是规划估计，实际收益取决于你现有的其他食材，且与库存方案可能重复计算同一批收获。完美收获、枯萎、生长加速与照料时间未计入。环境与可种判定和种植页一致。</p>
-<p>模型来自静态配置，不含库存读取。登记数据只保存在本浏览器。</p></details></div>
-<noscript><p>启用 JavaScript 可登记物资并计算增值方案。</p></noscript>'''
-    data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \
-        .replace("<", "\\u003c").replace("&", "\\u0026")
-    body += f'<script id="value-data" type="application/json">{data_json}</script>'
+    body = '''<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / VALUE PLANNER</p><h1>增值规划已并入交易规划</h1></div></div>
+<p>库存加工与“种什么最赚”现在和据点查询共用一份物资清单。</p><p><a class="supply-link" href="../trade/#plan=plant">前往种植收益规划 →</a></p>
+<script>location.replace("../trade/#plan=plant")</script>'''
     return shell(VALUE_TITLE, VALUE_DESCRIPTION, "value/", base, body, crumbs, version,
-                 extra_head='<link rel="stylesheet" href="../trade.css"><link rel="stylesheet" href="../value.css">'
-                            '<script src="../planting.js" defer></script><script src="../value.js" defer></script>')
+                 extra_head='<meta http-equiv="refresh" content="0;url=../trade/#plan=plant">')

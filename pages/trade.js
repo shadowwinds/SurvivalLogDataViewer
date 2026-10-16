@@ -14,15 +14,17 @@
   }
   function destinations(model, selection, excluded = []) {
     if (selection === "contact") return [{id: "contact", name: "陌生人 / 联系人", contact: true, items: []}];
+    if (selection === "base") return [{id: "base", name: "交易基准价值", baseline: true, items: []}];
     return selection === "all" ? model.points.filter(p => !excluded.includes(p.id)) : model.points.filter(p => String(p.id) === String(selection));
   }
   function rates(item, point, o, rules) {
-    const rejected = !point.contact && !o.absent[`${point.id}:${item.id}`] &&
+    const open = point.contact || point.baseline;
+    const rejected = !open && !o.absent[`${point.id}:${item.id}`] &&
       point.items.some(row => row.id === item.id && (row.count == null || row.count > 0));
-    const own = !point.contact && item.cat === point.half_value_cat ? rules.self_stock_rate : 1;
-    const sell = !point.contact && item.sell_rate > 0 && item.sell_rate < 1 ? item.sell_rate : 1;
+    const own = !open && item.cat === point.half_value_cat ? rules.self_stock_rate : 1;
+    const sell = !open && item.sell_rate > 0 && item.sell_rate < 1 ? item.sell_rate : 1;
     const boost = point.contact && o.demand.includes(item.cat) ? o.boost : 0;
-    return {rejected, own, sell, boost, scale: f(own * sell), coefficient: f(f(1 + boost) + o.appraisal)};
+    return {rejected, own, sell, boost, scale: f(own * sell), coefficient: point.baseline ? 1 : f(f(1 + boost) + o.appraisal)};
   }
   function given(item, quantity, remaining, point, o, rules) {
     const rate = rates(item, point, o, rules);
@@ -30,11 +32,11 @@
     return f(f(f(quantity * item.trade_value) * f(f(remaining) * uses(item))) * f(rate.scale * rate.coefficient));
   }
   function takeValue(item, point, o, rules) {
-    const price = !point.contact && o.camp && item.cat === 2 ?
+    const price = !point.contact && !point.baseline && o.camp && item.cat === 2 ?
       Math.max(item.trade_value, Math.ceil(f(item.trade_value * rules.camp_medicine_rate))) : item.trade_value;
     return price * uses(item);
   }
-  const availableTarget = (target, point, o) => !target || point.contact ||
+  const availableTarget = (target, point, o) => !target || point.contact || point.baseline ||
     point.items.some(i => i.id === target.id && i.count > 0 && !o.absent[`${point.id}:${i.id}`]);
   function cargo(model, basket, input) {
     const o = options(input, model.rules), target = model.items.find(i => i.id === Number(input.target));
@@ -149,8 +151,9 @@
     }
     return [...results.values()];
   }
-  host.Trade = {uses, cells, options, rates, given, takeValue, cargo, comparison, processing};
+  host.Trade = {uses, cells, options, destinations, rates, given, takeValue, cargo, comparison, processing};
   if (typeof document === "undefined") return;
+  if (document.getElementById("trade-planner")) return;
 
   (async () => {
     await host.I18n?.ready;

@@ -27,7 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = PROJECT_DIR / "pages"
 PUBLIC_METADATA = ("game_version", "database_schema_version")
 ASSETS = ("index.html", "styles.css", "guide.css", "game-theme.css", "app.js", "favicon.svg",
-          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "trade-worker.js", "value.css", "value.js", "value-worker.js", "locales/en.json", "locales/game-en.json")
+          "recommendations.css", "recommendations.js", "supply.js", "supply-worker.js", "i18n.js", "planting.js", "cooking.js", "trade.css", "trade.js", "trade-worker.js", "value.css", "value.js", "value-worker.js", "market.js", "locales/en.json", "locales/game-en.json")
 STAT_LABELS = ("饱腹", "心态", "精力", "健康", "生命")
 PRODUCT_FIELDS = (("PerfectItemID", "完美"), ("GoodItemID", "良好"), ("NormalItemID", "普通"), ("FailItemID", "失败"))
 ICON_ITEM_FIELDS = {"Config_CookingRecipe": tuple(field for field, _ in PRODUCT_FIELDS),
@@ -645,7 +645,7 @@ def build_pages(database_path: Path, output_dir: Path, site_url: str = DEFAULT_S
                        "planting_environment": payload["planting_environment"]}
     documents = seo_documents(payload, site_url, {
         "recommendations/index.html": recommendation_document(payload, site_url),
-        "trade/index.html": trade_document(trade_model, site_url, payload["metadata"].get("game_version", "未提供")),
+        "trade/index.html": trade_document(value_model, site_url, payload["metadata"].get("game_version", "未提供")),
         "value/index.html": value_document(value_model, site_url, payload["metadata"].get("game_version", "未提供"))})
     validate_output_targets(output_dir, [*ASSETS, "data.json", ".nojekyll",
                                          *documents, *( [PREY_MODEL_FILE] if prey_model else [])])
