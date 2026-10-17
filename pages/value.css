@@ -19,9 +19,13 @@ body > main .value-block h2 { font-size: 22px; margin: 0 0 14px; }
 .value-basket-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid #574b32; font-size: 13px; }
 .value-basket-row img { object-fit: contain; flex-shrink: 0; }
 .value-basket-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.value-basket-name small { display: block; margin-top: 3px; color: #a99d7e; font-size: 11px; }
 .value-basket-row input { width: 64px; min-height: 36px; background: #1e211a; border: 1px solid #77613c; color: #f1e6ca; padding: 5px; font: inherit; }
 .value-basket-row .value-supply { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #bdae8e; white-space: nowrap; }
 .value-basket-row .value-supply input { width: auto; min-height: auto; accent-color: #e1b537; }
+.value-not-applicable { width: 64px; color: #766e5c; text-align: center; }
+.value-basket-labels { display: grid; grid-template-columns: minmax(160px, 1fr) 64px 64px 64px 58px 28px; gap: 8px; padding: 8px 0; color: #95896f; border-bottom: 1px solid #574b32; font-size: 10px; text-align: center; }
+.value-basket-labels span:first-child { text-align: left; }
 #value-planner .value-remove { border: 0; background: transparent; color: #c8b48b; font-size: 20px; padding: 4px 8px; cursor: pointer; }
 #value-planner .value-remove:hover { color: #f2d486; }
 .value-basket-heading { display: flex; align-items: center; gap: 8px; margin: 20px 0 4px; flex-wrap: wrap; }
@@ -90,4 +94,17 @@ body > main .value-block h2 { font-size: 22px; margin: 0 0 14px; }
   .value-basket-row img { display: none; }
   .value-basket-row input { width: 54px; }
   .value-controls select { width: 100%; }
+}
+
+#trade-planner .value-basket-row { display: grid; grid-template-columns: auto minmax(120px, 1fr) 64px 64px 64px 58px 28px; }
+#trade-planner .value-basket-row .value-supply { justify-content: center; }
+#trade-planner .value-basket-row .value-remove { padding-left: 2px; padding-right: 2px; }
+#trade-planner #value-bulk { display: block; width: 100%; box-sizing: border-box; resize: vertical; margin: 8px 0; padding: 10px; color: #e8d5a6; border: 1px solid #78633d; background: #1e211a; font: inherit; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .value-basket-labels { display: none; }
+  #trade-planner .value-basket-row { grid-template-columns: minmax(115px, 1fr) repeat(3, 54px) 48px 26px; gap: 5px; }
+  #trade-planner .value-basket-row img { display: none; }
+  #trade-planner .value-basket-row input { width: 54px; }
+  #trade-planner .value-basket-row input::before { display: block; }
 }

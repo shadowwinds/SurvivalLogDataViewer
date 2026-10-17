@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from codex_pages import export_data
-from codex_pages_seo import trade_document
+from codex_pages_seo import trade_document, value_document
 from codex_pages_supply import extract_supply_model
 from codex_pages_trade import extract_trade_model
 from codex_parser import CONFIG_SCHEMAS, ConfigRow, parse_config_table
@@ -26,13 +26,31 @@ class SupplyModelTests(unittest.TestCase):
         source = r"""
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const sandbox = {window: {}};
-for (const file of ['cooking.js', 'supply.js', 'trade.js']) vm.runInNewContext(fs.readFileSync(process.argv[1] + '/pages/' + file, 'utf8'), sandbox);
+for (const file of ['cooking.js', 'supply.js', 'trade.js', 'value.js']) vm.runInNewContext(fs.readFileSync(process.argv[1] + '/pages/' + file, 'utf8'), sandbox);
 const S = sandbox.window.Supply, data = JSON.parse(fs.readFileSync(0, 'utf8'));
 const close = (a,b) => assert.ok(Math.abs(a-b) < 1e-6, `${a} != ${b}`);
 """ + assertions
         result = subprocess.run([node, "-e", source, str(ROOT)], input=json.dumps(data or {}),
                                 capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def run_value_worker(self, data: dict) -> dict:
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node.js is required to verify the value worker")
+        source = r"""
+const fs=require('node:fs'),vm=require('node:vm'),root=process.argv[1],request=JSON.parse(fs.readFileSync(0,'utf8'));
+let result=null;
+const sandbox={console,Math,Map,Set,Object,Array,Number,String,JSON};
+sandbox.self={postMessage:value=>{result=value;}}; sandbox.globalThis=sandbox;
+sandbox.importScripts=file=>vm.runInNewContext(fs.readFileSync(root+'/pages/'+file,'utf8'),sandbox);
+vm.runInNewContext(fs.readFileSync(root+'/pages/value-worker.js','utf8'),sandbox);
+sandbox.self.onmessage({data:request}); process.stdout.write(JSON.stringify(result));
+"""
+        result = subprocess.run([node, "-e", source, str(ROOT)], input=json.dumps(data),
+                                capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads(result.stdout)
 
     def test_trade_tables_read_all_fields_and_reject_unknown_layout_or_trailing_bytes(self) -> None:
         for table in ("Config_MapPoint", "Config_Shop"):
@@ -89,9 +107,14 @@ const close = (a,b) => assert.ok(Math.abs(a-b) < 1e-6, `${a} != ${b}`);
         self.assertNotIn("private-marker", json.dumps(model))
         html = trade_document(model, "../", "test")
         self.assertIn('id="trade-planner"', html)
+        self.assertIn('id="outposts"', html)
+        self.assertIn('id="inventory"', html)
+        self.assertIn('data-plan="plant"', html)
+        self.assertEqual(html.count('id="trade-data"'), 1)
         embedded = html.split('<script id="trade-data" type="application/json">', 1)[1].split('</script>', 1)[0]
         self.assertNotIn("</script>", embedded)
         self.assertEqual(json.loads(embedded)["points"][0]["name"], "outpost</script>")
+        self.assertIn('../trade/#plan=plant', value_document(model, "../", "test"))
 
     def test_container_cycles_power_controls_and_short_cycle_work(self) -> None:
         self.run_model(r"""
@@ -164,12 +187,15 @@ const medicine={id:3,cat:2,trade_value:11,use_times:2,sell_rate:1};
 const point={id:10,half_value_cat:9,items:[{...iron,count:3},{...medicine,count:5}]};
 const other={id:11,half_value_cat:10,items:[{...medicine,count:5}]};
 const contact={id:'contact',contact:true,items:[]};
+const baseline={id:'base',baseline:true,items:[]};
 let o=T.options({appraisal:20,boost:.9,demand:[1,9]},rules);
 close(T.given(iron,1,1,point,o,rules),0); // Reject only current visible stock.
 o.absent['10:1']=true; close(T.given(iron,1,1,point,o,rules),6);
 close(T.given(iron,1,1,other,o,rules),12); // No point demand bonus.
 close(T.given(rice,2,.5,contact,o,rules),Math.fround(176.4)); // 7 uses/package; demand + appraisal, no TradeSellRate.
 close(T.given(rice,1,1,other,T.options({},rules),rules),Math.fround(50.4));
+close(T.given(rice,1,1,baseline,T.options({},rules),rules),84);
+close(T.given(rice,1,1,baseline,T.options({appraisal:50},rules),rules),84);
 const model={rules,items:[iron,rice,medicine],points:[point,other]};
 const basket={1:{quantity:10,remaining:100}};
 let r=T.comparison(model,basket,{destination:'all',target:3,targetCount:5,discount:999});
@@ -180,6 +206,29 @@ assert.equal(T.takeValue(medicine,contact,T.options({camp:true},rules),rules),22
 assert.equal(T.comparison(model,basket,{destination:'all',excluded:[10,11]}).length,0);
 assert.equal(T.options({boost:.9},{...rules,demand_boost_max:.5}).boost,.5);
 """)
+
+    def test_shared_inventory_subtracts_reserved_whole_items(self) -> None:
+        self.run_model(r"""
+const V=sandbox.window.ValueInventory;
+const result=V.available({1:{quantity:7,reserve:2,remaining:50},2:{quantity:3,reserve:3,remaining:100},3:{quantity:1,reserve:9,remaining:100}});
+assert.deepEqual(Object.keys(result),['1']);
+assert.equal(result[1].quantity,5);
+assert.equal(result[1].remaining,50);
+""")
+
+    def test_value_worker_uses_selected_trade_valuation(self) -> None:
+        model = {"items": [{"id": 1, "name": "raw", "trade_value": 10, "use_times": 0},
+                           {"id": 2, "name": "product", "trade_value": 15, "use_times": 0}],
+                 "crafts": [{"id": 1, "name": "craft", "level": 1, "inputs": [1], "outputs": [2]}],
+                 "cooking": {"entries": [], "ingredients": [], "model": {}}, "dishes": []}
+        value = self.run_value_worker({"job": 1, "model": model, "input": {
+            "stock": {"1": {"quantity": 2, "remaining": 100}}, "supply": [], "quality": "普通",
+            "cookLevel": 1, "craftLevel": 1, "positiveOnly": True, "applied": [], "appliedRows": [],
+            "valuation": {"cost_per_use": {"1": 5, "2": 20}, "sale_per_use": {"1": 5, "2": 20},
+                          "sale_whole": {"1": 5, "2": 20}}}})
+        self.assertEqual(value["direct_total"], 10)
+        self.assertEqual(value["total_gain"], 30)
+        self.assertEqual(value["plan_total"], 40)
 
     def test_trade_processing_opportunity_cost_duplicate_materials_and_whole_pot(self) -> None:
         self.run_model(r"""

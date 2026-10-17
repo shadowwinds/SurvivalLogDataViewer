@@ -16,6 +16,9 @@ importScripts("cooking.js");
   function wholeBase(item) {
     return f(f(item.trade_value) * uses(item));
   }
+  const costPerUse = (item, valuation) => f(valuation?.cost_per_use?.[item.id] ?? item.trade_value);
+  const salePerUse = (item, valuation) => f(valuation?.sale_per_use?.[item.id] ?? item.trade_value);
+  const saleWhole = (item, valuation) => f(valuation?.sale_whole?.[item.id] ?? wholeBase(item));
 
   // 把登记库存换算成"可用次数"，补给品视为无限。
   function parseStock(model, input) {
@@ -25,11 +28,11 @@ importScripts("cooking.js");
       const item = byId.get(Number(id));
       if (!item || !(entry.quantity > 0)) continue;
       const perItem = Math.max(1, uses(item) * clampPercent(entry.remaining));
-      stockValue.direct += f(f(item.trade_value * perItem) * Math.floor(entry.quantity));
+      stockValue.direct += f(f(salePerUse(item, input.valuation) * perItem) * Math.floor(entry.quantity));
       if (input.supply?.includes(item.id)) supply.add(item.id);
       else stock[item.id] = Math.floor(entry.quantity) * perItem;
     }
-    return {byId, stock, supply, stockValue};
+    return {byId, stock, supply, stockValue, valuation: input.valuation || null};
   }
 
   const clampPercent = value => Math.min(100, Math.max(0, Number(value) || 100)) / 100;
@@ -38,9 +41,9 @@ importScripts("cooking.js");
     for (const itemId of Object.keys(requirements)) if (!ctx.byId.has(Number(itemId))) return null;
     for (const itemId of Object.keys(outputs)) if (!ctx.byId.has(Number(itemId))) return null;
     let cost = 0;
-    for (const [itemId, count] of Object.entries(requirements)) cost += ctx.byId.get(Number(itemId)).trade_value * count;
+    for (const [itemId, count] of Object.entries(requirements)) cost += costPerUse(ctx.byId.get(Number(itemId)), ctx.valuation) * count;
     let value = 0;
-    for (const [itemId, count] of Object.entries(outputs)) value += wholeBase(ctx.byId.get(Number(itemId))) * count;
+    for (const [itemId, count] of Object.entries(outputs)) value += saleWhole(ctx.byId.get(Number(itemId)), ctx.valuation) * count;
     cost = f(cost);
     value = f(value);
     const gain = f(value - cost);
@@ -94,8 +97,8 @@ importScripts("cooking.js");
         if (have !== Infinity) pots = Math.min(pots, Math.floor(have / count));
       }
       if (!(pots > 0)) continue;
-      const cost = Object.entries(requirements).reduce((sum, [itemId, count]) => f(sum + ctx.byId.get(Number(itemId)).trade_value * count), 0);
-      const value = Object.entries(outputs).reduce((sum, [itemId, count]) => f(sum + wholeBase(ctx.byId.get(Number(itemId))) * count), 0);
+      const cost = Object.entries(requirements).reduce((sum, [itemId, count]) => f(sum + costPerUse(ctx.byId.get(Number(itemId)), ctx.valuation) * count), 0);
+      const value = Object.entries(outputs).reduce((sum, [itemId, count]) => f(sum + saleWhole(ctx.byId.get(Number(itemId)), ctx.valuation) * count), 0);
       const gain = f(value - cost);
       const plan = {kind: saved.kind || "cook", key: saved.key || `${saved.kind}:${saved.id}`, id: saved.id,
         name: saved.name, requirements, outputs, cost, value, gain, ratio: gain / cost,
@@ -225,7 +228,7 @@ importScripts("cooking.js");
       if (available.length) {
         // cooking.ingredients 没有 trade_value 字段，交易基值统一从 trade items 表（ctx.byId）取。
         Cooking.plan(model.cooking.entries, available, planStock, quality, 0, 0, model.cooking.model, {
-          ingredientCost: item => f(ctx.byId.get(item.id)?.trade_value || 0),
+          ingredientCost: item => f(ctx.byId.has(item.id) ? costPerUse(ctx.byId.get(item.id), ctx.valuation) : 0),
           score: (total, chosen, entry, product) => {
             void total;
             const dish = model.dishes.find(item => item.id === entry.id);
@@ -234,10 +237,10 @@ importScripts("cooking.js");
             if (!output) return NaN;
             const cost = chosen.reduce((sum, item) => {
               const ingredient = ctx.byId.get(item.id);
-              return ingredient ? f(sum + f(ingredient.trade_value)) : NaN;
+              return ingredient ? f(sum + costPerUse(ingredient, ctx.valuation)) : NaN;
             }, 0);
             if (!Number.isFinite(cost)) return NaN;
-            const gain = f(wholeBase(output) - cost);
+            const gain = f(saleWhole(output, ctx.valuation) - cost);
             const previous = bestGeneric.get(entry.key);
             if (!previous || gain > previous.gain)
               bestGeneric.set(entry.key, {entryId: entry.id, entryKey: entry.key,
@@ -275,7 +278,7 @@ importScripts("cooking.js");
         .filter(item => ctx.stock[item.id] > 0)
         .map(item => ({id: item.id, name: item.name, icon: item.icon,
           uses_left: Math.round(ctx.stock[item.id]),
-          value: f(f(ctx.byId.get(item.id)?.trade_value || 0) * ctx.stock[item.id])}))
+          value: f(salePerUse(ctx.byId.get(item.id), ctx.valuation) * ctx.stock[item.id])}))
         .filter(item => item.uses_left > 0)
         .sort((a, b) => b.value - a.value);
 
