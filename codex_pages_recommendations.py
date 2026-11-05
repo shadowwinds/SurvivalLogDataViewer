@@ -364,7 +364,7 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <div id="rec-model-summary"><p>完整组合排名启用后，前期以饱食为主，中期兼顾心态，后期以心态与照料效率为主。</p></div>
 <details><summary>烹饪、照料与交易的计算口径</summary><ul>
 <li>指定配方优先；通用配方按实际食材、最高档位和所选品质计算。通用菜心态、精力取品质成品配置；饱食、健康、生命来自实际食材。每锅和每次食用分别展示，不将分份次数再乘到整锅恢复。</li>
-<li>在全部公开可烹饪食材中枚举组合，每道菜独立推荐。配置存在不等于商店有售、已经解锁或库存充足；实际库存可到图鉴的“按冰箱食材配餐”确认。</li>
+<li>在全部公开可烹饪食材中枚举组合，每道菜独立推荐。配置存在不等于商店有售、已经解锁或库存充足；实际库存可到图鉴的“冰箱配餐”确认。</li>
 <li>收益按每日饱食、心态目标归一化；负担按每日预算、照料分钟、可用种植容量和等待容忍归一化。收益 ÷（1 + 加权负担）得到效率，再转成同类候选的并列百分位，负面恢复最多扣 30 分。长期补给按基础心态收益比较，当天结算按当前上限扣除溢出；搜索与排序不改变评分池。</li>
 <li>每次食材购买价 = 整包 price ÷ UseTimes；每次交易换入基值 = TradeValue。两种单位不混用。种植计新种子的成本，不把返种当免费；未计肥料、电力、燃料、获取路程和设备购置。</li>
 <li>按所选容器种满计算：种子数 = floor(容量 ÷ 作物尺寸)。生长时间按设施、等级和额外速度的乘积缩短。普通与完美收获独立选择，不推断完美概率或无限再生。特殊温室的每日施肥、再生作物不参与基础排名。</li>
@@ -372,13 +372,13 @@ def recommendation_document(payload: dict[str, Any], base: str) -> str:
 <li>短周期增加每日播种和收获次数；不只按产量排名。每日方案按整数食用次数满足饱食需求，显示心态缺口、饱食超出、均摊锅数和预算。种植容器按整数向上取整，共享同种作物的收获不重复占地；每天照料和种子成本按这些整容器计，多余收获不抵扣成本。容量是容器内部的种植空间，设备实际地面占格仍需在游戏中安排。</li>
 <li>基础心态结算 = max(0, floor((结算前心态 − 50) ÷ 5))，兑换后会扣去对应心态。输入“不吃这组菜”的结算前心态与角色上限，比较食用前后差值；已计上限，未计其他当天事件。天赋改变兑换步长时可手填。</li>
 <li>完整一锅的交出基值 = 品质成品 TradeValue × max(1, 配置 UseTimes)。实际分份次数用于食用；交易按实例剩余次数 ÷ 实例最大次数归一，完整一锅不能再乘实际分份。配置折价情景仅应用据点的 TradeSellRate；完整据点折价、货架拒收与联系人需求请到交易行情页试算。净基值 = 成品交出估值 − 原料换入基值，不等于现金利润。未计燃料、设备与路程。</li>
-</ul></details><p><a href="../?lang=zh-CN#dish/">按冰箱里的实际食材配餐 →</a> · <a href="../?lang=zh-CN#plant/">核对当前种植环境 →</a></p>
+</ul></details><p><a href="../#pantry/">按冰箱里的实际食材配餐 →</a> · <a href="../#plant/">核对当前种植环境 →</a> · <a href="../trade/#plan=plant">种什么最赚 →</a></p>
 </section>'''
     document = shell("生存日志补给推荐｜囤货、前中后期菜肴与作物排行 · Survival Log",
                      "按真实烹饪组合、品质、每日心态与生存点、成熟时间、照料和种植空间，比较前中后期备料、菜肴与交易取舍。",
                      "recommendations/", base, body,
                      [("幸存者图鉴", base), ("生存补给计划", base + "recommendations/")],
-                     payload["metadata"].get("game_version", "未提供"), collection=True)
+                     payload["metadata"].get("game_version", "未提供"), collection=True, current="recommendations")
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("<", "\\u003c").replace("&", "\\u0026")
     return document.replace('</head>', '<link rel="stylesheet" href="../recommendations.css">\n</head>').replace(
         '</body>', f'<script id="rec-data" type="application/json">{embedded}</script><script src="../cooking.js" defer></script><script src="../supply.js" defer></script><script src="../recommendations.js" defer></script>\n</body>')
