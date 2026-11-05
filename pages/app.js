@@ -5,7 +5,8 @@
   const i18n = window.I18n;
   const locale = () => i18n?.locale || "zh-CN";
   const mobile = matchMedia("(max-width: 720px)");
-  const state = { categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", craftGroup: "", materialId: null, materialUses: new Map(), craftNoteNames: {}, furniturePageNames: {}, planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "", dataVersion: "", preyModel: null, preyModelPromise: null, preyModelFailed: false, preyById: new Map(), trapById: new Map(), baitById: new Map(), roomById: new Map() };
+  const homeTitle = document.title;
+  const state = { home: false, pending: null, categories: [], category: "food", key: "", entries: [], effect: "", debounce: null, ingredients: [], materials: [], group: "", tier: "", craftGroup: "", materialId: null, materialUses: new Map(), craftNoteNames: {}, furniturePageNames: {}, planters: [], plantingEnvironment: null, stock: {}, cookingModel: null, pantryPlans: new Map(), pantryPlanKey: "", dataVersion: "", preyModel: null, preyModelPromise: null, preyModelFailed: false, preyById: new Map(), trapById: new Map(), baitById: new Map(), roomById: new Map() };
   const preyModes = new Set(["prey", "traps", "baits", "cages"]);
   const preyModeHelp = {
     prey: "先看哪些陷阱能抓到、放什么诱饵最有效；食用属性移到了后面。",
@@ -17,11 +18,13 @@
   const statLabels = ["饱腹", "心态", "精力", "健康", "生命"];
   const tierLabels = { 1: "高档", 2: "中档", 3: "低档" };
   const qualityName = (value) => value === "良好" ? "优良" : value;
-  const titles = { food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", plant: "种植手册", prey: "猎物图鉴", traps: "陷阱图鉴", baits: "诱饵图鉴", cages: "老鼠笼发电", craft: "制造手册", furniture: "家具与设施", books: "书籍列表", achievements: "成就指南" };
+  const titles = { home: "幸存者图鉴", food: "烹饪食材", "ready-food": "即食食品", dish: "菜肴与效果", pantry: "冰箱配餐", plant: "种植手册", prey: "猎物图鉴", traps: "陷阱图鉴", baits: "诱饵图鉴", cages: "老鼠笼发电", craft: "制造手册", furniture: "家具与设施", books: "书籍列表", achievements: "成就指南" };
   const intros = {
+    home: "从你现在想做的事出发：搜索全站，或选一个问题直接进入对应工具。",
     food: "看属性、查标签，掌握每份食材的可用次数。",
     "ready-food": "不用于烹饪的食品与饮品，直接查看食用次数与效果。",
     dish: "先看吃完的效果，再决定今天做什么。",
+    pantry: "登记冰箱里剩下的食材，自动配出能做的菜和每锅效果。",
     plant: "选天气、位置与供暖，查现在能种什么。",
     prey: "先看哪些陷阱能抓到、放什么诱饵最有效。",
     traps: "比较耐久、检查间隔与各猎物的基础概率。",
@@ -33,6 +36,10 @@
     achievements: "查条件、看方法，补齐你的生存记录。",
   };
   const icons = {
+    home: '<path d="M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6"/>',
+    pantry: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 10h12M9 6v2m0 5v3"/>',
+    plan: '<path d="M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M8 11h8M8 15h8M8 19h4"/>',
+    trade: '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
     food: '<path d="M5 10c-4-3-1-7 3-6 2-2 5-2 7 0 4-1 7 3 3 6v9H5z"/><path d="M9 11v4m5-4v4"/>',
     dish: '<path d="M3 12h18a9 9 0 0 1-18 0zM8 21h8M9 3c-3 3 3 3 0 6m6-6c-3 3 3 3 0 6"/>',
     plant: '<path d="M12 21v-9M12 14C4 14 3 10 3 5c7 0 9 3 9 9zM12 11c0-6 3-8 9-8 0 6-3 8-9 8z"/>',
@@ -155,8 +162,13 @@
     return "#" + categoryId + "/" + encodeURIComponent(key);
   }
 
+  // 冰箱配餐与查菜谱共用菜肴条目，只在网址和导航上区分为两个入口。
+  function currentRoute() {
+    return state.home ? "home" : isPantry() ? "pantry" : state.category;
+  }
+
   function setUrl() {
-    history.replaceState(null, "", urlFor(state.category, state.key));
+    history.replaceState(null, "", urlFor(currentRoute(), state.key));
   }
 
   function profile(entry) {
@@ -534,32 +546,128 @@
     return assign(0);
   }
 
+  // 导航按玩家需求分组；补给计划与交易规划是独立页面，同样放进对应需求组。
+  const navGroups = [
+    ["", ["home"]],
+    ["吃饭与烹饪", ["food", "ready-food", "dish", "pantry", "@recommendations"]],
+    ["种植与狩猎", ["plant", "prey"]],
+    ["制造与建设", ["craft", "furniture"]],
+    ["交易与增值", ["@trade"]],
+    ["资料与成就", ["books", "achievements"]],
+  ];
+  const navLabels = { home: "首页 · 全站搜索", prey: "猎物与陷阱" };
+  const externalTools = {
+    "@recommendations": { href: "./recommendations/", label: "补给计划", icon: "plan", title: "囤什么、做什么、种什么：按生存阶段排名" },
+    "@trade": { href: "./trade/", label: "交易规划", icon: "trade", title: "据点货架、物资交换、加工增值与种植收益" },
+  };
+  const navCategory = (id) => id === "home" ? true : category(id === "pantry" ? "dish" : id);
+  const modeTabs = {
+    cookingModeTabs: [["dish", "查菜谱 · 指定材料"], ["pantry", "冰箱配餐"]],
+    preyModeTabs: [["prey", "猎物捕获"], ["traps", "陷阱"], ["baits", "诱饵"], ["cages", "老鼠笼发电"]],
+  };
+  const relatedTools = {
+    food: [["#pantry/", "冰箱配餐：这些食材能做什么"], ["./recommendations/#ingredients", "备料推荐"], ["./trade/#plan=direct", "拿去据点交换"]],
+    "ready-food": [["./recommendations/#stock", "即食囤货排行"], ["./trade/#plan=direct", "拿去据点交换"]],
+    dish: [["./recommendations/#dishes", "菜肴推荐排行"], ["./trade/#plan=process", "做菜再卖：加工增值"], ["./recommendations/#trade", "自己吃还是拿去换"]],
+    plant: [["./trade/#plan=plant", "种什么最赚"], ["./recommendations/#crops", "按每日饱食排作物"], ["#furniture/", "种植容器", "6"]],
+    prey: [["#craft/", "制作陷阱", "3"], ["./trade/#plan=direct", "猎物拿去交换"]],
+    craft: [["./trade/#plan=process", "做了再卖：制造增值"], ["#furniture/", "家具与设施"]],
+    furniture: [["#craft/", "制造手册"], ["#plant/", "种植手册"]],
+  };
+  const searchOrder = ["food", "ready-food", "dish", "plant", "prey", "traps", "baits", "cages", "craft", "furniture", "books", "achievements"];
+
   function buildNav() {
     const fragment = document.createDocumentFragment();
-    for (const id of ["food", "ready-food", "dish", "plant", "prey", "craft", "furniture", "books", "achievements"]) {
-      const item = category(id);
-      if (!item) continue;
-      if (id === "food" || id === "plant") fragment.append(node("div", "nav-caption", id === "food" ? "吃什么 · 怎么做" : "更多生存手册"));
-      const button = node("button", "category-button");
-      button.type = "button";
-      button.dataset.category = id;
-      button.setAttribute("aria-label", titles[id] + "，" + item.entries.length + " 条");
-      button.append(icon(id), node("span", "category-label", titles[id]), node("span", "category-count", item.entries.length));
-      button.addEventListener("click", () => {
-        if (state.category === id) return;
-        location.hash = urlFor(id, "");
-      });
-      fragment.append(button);
+    for (const [caption, ids] of navGroups) {
+      const items = ids.filter((id) => externalTools[id] || navCategory(id));
+      if (!items.length) continue;
+      if (caption) fragment.append(node("div", "nav-caption", caption));
+      for (const id of items) {
+        const tool = externalTools[id];
+        if (tool) {
+          const link = node("a", "category-button nav-tool");
+          link.href = tool.href;
+          link.title = tool.title;
+          link.append(icon(tool.icon), node("span", "category-label", tool.label), node("span", "nav-external", "↗"));
+          fragment.append(link);
+          continue;
+        }
+        const label = navLabels[id] || titles[id];
+        const count = ["home", "pantry"].includes(id) ? null : category(id).entries.length;
+        const button = node("button", "category-button");
+        button.type = "button";
+        button.dataset.category = id;
+        button.setAttribute("aria-label", count === null ? label : label + "，" + count + " 条");
+        button.append(icon(id), node("span", "category-label", label));
+        if (count !== null) button.append(node("span", "category-count", count));
+        button.addEventListener("click", () => {
+          if (currentRoute() === id) return;
+          location.hash = id === "home" ? "home" : urlFor(id, "");
+        });
+        fragment.append(button);
+      }
     }
     $("categoryNav").replaceChildren(fragment);
+    markNav();
+  }
+
+  function markNav() {
+    const navId = state.home ? "home" : isPantry() ? "pantry" : ({ traps: "prey", baits: "prey", cages: "prey" })[state.category] || state.category;
+    document.querySelectorAll(".category-button[data-category]").forEach((button) => {
+      const active = button.dataset.category === navId;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+  }
+
+  // 手机端导航是一行横向滚动条，切换后把当前项滚到可见位置。
+  function revealActiveNav() {
+    const nav = $("categoryNav"), active = nav.querySelector(".category-button.active");
+    if (!active) return;
+    const box = nav.getBoundingClientRect(), item = active.getBoundingClientRect();
+    if (nav.scrollWidth > nav.clientWidth) nav.scrollLeft += item.left - box.left - (nav.clientWidth - item.width) / 2;
+    else if (item.top < box.top || item.bottom > box.bottom) nav.scrollTop += item.top - box.top - (nav.clientHeight - item.height) / 2;
+  }
+
+  function renderModeTabs() {
+    const route = currentRoute();
+    for (const [id, tabs] of Object.entries(modeTabs)) {
+      $(id).replaceChildren(...tabs.filter(([tab]) => navCategory(tab)).map(([tab, label]) => {
+        const link = node("a", "mode-tab", label);
+        link.href = urlFor(tab, "");
+        if (tab === route) link.setAttribute("aria-current", "page");
+        return link;
+      }));
+    }
+  }
+
+  function renderRelatedTools() {
+    const route = currentRoute();
+    const tools = relatedTools[({ pantry: "dish", traps: "prey", baits: "prey", cages: "prey" })[route] || route] || [];
+    $("relatedTools").hidden = state.home || !tools.length;
+    $("relatedTools").replaceChildren(node("span", "related-label", "相关工具"), ...tools.map(([href, label, group]) => {
+      const link = node("a", "related-tool", label);
+      link.href = href;
+      if (group) link.dataset.group = group;
+      if (!href.startsWith("#")) link.append(node("span", "related-arrow", "↗"));
+      return link;
+    }));
+  }
+
+  function renderHeading() {
+    const route = currentRoute();
+    $("categoryTitle").textContent = titles[route];
+    $("categoryIntro").textContent = intros[route];
+    $("pageHelp").hidden = state.home;
+    renderModeTabs();
+    renderRelatedTools();
   }
 
   function configureControls() {
     const isFood = ["food", "ready-food"].includes(state.category);
     const isDish = state.category === "dish";
     const preyFamily = preyModes.has(state.category);
-    $("categoryTitle").textContent = titles[state.category];
-    $("categoryIntro").textContent = intros[state.category];
     $("pageHelp").querySelector("p").textContent = state.category === "plant" ?
       "选择当前天气、寒潮强度、种植位置与正在运行的供暖设备。勾选只看当前可种；取消后可查看光照、寒冷或空间不满足的原因。默认食用作物优先，再按基础收获时间排列。" :
       state.category === "prey" ? "每个猎物列出能抓住它的陷阱、推荐诱饵和房间倾向；数值为配置原始值，实际概率由陷阱、诱饵、房间和陷阱技能共同决定。" :
@@ -567,10 +675,7 @@
     $("searchLabel").textContent = state.category === "ready-food" ? "找食品与饮品" : isFood ? "找食材" : isDish ? "找一道菜" : state.category === "baits" ? "找诱饵" : state.category === "books" ? "找一本书" : "搜索图鉴";
     $("nameSearch").placeholder = isFood ? "搜索名称、标签或食用说明" : isDish ? "搜索菜名或成品说明" : "搜索名称或 ID";
     $("preyModeField").hidden = !preyFamily || !state.preyModel;
-    if (preyFamily && state.preyModel) {
-      $("preyMode").value = state.category;
-      $("preyModeHelp").textContent = preyModeHelp[state.category];
-    }
+    if (preyFamily && state.preyModel) $("preyModeHelp").textContent = preyModeHelp[state.category];
     $("materialField").hidden = !["craft", "furniture"].includes(state.category);
     $("ingredientField").hidden = !isDish;
     $("cookingModeField").hidden = !isDish;
@@ -876,6 +981,7 @@
     $("entryList").replaceChildren(fragment);
     $("entryList").setAttribute("aria-busy", "false");
     $("emptyState").hidden = state.entries.length !== 0;
+    $("emptyState").querySelector("h2").textContent = isPantry() && !pantryCount() ? "先登记冰箱里的食材" : "这次没有找到";
     $("emptyState").querySelector("p").textContent = isPantry() ? "先添加冰箱食材和剩余用量；没有结果时，检查烹饪等级、品质或其他筛选条件。" : "换个关键词，或减少标签和属性筛选。";
     $("resultCount").textContent = state.entries.length + " / " + category().entries.length + (state.category === "dish" ? " 道料理" : " 个条目");
     $("filterSummary").textContent = state.category === "dish" ? qualityName($("qualitySelect").value) + "品质" + ($("cookingLevelSelect").value ? " · 烹饪 Lv." + $("cookingLevelSelect").value + " 及以下" : "") + ($("specificRecipesOnly").checked ? " · 仅专用菜谱" : "") + (isPantry() ? " · 按冰箱配餐 · 每锅总量" : state.materials.length ? " · 已按食材槽位与档位筛选" : "") : ["food", "ready-food"].includes(state.category) ? "绿色为增益 · 红色为减益" : ["craft", "furniture"].includes(state.category) ? [state.craftGroup ? "已按分类筛选" : "", state.materialId ? "已按材料筛选" : ""].filter(Boolean).join(" · ") : "";
@@ -1504,15 +1610,10 @@
   }
 
   function render(preserveDetailScroll = false, preservePantryInputs = false) {
-    if (!category()) return;
-    if (location.hash) document.title = titles[state.category] + " · 生存日志 Survival Log";
-    const navId = ({traps: "prey", baits: "prey", cages: "prey"})[state.category] || state.category;
-    document.querySelectorAll(".category-button").forEach((button) => {
-      const active = button.dataset.category === navId;
-      button.classList.toggle("active", active);
-      if (active) button.setAttribute("aria-current", "page");
-      else button.removeAttribute("aria-current");
-    });
+    if (!category() || state.home) return;
+    if (location.hash) document.title = titles[currentRoute()] + " · 生存日志 Survival Log";
+    markNav();
+    renderHeading();
     document.querySelectorAll(".filter-chip").forEach((button) => {
       button.classList.toggle("active", button.dataset.effect === state.effect);
       button.setAttribute("aria-pressed", String(button.dataset.effect === state.effect));
@@ -1526,7 +1627,144 @@
     renderDetail(preserveDetailScroll);
     renderFacets();
     renderPlantingConditions();
+    renderElsewhere();
     i18n?.apply();
+  }
+
+  // 分类内搜索时，提示同一关键词在其他分类里的命中数，点一下带着关键词过去。
+  function renderElsewhere() {
+    const raw = $("nameSearch").value.trim(), query = normalize(raw);
+    const matches = query ? searchOrder.filter((id) => id !== state.category && category(id))
+      .map((id) => [id, category(id).entries.filter((entry) => entry.nameIndex.includes(query)).length])
+      .filter(([, count]) => count) : [];
+    $("elsewhere").hidden = !matches.length;
+    $("elsewhere").replaceChildren(...(matches.length ? [node("span", "elsewhere-label", "其他分类也有“" + raw + "”：")] : []),
+      ...matches.map(([id, count]) => {
+        const link = node("a", "elsewhere-link");
+        link.href = urlFor(id, "");
+        link.dataset.query = raw;
+        link.append(node("span", "", titles[id]), node("small", "", count));
+        return link;
+      }));
+  }
+
+  function entryMeta(categoryId, entry) {
+    if (categoryId === "prey") return [stars(state.preyById.get(entry.id)?.rarity), "猎物"].filter(Boolean).join(" · ");
+    if (entry.trap) return "耐久 " + number(entry.trap.durability) + " · 可捕 " + entry.trap.prey.length + " 种猎物";
+    if (entry.bait) return state.preyModel?.bait_effects[entry.bait.effect] || titles.baits;
+    if (entry.cage) return "容纳 " + number(entry.cage.capacity_mice) + " 只 · 每只 " + number(entry.cage.power_per_mouse) + " 电力";
+    if (categoryId === "books") return titles.books;
+    if (entry.food) return [entry.food.sub_category, entry.food.cookable ? tierLabels[entry.food.tier] || "不影响档位" : "即食"].filter(Boolean).join(" · ");
+    if (categoryId === "dish") return Number.isInteger(entry.recipe?.min_level) ? "烹饪 Lv." + entry.recipe.min_level : titles.dish;
+    if (entry.plant) return entry.plant.food_harvest ? "食用收获" : "其他收获";
+    if (categoryId === "craft" || categoryId === "furniture") return craftGroupName(categoryId, entry) || titles[categoryId];
+    if (categoryId === "achievements") return entry.hidden ? "隐藏成就" : entry.group || titles.achievements;
+    return "ID " + entry.id;
+  }
+
+  function matchRank(entry, query) {
+    const names = [normalize(entry.name), normalize(i18n?.english(entry.name) || "")];
+    if (names.includes(query) || String(entry.id) === query) return 0;
+    if (names.some((name) => name.startsWith(query))) return 1;
+    return names.some((name) => name.includes(query)) ? 2 : 3;
+  }
+
+  // 首页全站搜索：按分类分组，名称完全匹配或前缀匹配的分类排在前面。
+  function renderHub() {
+    const raw = $("globalSearch").value.trim(), query = normalize(raw), box = $("hubResults");
+    box.hidden = !query;
+    if (!query) { box.replaceChildren(); return; }
+    const groups = searchOrder.filter((id) => category(id)).map((id, order) => {
+      const matches = category(id).entries.filter((entry) => entry.nameIndex.includes(query))
+        .map((entry) => ({ entry, rank: matchRank(entry, query) }))
+        .sort((a, b) => a.rank - b.rank || a.entry.id - b.entry.id);
+      return { id, order, matches, best: matches[0]?.rank ?? 9 };
+    }).filter((group) => group.matches.length).sort((a, b) => a.best - b.best || a.order - b.order);
+    if (!groups.length) {
+      box.replaceChildren(node("p", "hub-empty", "没有找到“" + raw + "”。换个关键词、少写几个字，或直接输入 ID。"));
+      i18n?.apply(box);
+      return;
+    }
+    const total = groups.reduce((sum, group) => sum + group.matches.length, 0);
+    const list = node("div", "hub-result-groups");
+    for (const group of groups) {
+      const block = node("section", "hub-result-group");
+      const head = node("div", "hub-result-head");
+      head.append(icon(group.id), node("h3", "", titles[group.id]), node("small", "", "共 " + group.matches.length + " 条"));
+      block.append(head);
+      for (const { entry } of group.matches.slice(0, 4)) {
+        const link = node("a", "hub-result");
+        link.href = urlFor(group.id, entry.key);
+        const text = node("span", "hub-result-text");
+        text.append(node("span", "hub-result-name", entry.name), node("small", "", entryMeta(group.id, entry)));
+        link.append(art(entry.icon, group.id), text);
+        block.append(link);
+      }
+      if (group.matches.length > 4) {
+        const more = node("a", "hub-result-more", "查看全部 " + group.matches.length + " 条 →");
+        more.href = urlFor(group.id, "");
+        more.dataset.query = raw;
+        block.append(more);
+      }
+      list.append(block);
+    }
+    box.replaceChildren(node("p", "hub-results-summary", "找到 " + total + " 条 · 分布在 " + groups.length + " 个分类 · 按回车打开第一条"), list);
+    i18n?.apply(box);
+  }
+
+  function pantryCount() {
+    return state.ingredients.filter((item) => state.stock[item.id] > 0).length;
+  }
+
+  function renderContinue() {
+    const items = [];
+    const fridge = pantryCount();
+    if (fridge) items.push(["#pantry/", "冰箱已登记 " + fridge + " 种食材", "继续配餐 →"]);
+    let goods = 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem("survival-log-market-inventory:" + state.dataVersion) || "null");
+      goods = Object.values(saved?.stock || {}).filter((entry) => entry?.quantity > 0).length;
+    } catch { /* Storage is optional. */ }
+    if (goods) items.push(["./trade/#plan=direct", "交易清单已登记 " + goods + " 种物资", "继续规划 →"]);
+    $("hubContinue").hidden = !items.length;
+    $("hubContinue").replaceChildren(...(items.length ? [node("span", "hub-continue-label", "继续上次")] : []),
+      ...items.map(([href, text, action]) => {
+        const link = node("a", "hub-continue-link");
+        link.href = href;
+        link.append(node("span", "", text), node("strong", "", action));
+        return link;
+      }));
+  }
+
+  function showHome() {
+    state.home = true;
+    if ($("detailPanel").open && mobile.matches) $("detailPanel").close();
+    ["queryTools", "workspace"].forEach((id) => { $(id).hidden = true; });
+    $("homeView").hidden = false;
+    document.title = homeTitle;
+    renderHeading();
+    markNav();
+    renderHub();
+    renderContinue();
+    i18n?.apply();
+    revealActiveNav();
+  }
+
+  function focusControl(id) {
+    const control = $(id);
+    if (!control || control.closest("[hidden]")) return;
+    if (control.tagName === "DETAILS") {
+      control.open = true;
+      control.querySelector("summary")?.focus();
+    } else control.focus();
+  }
+
+  // 首页任务、相关工具和跨分类提示可以附带关键词、聚焦控件或预选分组。
+  function go(route, options) {
+    state.pending = options;
+    const target = "#" + route + "/";
+    if (location.hash === target) readHash(true);
+    else location.hash = target;
   }
 
   function resetSearch() {
@@ -1536,18 +1774,38 @@
   }
 
   function readHash(openMobile = false) {
-    let categoryId, key;
+    let route, key;
     try {
-      [categoryId, key] = location.hash.slice(1).split("/").map(decodeURIComponent);
-    } catch { categoryId = "food"; }
+      [route, key] = location.hash.slice(1).split("/").map(decodeURIComponent);
+    } catch { route = ""; }
+    let categoryId = route === "pantry" ? "dish" : route;
     if (categoryId === "food" && key && category("ready-food")?.entries.some((entry) => entry.key === key)) categoryId = "ready-food";
-    if (!state.categories.some((item) => item.id === categoryId)) categoryId = "food";
-    if (categoryId !== state.category) {
+    if (!route || route === "home" || !state.categories.some((item) => item.id === categoryId)) {
+      state.pending = null;
+      showHome();
+      return;
+    }
+    const fromHome = state.home;
+    const categoryChanged = categoryId !== state.category || fromHome;
+    state.home = false;
+    $("homeView").hidden = true;
+    ["queryTools", "workspace"].forEach((id) => { $(id).hidden = false; });
+    if (categoryChanged) {
       clearFilters();
       state.category = categoryId;
       configureControls();
       $("entryList").scrollTop = 0;
     }
+    const mode = route === "pantry" ? "pantry" : "recipes";
+    if (categoryId === "dish" && $("cookingMode").value !== mode) {
+      $("cookingMode").value = mode;
+      renderIngredientOptions();
+      $("entryList").scrollTop = 0;
+    }
+    const pending = state.pending;
+    state.pending = null;
+    if (pending?.query) $("nameSearch").value = pending.query;
+    if (pending?.group && ["craft", "furniture"].includes(categoryId)) state.craftGroup = pending.group;
     state.key = key || "";
     if (key && category().entries.some((entry) => entry.key === key) && !filteredEntries().some((entry) => entry.key === key)) {
       if (state.category === "dish") $("cookingMode").value = "recipes";
@@ -1556,6 +1814,10 @@
     }
     render();
     if (mobile.matches && openMobile && key && state.entries.some((entry) => entry.key === key)) selectEntry(key, true);
+    // 冰箱还没登记时，进入配餐就直接打开食材登记面板。
+    const focus = pending?.focus || (isPantry() && !pantryCount() && !key ? "ingredientPicker" : "");
+    if (focus) focusControl(focus);
+    if (categoryChanged) revealActiveNav();
   }
 
   async function load() {
@@ -1634,11 +1896,12 @@
       $("footerVersion").textContent = "数据版本 " + (data.metadata.game_version || "未标注");
       $("gameVersion").title = "图鉴效果来自仓库静态库；图标单独提取，不会改变图鉴数值";
       state.dataVersion = data.metadata.game_version || "";
+      document.querySelectorAll(".hub-group-icon[data-icon]").forEach((span) => span.replaceChildren(icon(span.dataset.icon)));
+      ["nameSearch", "materialSearch", "ingredientSearch", "resetSearch", "globalSearch"].forEach((id) => { $(id).disabled = false; });
       buildNav();
       renderIngredientOptions();
       configureControls();
       readHash(Boolean(location.hash));
-      ["nameSearch", "materialSearch", "ingredientSearch", "resetSearch"].forEach((id) => { $(id).disabled = false; });
       ensurePreyModel();
     } catch (error) {
       $("loadError").hidden = false;
@@ -1655,7 +1918,17 @@
     state.debounce = setTimeout(() => { $("entryList").scrollTop = 0; render(); }, 100);
   }));
   $("ingredientSearch").addEventListener("input", renderIngredientOptions);
-  $("cookingMode").addEventListener("change", () => { renderIngredientOptions(); $("entryList").scrollTop = 0; render(); });
+  $("globalSearch").addEventListener("input", () => {
+    clearTimeout(state.debounce);
+    state.debounce = setTimeout(renderHub, 120);
+  });
+  $("globalSearchForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    clearTimeout(state.debounce);
+    renderHub();
+    const first = $("hubResults").querySelector("a.hub-result");
+    if (first) location.hash = first.getAttribute("href");
+  });
   ["ingredientGroupSelect", "ingredientTierSelect"].forEach(id => $(id).addEventListener("change", renderIngredientOptions));
   $("ingredientGroupFilter").addEventListener("change", () => { state.group = $("ingredientGroupFilter").value; render(); });
   $("ingredientTierFilter").addEventListener("change", () => { state.tier = $("ingredientTierFilter").value; render(); });
@@ -1667,8 +1940,13 @@
   $("ingredientPicker").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("ingredientPicker").open = false; $("ingredientSummary").focus(); }
   });
-  $("preyMode").addEventListener("change", () => {
-    location.hash = urlFor($("preyMode").value, "");
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a[data-query], a[data-focus], a[data-group]");
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const match = link.getAttribute("href").match(/^#([\w-]+)\/$/);
+    if (!match || !state.categories.length) return;
+    event.preventDefault();
+    go(match[1], { query: link.dataset.query, focus: link.dataset.focus, group: link.dataset.group });
   });
   $("pageHelp").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { $("pageHelp").open = false; $("pageHelp").querySelector("summary").focus(); }
@@ -1689,6 +1967,7 @@
   window.addEventListener("hashchange", () => { if (state.categories.length) readHash(true); });
   window.addEventListener("languagechange", () => {
     if (!state.categories.length) return;
+    if (state.home) { renderHub(); renderContinue(); return; }
     const listScroll = $("entryList").scrollTop;
     renderIngredientOptions();
     render(true);
@@ -1697,7 +1976,7 @@
   window.addEventListener("keydown", (event) => {
     if (event.key === "/" && !event.ctrlKey && !event.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) && !event.target.isContentEditable && !(mobile.matches && $("detailPanel").open)) {
       event.preventDefault();
-      $("nameSearch").focus();
+      $(state.home ? "globalSearch" : "nameSearch").focus();
     }
   });
   mobile.addEventListener("change", () => {
