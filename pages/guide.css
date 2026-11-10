@@ -6,7 +6,7 @@ a:hover { color: #116242; }
 a:focus-visible, summary:focus-visible { outline: 3px solid #a77539; outline-offset: 4px; }
 .guide-header { background: #294434; color: #fff; padding: 22px max(24px, calc((100vw - 1100px) / 2)); display: flex; justify-content: space-between; gap: 20px; }
 .guide-header a { color: #fff; text-decoration: none; }
-.guide-header a:first-child { font-weight: 700; }
+.guide-header > a:first-child { font-weight: 700; }
 main, footer { max-width: 1100px; margin: 0 auto; padding: 30px 24px; }
 footer { color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
 h1, h2, h3 { line-height: 1.35; }

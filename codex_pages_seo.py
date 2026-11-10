@@ -154,9 +154,20 @@ def home_seo(payload: dict[str, Any], template: str, base: str) -> str:
         "<!-- SEO_DIRECTORY -->", directory_links(payload))
 
 
+# 独立页面与图鉴首页共用的需求入口，命名与图鉴侧栏保持一致。
+SITE_NAV = (("home", "图鉴首页", ""), ("pantry", "冰箱配餐", "#pantry/"),
+            ("recommendations", "补给计划", "recommendations/"), ("trade", "交易规划", "trade/"))
+
+
+def site_nav(root: str, current: str = "") -> str:
+    current_attr = ' aria-current="page"'
+    return " · ".join(f'<a href="{root}{href}"{current_attr if key == current else ""}>{h(label)}</a>'
+                      for key, label, href in SITE_NAV)
+
+
 def shell(title: str, description: str, path: str, base: str, body: str,
           crumbs: list[tuple[str, str]], version: str, icon: str = "", collection: bool = False,
-          extra_head: str = "") -> str:
+          extra_head: str = "", current: str = "") -> str:
     depth = len(PurePosixPath(path).parts)
     root = "../" * depth
     url = base + path
@@ -179,9 +190,9 @@ def shell(title: str, description: str, path: str, base: str, body: str,
     {extra_head}
   </head>
   <body>
-    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav><a href="{root}">图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易规划</a></nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
+    <header class="guide-header"><a href="{root}">{h(SITE_NAME)}</a><nav aria-label="站点导航">{site_nav(root, current)}</nav><label class="language-switch"><span>Language / 语言</span><select data-language-select aria-label="Language / 语言" disabled><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
     <main>{breadcrumb}{body}</main>
-    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p><a href="{root}">返回图鉴查询</a> · <a href="{root}recommendations/">补给推荐</a> · <a href="{root}trade/">交易规划</a> · <a href="{root}sitemap.xml">站点地图</a></footer>
+    <footer><p>数据版本：{h(version)}。属性来自公开静态配置，实际效果以游戏为准。</p>{site_nav(root)} · <a href="{root}sitemap.xml">站点地图</a></footer>
   </body>
 </html>
 '''
@@ -469,7 +480,7 @@ def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str
         body = ('<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / TRADE</p>'
                 '<h1>交易规划</h1></div></div>'
                 '<p>当前公开数据版本没有匹配的交易与增值模型。请用与本站静态库一致的游戏版本重新构建网页。</p>')
-        return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version)
+        return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version, current="trade")
 
     shared_ids = {entry["id"] for entry in model.get("shared", [])}
     categories = {str(key): value for key, value in (model.get("categories") or {}).items()}
@@ -508,7 +519,7 @@ def trade_document(model: dict[str, Any] | None, base: str, version: str) -> str
     data_json = json.dumps(model, ensure_ascii=False, separators=(",", ":"), allow_nan=False) \
         .replace("<", "\\u003c").replace("&", "\\u0026")
     body += f'<script id="trade-data" type="application/json">{data_json}</script>'
-    return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version,
+    return shell(TRADE_TITLE, TRADE_DESCRIPTION, "trade/", base, body, crumbs, version, current="trade",
                  extra_head='<link rel="stylesheet" href="../trade.css"><link rel="stylesheet" href="../value.css">'
                             '<script src="../planting.js" defer></script><script src="../cooking.js" defer></script>'
                             '<script src="../trade.js" defer></script><script src="../value.js" defer></script><script src="../market.js" defer></script>')
@@ -519,5 +530,5 @@ def value_document(model: dict[str, Any] | None, base: str, version: str) -> str
     body = '''<div class="entry-heading"><div><p class="eyebrow">SURVIVAL LOG / VALUE PLANNER</p><h1>增值规划已并入交易规划</h1></div></div>
 <p>库存加工与“种什么最赚”现在和据点查询共用一份物资清单。</p><p><a class="supply-link" href="../trade/#plan=plant">前往种植收益规划 →</a></p>
 <script>location.replace("../trade/#plan=plant")</script>'''
-    return shell(VALUE_TITLE, VALUE_DESCRIPTION, "value/", base, body, crumbs, version,
+    return shell(VALUE_TITLE, VALUE_DESCRIPTION, "value/", base, body, crumbs, version, current="trade",
                  extra_head='<meta http-equiv="refresh" content="0;url=../trade/#plan=plant">')
